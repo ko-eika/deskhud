@@ -1,18 +1,22 @@
-//! 本地包加载器（骨架）。
+//! 本地包加载器：扫描目录与 `.deskhud` zip，解压到缓存后解析清单。
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use deskhud_package::{PackCatalog, PackManifest, PackageError};
-use tracing::warn;
+use deskhud_package::{
+    open_pack, read_catalog_dir, read_manifest_dir, PackCatalog, PackManifest, PackageError,
+};
+use tracing::{info, warn};
 
-use crate::{RuntimeError, default_package_dirs};
+use crate::{default_package_dirs, RuntimeError};
 
 /// 已发现但尚未实例化的包。
 #[derive(Debug, Clone)]
 pub struct DiscoveredPack {
-    /// 包根目录（解压后的 `.deskhud` 目录）。
+    /// 包根目录（目录包或解压后的缓存）。
     pub root: PathBuf,
+    /// 若来自归档，原 `.deskhud` / zip 路径。
+    pub archive: Option<PathBuf>,
     /// 清单。
     pub manifest: PackManifest,
 }
@@ -21,24 +25,27 @@ pub struct DiscoveredPack {
 #[derive(Debug, Default)]
 pub struct PackageLoader {
     roots: Vec<PathBuf>,
+    cache_dir: PathBuf,
 }
 
 impl PackageLoader {
-    /// 使用默认扫描路径。
+    /// 使用默认扫描路径与缓存目录。
     pub fn new() -> Self {
         Self {
             roots: default_package_dirs(),
+            cache_dir: default_pack_cache_dir().unwrap_or_else(|| PathBuf::from("packages/.cache")),
         }
     }
 
-    /// 自定义扫描根。
-    pub fn with_roots(roots: Vec<PathBuf>) -> Self {
-        Self { roots }
+    /// 自定义扫描根与缓存。
+    pub fn with_roots(roots: Vec<PathBuf>, cache_dir: PathBuf) -> Self {
+        Self { roots, cache_dir }
     }
 
-    /// 发现所有含 `manifest.toml` 的包目录。
+    /// 发现目录包与 `.deskhud`/`.zip` 归档。
     pub fn discover(&self) -> Result<Vec<DiscoveredPack>, RuntimeError> {
         let mut out = Vec::new();
+        fs::create_dir_all(&self.cache_dir)?;
         for root in &self.roots {
             if !root.exists() {
                 continue;
@@ -46,14 +53,16 @@ impl PackageLoader {
             for entry in fs::read_dir(root)? {
                 let entry = entry?;
                 let path = entry.path();
-                if !path.is_dir() {
+                // 跳过缓存目录
+                if path.file_name().and_then(|n| n.to_str()) == Some(".cache") {
                     continue;
                 }
-                match load_manifest_dir(&path) {
-                    Ok(manifest) => out.push(DiscoveredPack {
-                        root: path,
-                        manifest,
-                    }),
+                match self.load_entry(&path) {
+                    Ok(Some(pack)) => {
+                        info!(id = %pack.manifest.id, root = %pack.root.display(), "discovered pack");
+                        out.push(pack);
+                    }
+                    Ok(None) => {}
                     Err(err) => warn!(?path, %err, "skip pack"),
                 }
             }
@@ -61,22 +70,65 @@ impl PackageLoader {
         Ok(out)
     }
 
+    fn load_entry(&self, path: &Path) -> Result<Option<DiscoveredPack>, RuntimeError> {
+        if path.is_dir() {
+            if !path.join("manifest.toml").exists() {
+                return Ok(None);
+            }
+            let manifest = read_manifest_dir(path)?;
+            return Ok(Some(DiscoveredPack {
+                root: path.to_path_buf(),
+                archive: None,
+                manifest,
+            }));
+        }
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if ext != "deskhud" && ext != "zip" {
+            return Ok(None);
+        }
+        let opened = open_pack(path, &self.cache_dir)?;
+        let manifest = read_manifest_dir(&opened.path)?;
+        Ok(Some(DiscoveredPack {
+            root: opened.path,
+            archive: opened.archive,
+            manifest,
+        }))
+    }
+
     /// 读取包内某一 locale 的目录（文件可不存在）。
     pub fn read_catalog(
         pack_root: &Path,
         locale: &str,
     ) -> Result<Option<PackCatalog>, RuntimeError> {
-        let path = pack_root.join("i18n").join(format!("{locale}.toml"));
-        if !path.exists() {
-            return Ok(None);
-        }
-        let text = fs::read_to_string(path)?;
-        let catalog = PackCatalog::parse_toml(&text).map_err(PackageError::from)?;
-        Ok(Some(catalog))
+        Ok(read_catalog_dir(pack_root, locale).map_err(PackageError::from)?)
     }
 }
 
-fn load_manifest_dir(dir: &Path) -> Result<PackManifest, RuntimeError> {
-    let text = fs::read_to_string(dir.join("manifest.toml"))?;
-    Ok(PackManifest::parse_toml(&text)?)
+fn default_pack_cache_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        let appdata = std::env::var_os("APPDATA")?;
+        Some(
+            PathBuf::from(appdata)
+                .join("DeskHud")
+                .join("cache")
+                .join("packs"),
+        )
+    }
+    #[cfg(not(windows))]
+    {
+        let home = std::env::var_os("HOME")?;
+        Some(
+            PathBuf::from(home)
+                .join(".local")
+                .join("share")
+                .join("DeskHud")
+                .join("cache")
+                .join("packs"),
+        )
+    }
 }

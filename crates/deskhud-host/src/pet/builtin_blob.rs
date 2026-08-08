@@ -52,7 +52,7 @@ impl PetKind for BuiltinBlobPet {
             display_name: "蓝点",
             description: "简洁圆点；拖动/贴边略变形态",
             author: "DeskHud",
-            homepage: Some("https://github.com/deskhud/deskhud"),
+            homepage: Some("https://github.com/ko-eika/deskhud"),
             window_width: 96.0,
             window_height: 96.0,
             preview_png: Some(include_bytes!("../../assets/preview_blob.png")),

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # 架构
 
-- `deskhud-egui`：唯一 UI（桌宠 / 右键菜单 / 设置：常规·宠物·插件）。
+- `deskhud-egui`：唯一 UI（桌宠 / 右键菜单 / 设置：常规·宠物·插件·关于）。
 - `deskhud-runtime`：本地包发现与加载（内置映射 / WASM）。
 - `deskhud-host`：`PetKind` / `Plugin` / `HudContribution` / `HostRegistry`（含宠配置与图标契约）。
 - `deskhud-package`：`.deskhud` manifest、包 IO、包内 i18n 文件。

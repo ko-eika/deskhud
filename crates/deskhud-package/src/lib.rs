@@ -7,8 +7,13 @@
 
 pub mod error;
 pub mod i18n;
+pub mod io;
 pub mod manifest;
 
 pub use error::PackageError;
 pub use i18n::PackCatalog;
+pub use io::{
+    open_pack, pack_directory, read_catalog_dir, read_manifest_dir, unpack_archive,
+    write_manifest_dir, PackRoot,
+};
 pub use manifest::{PackHudEntry, PackKind, PackManifest};

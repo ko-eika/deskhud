@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Frame, Margin, Sense, Stroke, Vec2};
 use deskhud_ui::{MessageKey, UiPreferences};
 
-use crate::win_chrome;
+use crate::platform;
 
 fn viewport_id() -> egui::ViewportId {
     egui::ViewportId::from_hash_of("deskhud_pet_menu")
@@ -137,7 +137,7 @@ impl PetMenuHost {
     pub fn open_at(&self, prefs: &UiPreferences, cursor_points: egui::Pos2, ppp: f32) {
         // 首帧前用保守宽度贴边；字体测量后在 show 里再校正
         let provisional_w = MENU_MIN_W.max(180.0);
-        let (x, y) = win_chrome::fit_popup_pos_points(
+        let (x, y) = platform::fit_popup_pos_points(
             (cursor_points.x, cursor_points.y),
             provisional_w,
             menu_height(),
@@ -178,7 +178,7 @@ impl PetMenuHost {
             let mut s = self.lock();
             s.menu_w = w;
             s.width_ready = true;
-            let (x, y) = win_chrome::fit_popup_pos_points(
+            let (x, y) = platform::fit_popup_pos_points(
                 (s.cursor.x, s.cursor.y),
                 w,
                 menu_height(),
@@ -236,7 +236,7 @@ impl PetMenuHost {
         if opened_at.elapsed() < DISMISS_GRACE {
             return;
         }
-        if win_chrome::foreground_is_outside(pet_hwnd, menu_hwnd) {
+        if platform::foreground_is_outside(pet_hwnd, menu_hwnd) {
             self.close_viewport(ctx);
         }
     }
@@ -247,7 +247,7 @@ impl PetMenuHost {
             let mut s = self.lock();
             let pet = s.pet_hwnd;
             if s.menu_hwnd.is_none() {
-                if let Some(h) = win_chrome::foreground_hwnd() {
+                if let Some(h) = platform::foreground_hwnd() {
                     if Some(h) != pet {
                         s.menu_hwnd = Some(h);
                     }
@@ -255,7 +255,7 @@ impl PetMenuHost {
             }
             if let Some(h) = s.menu_hwnd {
                 if !s.popup_chrome_done {
-                    win_chrome::ensure_acrylic_popup(h, pet);
+                    platform::ensure_acrylic_popup(h, pet);
                     s.popup_chrome_done = true;
                 }
             }

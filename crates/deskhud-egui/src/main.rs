@@ -9,8 +9,9 @@ mod pet_dock;
 mod pet_draw;
 mod pet_input;
 mod pet_menu;
+mod platform;
 mod settings;
-mod win_chrome;
+mod theme;
 
 use std::sync::{Arc, OnceLock};
 

@@ -8,7 +8,7 @@ use deskhud_host::{
     PetPaintCtx,
 };
 use deskhud_ui::{persist, UiPreferences};
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use raw_window_handle::HasWindowHandle;
 use tracing::{info, warn};
 
 use crate::fonts;
@@ -17,7 +17,7 @@ use crate::pet_draw;
 use crate::pet_input;
 use crate::pet_menu::PetMenuHost;
 use crate::settings::{SettingsHost, SettingsTab};
-use crate::win_chrome;
+use crate::platform;
 
 const PREFS_SAVE_DEBOUNCE: Duration = Duration::from_millis(400);
 
@@ -25,12 +25,16 @@ const PREFS_SAVE_DEBOUNCE: Duration = Duration::from_millis(400);
 pub struct PetApp {
     prefs: UiPreferences,
     host: HostRegistry,
+    /// 外壳 + 已发现包的合并文案（内置层已含多语言；打开设置时传入）。
+    catalogs: deskhud_ui::CatalogStore,
     settings: SettingsHost,
     pet_menu: PetMenuHost,
     quitting: bool,
     hwnd: Option<isize>,
     pupil_smooth: [f32; 2],
     drag_grab_px: Option<(i32, i32)>,
+    /// 非 Windows：拖拽时指针相对窗左上角的逻辑点偏移。
+    drag_grab_points: Option<(f32, f32)>,
     /// 偏好相对上次成功落盘是否有变更。
     prefs_dirty: bool,
     /// 脏标记出现时间，用于防抖写盘。
@@ -56,28 +60,24 @@ pub struct PetApp {
 
 impl PetApp {
     pub fn new(cc: &eframe::CreationContext<'_>, mut prefs: UiPreferences) -> Self {
-        fonts::configure_fonts(&cc.egui_ctx);
+        crate::theme::apply(&cc.egui_ctx, prefs.shell.ui_theme);
+        fonts::configure_typography(
+            &cc.egui_ctx,
+            &prefs.shell.ui_font_id,
+            prefs.shell.ui_font_size,
+        );
         let hwnd = hwnd_from_cc(cc);
         if let Some(h) = hwnd {
-            win_chrome::ensure_pet_chrome(h);
+            platform::ensure_pet_chrome(h);
         }
 
-        let mut visuals = egui::Visuals::light();
-        visuals.panel_fill = Color32::TRANSPARENT;
-        visuals.window_fill = Color32::TRANSPARENT;
-        visuals.extreme_bg_color = Color32::TRANSPARENT;
-        cc.egui_ctx.set_visuals_of(egui::Theme::Light, visuals);
-
-        let mut style = (*cc.egui_ctx.style_of(egui::Theme::Light)).clone();
-        style.visuals.panel_fill = Color32::TRANSPARENT;
-        style.visuals.window_fill = Color32::TRANSPARENT;
-        style.visuals.extreme_bg_color = Color32::TRANSPARENT;
-        style.visuals.popup_shadow = egui::Shadow::NONE;
-        style.visuals.window_stroke = Stroke::NONE;
-        cc.egui_ctx.set_style_of(egui::Theme::Light, style);
-        cc.egui_ctx.set_theme(egui::ThemePreference::Light);
-
-        let mut host = HostRegistry::new();
+        let boot = deskhud_runtime::bootstrap_registry();
+        let mut host = boot.registry;
+        let catalogs = deskhud_runtime::build_catalog_store(&boot.discovered, prefs.locale);
+        info!(
+            packs = boot.discovered.len(),
+            "local packages discovered"
+        );
         if !host.set_active_pet(&prefs.shell.active_pet_kind_id) {
             warn!(
                 id = %prefs.shell.active_pet_kind_id,
@@ -92,10 +92,12 @@ impl PetApp {
             pet_menu: PetMenuHost::new(prefs.clone()),
             prefs,
             host,
+            catalogs,
             quitting: false,
             hwnd,
             pupil_smooth: [0.0, 0.0],
             drag_grab_px: None,
+            drag_grab_points: None,
             prefs_dirty: false,
             prefs_dirty_since: None,
             position_applied: false,
@@ -188,13 +190,26 @@ impl PetApp {
     }
 
     fn capture_pet_position(&mut self, ctx: &egui::Context) {
-        let Some(hwnd) = self.hwnd else {
-            return;
-        };
-        let Some((x, y)) = win_chrome::window_screen_pos(hwnd) else {
-            return;
-        };
         let ppp = ctx.pixels_per_point().max(0.01);
+        let (x, y) = {
+            #[cfg(windows)]
+            {
+                let Some(hwnd) = self.hwnd else {
+                    return;
+                };
+                let Some(pos) = platform::window_screen_pos(hwnd) else {
+                    return;
+                };
+                pos
+            }
+            #[cfg(not(windows))]
+            {
+                let Some(pos) = platform::window_screen_pos_from_ctx(ctx) else {
+                    return;
+                };
+                pos
+            }
+        };
         let nx = x as f32 / ppp;
         let ny = y as f32 / ppp;
         let changed = self.prefs.shell.pet_pos() != Some([nx, ny]);
@@ -223,6 +238,7 @@ impl PetApp {
             pet_options,
             self.host.plugin_infos(),
             self.host.all_hud_contributions(),
+            self.catalogs.clone(),
             tab,
         );
     }
@@ -270,8 +286,13 @@ impl PetApp {
             let draft = s.prefs.clone();
             drop(s);
             if discard {
-                // 取消：只同步设置窗几何 + 视图模式偏好可保留在草稿里已丢弃
-                // 几何写在 draft 上（关闭前 capture），合并到 app
+                // 取消：恢复字体/主题即时预览；只保留设置窗几何
+                crate::theme::apply(ctx, self.prefs.shell.ui_theme);
+                fonts::configure_typography(
+                    ctx,
+                    &self.prefs.shell.ui_font_id,
+                    self.prefs.shell.ui_font_size,
+                );
                 self.prefs.shell.settings_width = draft.shell.settings_width;
                 self.prefs.shell.settings_height = draft.shell.settings_height;
                 self.prefs.shell.settings_pos_x = draft.shell.settings_pos_x;
@@ -292,6 +313,11 @@ impl PetApp {
             || draft.shell.pet_height != self.prefs.shell.pet_height
             || draft.shell.active_pet_kind_id != self.prefs.shell.active_pet_kind_id;
         let topmost_changed = draft.shell.pet_topmost != self.prefs.shell.pet_topmost;
+        let font_changed = draft.shell.ui_font_id != self.prefs.shell.ui_font_id
+            || (draft.shell.ui_font_size - self.prefs.shell.ui_font_size).abs() > 0.01
+            || draft.shell.ui_font_style != self.prefs.shell.ui_font_style
+            || draft.shell.ui_font_family != self.prefs.shell.ui_font_family;
+        let theme_changed = draft.shell.ui_theme != self.prefs.shell.ui_theme;
         let pos = (self.prefs.shell.pet_pos_x, self.prefs.shell.pet_pos_y);
         self.prefs = draft;
         self.prefs.shell.pet_pos_x = pos.0;
@@ -307,6 +333,16 @@ impl PetApp {
         }
         if topmost_changed {
             self.apply_topmost(ctx);
+        }
+        if theme_changed {
+            crate::theme::apply(ctx, self.prefs.shell.ui_theme);
+        }
+        if font_changed || theme_changed {
+            fonts::configure_typography(
+                ctx,
+                &self.prefs.shell.ui_font_id,
+                self.prefs.shell.ui_font_size,
+            );
         }
         if save {
             self.mark_prefs_dirty();
@@ -332,7 +368,7 @@ impl PetApp {
 
     fn pointer_dir(&self, ctx: &egui::Context, center: egui::Pos2) -> [f32; 2] {
         if let Some(hwnd) = self.hwnd {
-            if let Some((cx, cy)) = win_chrome::cursor_client_px(hwnd) {
+            if let Some((cx, cy)) = platform::cursor_client_px(hwnd) {
                 let ppp = ctx.pixels_per_point();
                 let pos = egui::pos2(cx as f32 / ppp, cy as f32 / ppp);
                 return dir_from_center(center, pos);
@@ -349,7 +385,7 @@ impl PetApp {
 
     fn open_context_menu(&self, ctx: &egui::Context) {
         let ppp = ctx.pixels_per_point();
-        let cursor = win_chrome::cursor_screen_px()
+        let cursor = platform::cursor_screen_px()
             .map(|(x, y)| egui::pos2(x as f32 / ppp, y as f32 / ppp))
             .or_else(|| ctx.pointer_interact_pos())
             .unwrap_or(egui::pos2(100.0, 100.0));
@@ -389,40 +425,70 @@ impl PetApp {
 
     fn finish_pet_drag(&mut self, ctx: &egui::Context) {
         self.set_pet_dragging(false);
+        let ppp = ctx.pixels_per_point();
+        #[cfg(windows)]
         if let Some(hwnd) = self.hwnd {
-            let ppp = ctx.pixels_per_point();
             let dock =
                 pet_dock::snap_on_release(hwnd, pet_dock::SNAP_THRESHOLD_POINTS, ppp);
+            self.set_pet_dock(dock);
+        }
+        #[cfg(not(windows))]
+        {
+            let dock =
+                pet_dock::snap_on_release_ctx(ctx, pet_dock::SNAP_THRESHOLD_POINTS, ppp);
             self.set_pet_dock(dock);
         }
         self.capture_pet_position(ctx);
     }
 
     fn reanchor_pet_after_size_change(&mut self, ctx: &egui::Context, prefer: DockState) {
-        let Some(hwnd) = self.hwnd else {
-            return;
-        };
         let ppp = ctx.pixels_per_point();
-        let dock = pet_dock::reanchor_after_size_change(
-            hwnd,
-            self.prefs.shell.pet_width,
-            self.prefs.shell.pet_height,
-            prefer,
-            pet_dock::SNAP_THRESHOLD_POINTS,
-            ppp,
-        );
-        self.set_pet_dock(dock);
+        #[cfg(windows)]
+        {
+            let Some(hwnd) = self.hwnd else {
+                return;
+            };
+            let dock = pet_dock::reanchor_after_size_change(
+                hwnd,
+                self.prefs.shell.pet_width,
+                self.prefs.shell.pet_height,
+                prefer,
+                pet_dock::SNAP_THRESHOLD_POINTS,
+                ppp,
+            );
+            self.set_pet_dock(dock);
+        }
+        #[cfg(not(windows))]
+        {
+            let dock = pet_dock::reanchor_after_size_change_ctx(
+                ctx,
+                self.prefs.shell.pet_width,
+                self.prefs.shell.pet_height,
+                prefer,
+                pet_dock::SNAP_THRESHOLD_POINTS,
+                ppp,
+            );
+            self.set_pet_dock(dock);
+        }
         self.capture_pet_position(ctx);
     }
 
-    fn refresh_pet_dock(&mut self) {
-        let Some(hwnd) = self.hwnd else {
-            return;
-        };
+    fn refresh_pet_dock(&mut self, ctx: &egui::Context) {
         if self.pet_drag.is_dragging() {
             return;
         }
-        self.set_pet_dock(pet_dock::current_dock(hwnd));
+        #[cfg(windows)]
+        {
+            let _ = ctx;
+            let Some(hwnd) = self.hwnd else {
+                return;
+            };
+            self.set_pet_dock(pet_dock::current_dock(hwnd));
+        }
+        #[cfg(not(windows))]
+        {
+            self.set_pet_dock(pet_dock::current_dock_ctx(ctx));
+        }
     }
 
     fn emit_pet(&self, event: PetEvent) {
@@ -430,7 +496,7 @@ impl PetApp {
     }
 
     fn sync_global_mouse(&mut self, ui: &egui::Ui) {
-        let (gp, gs, gm) = win_chrome::global_mouse_buttons();
+        let (gp, gs, gm) = platform::global_mouse_buttons();
         if !self.global_mouse_primed {
             self.pet_mouse.global_primary_down = gp;
             self.pet_mouse.global_secondary_down = gs;
@@ -466,7 +532,7 @@ impl PetApp {
     }
 
     fn sync_global_wheel(&mut self, ui: &egui::Ui) {
-        let raw = win_chrome::take_wheel_delta();
+        let raw = platform::take_wheel_delta();
         if raw == 0 {
             return;
         }
@@ -487,7 +553,7 @@ impl PetApp {
         let tracked = pet_input::global_tracked_keys();
         let mut now = Vec::with_capacity(tracked.len());
         for key in tracked {
-            let down = pet_input::global_pet_key_down(*key, win_chrome::global_key_down);
+            let down = pet_input::global_pet_key_down(*key, platform::global_key_down);
             now.push(down);
         }
         if !self.global_keys_primed {
@@ -637,7 +703,7 @@ impl PetApp {
         let dt = ui.input(|i| i.stable_dt).max(0.0);
         self.host.active_pet().tick(dt);
 
-        self.refresh_pet_dock();
+        self.refresh_pet_dock(&ctx);
 
         let config_map = self.active_pet_config_map();
         let config = PetConfigBag::new(&config_map);
@@ -678,28 +744,56 @@ impl PetApp {
             }
         }
         if response.drag_started_by(egui::PointerButton::Primary) {
+            #[cfg(windows)]
             if let Some(hwnd) = self.hwnd {
                 if let (Some(cur), Some(origin)) = (
-                    win_chrome::cursor_screen_px(),
-                    win_chrome::window_screen_pos(hwnd),
+                    platform::cursor_screen_px(),
+                    platform::window_screen_pos(hwnd),
                 ) {
                     self.drag_grab_px = Some((cur.0 - origin.0, cur.1 - origin.1));
                     self.set_pet_dragging(true);
                 }
             }
+            #[cfg(not(windows))]
+            {
+                let (pointer, outer) = ui.input(|i| (i.pointer.latest_pos(), i.viewport().outer_rect));
+                if let (Some(pointer), Some(outer)) = (pointer, outer) {
+                    self.drag_grab_points =
+                        Some((pointer.x - outer.min.x, pointer.y - outer.min.y));
+                    self.set_pet_dragging(true);
+                }
+            }
         }
+        #[cfg(windows)]
         if self.drag_grab_px.is_some() {
             let primary_down = ui.input(|i| i.pointer.primary_down());
             if primary_down {
                 if let (Some(hwnd), Some(grab), Some(cur)) = (
                     self.hwnd,
                     self.drag_grab_px,
-                    win_chrome::cursor_screen_px(),
+                    platform::cursor_screen_px(),
                 ) {
-                    win_chrome::move_window_screen(hwnd, cur.0 - grab.0, cur.1 - grab.1);
+                    platform::move_window_screen(hwnd, cur.0 - grab.0, cur.1 - grab.1);
                 }
             } else {
                 self.drag_grab_px = None;
+                self.finish_pet_drag(&ctx);
+            }
+        }
+        #[cfg(not(windows))]
+        if self.drag_grab_points.is_some() {
+            let primary_down = ui.input(|i| i.pointer.primary_down());
+            if primary_down {
+                if let (Some(grab), Some(pointer)) = (
+                    self.drag_grab_points,
+                    ui.input(|i| i.pointer.latest_pos()),
+                ) {
+                    let x = pointer.x - grab.0;
+                    let y = pointer.y - grab.1;
+                    platform::move_viewport_points(&ctx, x, y);
+                }
+            } else {
+                self.drag_grab_points = None;
                 self.finish_pet_drag(&ctx);
             }
         }
@@ -707,6 +801,7 @@ impl PetApp {
         if response.secondary_clicked() {
             if self.pet_drag.is_dragging() {
                 self.drag_grab_px = None;
+                self.drag_grab_points = None;
                 self.set_pet_dragging(false);
             }
             self.open_context_menu(&ctx);
@@ -816,23 +911,17 @@ fn dir_from_center(center: egui::Pos2, pos: egui::Pos2) -> [f32; 2] {
 
 fn hwnd_from_cc(cc: &eframe::CreationContext<'_>) -> Option<isize> {
     let handle = cc.window_handle().ok()?;
-    match handle.as_raw() {
-        RawWindowHandle::Win32(win) => Some(win.hwnd.get() as isize),
-        _ => None,
-    }
+    platform::native_window_id(handle.as_raw())
 }
 
 fn hwnd_from_frame(frame: &eframe::Frame) -> Option<isize> {
     let handle = frame.window_handle().ok()?;
-    match handle.as_raw() {
-        RawWindowHandle::Win32(win) => Some(win.hwnd.get() as isize),
-        _ => None,
-    }
+    platform::native_window_id(handle.as_raw())
 }
 
 fn global_pet_modifiers(_ui: &egui::Ui) -> PetModifiers {
-    let (shift, ctrl, alt) = win_chrome::global_modifiers();
-    let meta = win_chrome::global_key_down(0x5B) || win_chrome::global_key_down(0x5C);
+    let (shift, ctrl, alt) = platform::global_modifiers();
+    let meta = platform::global_key_down(0x5B) || platform::global_key_down(0x5C);
     PetModifiers {
         shift,
         ctrl,
@@ -867,7 +956,7 @@ impl eframe::App for PetApp {
         // 每帧刷新 HWND：重建视口时句柄会变，旧子类化若不拆会 AV
         if let Some(h) = hwnd_from_frame(frame) {
             self.hwnd = Some(h);
-            win_chrome::ensure_pet_chrome(h);
+            platform::ensure_pet_chrome(h);
         }
 
         let ctx = ui.ctx().clone();

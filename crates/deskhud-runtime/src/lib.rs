@@ -8,18 +8,15 @@
 
 #![deny(missing_docs)]
 
+pub mod bootstrap;
+pub mod catalog;
 pub mod error;
 pub mod loader;
 pub mod paths;
 pub mod wasm;
 
+pub use bootstrap::{bootstrap_registry, bootstrap_registry_result, Bootstrap};
+pub use catalog::build_catalog_store;
 pub use error::RuntimeError;
 pub use loader::{DiscoveredPack, PackageLoader};
 pub use paths::default_package_dirs;
-
-/// 启动时的默认宿主注册表（内置宠 + 演示 HUD）。
-///
-/// 社区包发现见 [`PackageLoader`]；WASM 接入后在此合并注册。
-pub fn bootstrap_registry() -> deskhud_host::HostRegistry {
-    deskhud_host::HostRegistry::new()
-}

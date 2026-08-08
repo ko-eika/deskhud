@@ -2,12 +2,46 @@
 
 use deskhud_host::DockState;
 
-use crate::win_chrome;
+use crate::platform;
 
 /// 靠近边缘多少逻辑像素时松手吸附。
 pub const SNAP_THRESHOLD_POINTS: f32 = 28.0;
 /// 判定「已贴边」的容差（物理像素）。
 const DOCKED_EPS_PX: i32 = 3;
+
+fn window_rect_px(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+    platform::window_screen_rect(hwnd)
+}
+
+#[cfg(not(windows))]
+fn window_rect_from_ctx(ctx: &eframe::egui::Context) -> Option<(i32, i32, i32, i32)> {
+    let (rect, ppp) = ctx.input(|i| (i.viewport().outer_rect, i.pixels_per_point()));
+    let rect = rect?;
+    let l = (rect.min.x * ppp).round() as i32;
+    let t = (rect.min.y * ppp).round() as i32;
+    let r = (rect.max.x * ppp).round() as i32;
+    let b = (rect.max.y * ppp).round() as i32;
+    Some((l, t, r, b))
+}
+
+fn work_area_for_window(l: i32, t: i32, r: i32, b: i32) -> (i32, i32, i32, i32) {
+    // 窗口中心可能已在屏外；优先用光标所在显示器工作区
+    if let Some((cx, cy)) = platform::cursor_screen_px() {
+        return platform::work_area_containing_px(cx, cy);
+    }
+    let cx = (l + r) / 2;
+    let cy = (t + b) / 2;
+    platform::work_area_containing_px(cx, cy)
+}
+
+#[cfg(not(windows))]
+fn work_area_for_ctx(ctx: &eframe::egui::Context, l: i32, t: i32, r: i32, b: i32) -> (i32, i32, i32, i32) {
+    if let Some((cx, cy)) = platform::cursor_screen_px_from_ctx(ctx) {
+        return platform::work_area_containing_px(cx, cy);
+    }
+    let _ = (l, t, r, b);
+    platform::work_area_from_ctx(ctx)
+}
 
 /// 根据窗口矩形与工作区计算贴边状态。
 pub fn dock_from_rects(
@@ -93,28 +127,28 @@ pub fn snap_to_work_area(
     (x, y, dock)
 }
 
-fn work_area_for_window(l: i32, t: i32, r: i32, b: i32) -> (i32, i32, i32, i32) {
-    // 窗口中心可能已在屏外；优先用光标所在显示器工作区
-    if let Some((cx, cy)) = win_chrome::cursor_screen_px() {
-        return win_chrome::work_area_containing_px(cx, cy);
-    }
-    let cx = (l + r) / 2;
-    let cy = (t + b) / 2;
-    win_chrome::work_area_containing_px(cx, cy)
-}
-
 /// 读取当前宠窗贴边状态；失败则 [`DockState::FREE`]。
 pub fn current_dock(hwnd: isize) -> DockState {
-    let Some((l, t, r, b)) = win_chrome::window_screen_rect(hwnd) else {
+    let Some((l, t, r, b)) = window_rect_px(hwnd) else {
         return DockState::FREE;
     };
     let (wl, wt, wr, wb) = work_area_for_window(l, t, r, b);
     dock_from_rects(l, t, r, b, wl, wt, wr, wb, DOCKED_EPS_PX)
 }
 
+/// 非 Windows：用 egui 视口外接矩形算贴边。
+#[cfg(not(windows))]
+pub fn current_dock_ctx(ctx: &eframe::egui::Context) -> DockState {
+    let Some((l, t, r, b)) = window_rect_from_ctx(ctx) else {
+        return DockState::FREE;
+    };
+    let (wl, wt, wr, wb) = work_area_for_ctx(ctx, l, t, r, b);
+    dock_from_rects(l, t, r, b, wl, wt, wr, wb, DOCKED_EPS_PX)
+}
+
 /// 松手：靠近或出界则吸附并返回新状态。
 pub fn snap_on_release(hwnd: isize, threshold_points: f32, pixels_per_point: f32) -> DockState {
-    let Some((l, t, r, b)) = win_chrome::window_screen_rect(hwnd) else {
+    let Some((l, t, r, b)) = window_rect_px(hwnd) else {
         return DockState::FREE;
     };
     let w = (r - l).max(1);
@@ -124,7 +158,30 @@ pub fn snap_on_release(hwnd: isize, threshold_points: f32, pixels_per_point: f32
     let thr = thr.max(8);
     let (nx, ny, dock) = snap_to_work_area(l, t, w, h, wl, wt, wr, wb, thr);
     if nx != l || ny != t {
-        win_chrome::move_window_screen(hwnd, nx, ny);
+        platform::move_window_screen(hwnd, nx, ny);
+    }
+    dock
+}
+
+/// 非 Windows：松手吸附（ViewportCommand 移动）。
+#[cfg(not(windows))]
+pub fn snap_on_release_ctx(
+    ctx: &eframe::egui::Context,
+    threshold_points: f32,
+    pixels_per_point: f32,
+) -> DockState {
+    let Some((l, t, r, b)) = window_rect_from_ctx(ctx) else {
+        return DockState::FREE;
+    };
+    let w = (r - l).max(1);
+    let h = (b - t).max(1);
+    let (wl, wt, wr, wb) = work_area_for_ctx(ctx, l, t, r, b);
+    let ppp = pixels_per_point.max(0.01);
+    let thr = (threshold_points * ppp).round() as i32;
+    let thr = thr.max(8);
+    let (nx, ny, dock) = snap_to_work_area(l, t, w, h, wl, wt, wr, wb, thr);
+    if nx != l || ny != t {
+        platform::move_viewport_points(ctx, nx as f32 / ppp, ny as f32 / ppp);
     }
     dock
 }
@@ -140,7 +197,7 @@ pub fn reanchor_after_size_change(
     threshold_points: f32,
     pixels_per_point: f32,
 ) -> DockState {
-    let Some((l, t)) = win_chrome::window_screen_pos(hwnd) else {
+    let Some((l, t)) = platform::window_screen_pos(hwnd) else {
         return DockState::FREE;
     };
     let ppp = pixels_per_point.max(0.01);
@@ -156,7 +213,36 @@ pub fn reanchor_after_size_change(
         reanchor_to_sides(l, t, w, h, wl, wt, wr, wb, prefer)
     };
     if nx != l || ny != t {
-        win_chrome::move_window_screen(hwnd, nx, ny);
+        platform::move_window_screen(hwnd, nx, ny);
+    }
+    dock
+}
+
+#[cfg(not(windows))]
+pub fn reanchor_after_size_change_ctx(
+    ctx: &eframe::egui::Context,
+    new_w_points: f32,
+    new_h_points: f32,
+    prefer: DockState,
+    threshold_points: f32,
+    pixels_per_point: f32,
+) -> DockState {
+    let Some((l, t, _, _)) = window_rect_from_ctx(ctx) else {
+        return DockState::FREE;
+    };
+    let ppp = pixels_per_point.max(0.01);
+    let w = (new_w_points * ppp).round().max(1.0) as i32;
+    let h = (new_h_points * ppp).round().max(1.0) as i32;
+    let (wl, wt, wr, wb) = work_area_for_ctx(ctx, l, t, l + w, t + h);
+    let thr = (threshold_points * ppp).round() as i32;
+    let thr = thr.max(8);
+    let (nx, ny, dock) = if prefer.is_free() {
+        snap_to_work_area(l, t, w, h, wl, wt, wr, wb, thr)
+    } else {
+        reanchor_to_sides(l, t, w, h, wl, wt, wr, wb, prefer)
+    };
+    if nx != l || ny != t {
+        platform::move_viewport_points(ctx, nx as f32 / ppp, ny as f32 / ppp);
     }
     dock
 }

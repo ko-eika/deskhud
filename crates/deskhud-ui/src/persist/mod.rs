@@ -112,6 +112,7 @@ mod tests {
                 settings_height: Some(600.0),
                 settings_pos_x: Some(80.0),
                 settings_pos_y: Some(60.0),
+                ..ShellPrefs::default()
             },
             pet: PetPrefs::default(),
             hud: HudPrefs::default(),

@@ -1,6 +1,6 @@
 # DeskHud — Agent 工作手册
 
-> Agent / 协作者入口。细则见 `.cursor/rules/`；笔记见 `.cursor/MEMORY.md`；架构见 [`docs/architecture.md`](./docs/architecture.md)；**扩展指南**见 [`docs/extension-guide.md`](./docs/extension-guide.md)。
+> Agent / 协作者入口。细则见 `.cursor/rules/`；笔记见 `.cursor/MEMORY.md`；架构见 [`docs/architecture.md`](./docs/architecture.md)；**扩展指南**见 [`docs/extension-guide.md`](./docs/extension-guide.md)；**发版**见 [`docs/release.md`](./docs/release.md)。
 
 ## 一句话
 
@@ -29,7 +29,7 @@
 ## 架构与 crate
 
 ```
-deskhud-egui        UI 壳（透明宠窗 / 菜单 / 设置：常规·宠物·插件）
+deskhud-egui        UI 壳（透明宠窗 / 菜单 / 设置：常规·宠物·插件·关于）
        │
        ▼
 deskhud-runtime     本地发现包 → 加载（原生内置 / WASM）→ 注册
@@ -53,22 +53,22 @@ crates/
   deskhud-egui/       可执行 UI
 packages/             本地已安装 / 开发用包（扫描根）
 examples/             社区开发示例（宠物包 / HUD 插件）
-docs/                 架构与路线图
+docs/                 架构、扩展指南、路线图、发版
 ```
 
 ## 当前范围（初始化后演进）
 
 - [x] 透明桌宠窗 + 拖动 + 右键菜单（设置 / 退出）
-- [x] 统一设置窗（侧栏：常规 / 宠物 / 插件；默认打开常规）+ 宠窗尺寸跟宠物包
+- [x] 统一设置窗（侧栏：常规 / 宠物 / 插件 / 关于；默认打开常规）+ 宠窗尺寸跟宠物包
 - [x] prefs 持久化（语言 / 宠物 / HUD / 位置 / 尺寸 / 宠行为配置）
 - [x] 贴边状态检测 + 松手吸附 + `PetEvent::DockChanged` / `PetPaintCtx.dock`（供宠物包行为）
 - [x] 拖拽状态 + `PetEvent::DragStarted`/`DragEnded` / `PetPaintCtx.drag`
 - [x] 键鼠事件 + `MouseState` / `PetKey` + 扩展指南 `docs/extension-guide.md`
 - [x] 全 ID 约定 `pet|hud.<组织>.<标识>` + `[pet|hud.config]`；宠 `PetConfigOption` / 插件图标
-- [ ] 包格式 + 本地加载
+- [x] 包格式（目录/zip）+ 本地扫描引导；跨平台 MVP（`platform` + CI 三端）
+- [x] `CatalogStore` 多源 i18n 合并 + 设置页接线（宠/插件/配置项/字体来源后缀）
 - [ ] 宠物行为事件完善（更多 `PetEvent`）与更中性绘制帧
 - [ ] HUD 插件真实帧数据（prefs 插件级/条目级开关已具备）
-- [ ] 多源 i18n 扫描合并
 - [ ] WASM runtime + SDK + 示例包
 
 ## 常用命令
@@ -77,6 +77,7 @@ docs/                 架构与路线图
 cargo check
 cargo test
 cargo run -p deskhud-egui
+cargo build -p deskhud-egui --release   # 产物见 docs/release.md
 cargo fmt
 cargo clippy --workspace --all-targets -- -D warnings
 ```

@@ -21,12 +21,13 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
-authors = ["DeskHud Contributors"]
+authors = ["KO.EIKA"]
 description = "DeskHud — extensible desktop pet packs + HUD plugins (egui)."
+repository = "https://github.com/ko-eika/deskhud"
 keywords = ["desktop-pet", "hud", "egui"]
 categories = ["gui"]
 
@@ -60,6 +61,9 @@ windows-sys = { version = "0.59", features = [
 
 # Windows：把 .ico 嵌进 exe（资源管理器图标）
 winresource = "0.1"
+
+# `.deskhud` zip 读写
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [profile.dev]
 opt-level = 1

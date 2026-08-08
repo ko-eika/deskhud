@@ -5,11 +5,15 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, Align2, Color32, ColorImage, CornerRadius, CursorIcon, FontId, Frame, Layout, Margin,
-    RichText, Sense, Stroke, TextureHandle, TextureOptions, Vec2,
+    self, Align2, Area, Color32, ColorImage, CornerRadius, CursorIcon, FontId, Frame, Layout,
+    Margin, Order, RichText, Sense, Stroke, TextureHandle, TextureOptions, Vec2,
 };
+use eframe::egui::text::{CCursor, CCursorRange};
+use eframe::egui::text_edit::TextEditState;
 use deskhud_host::{HudContribution, PetConfigOption, PetKindInfo, PluginInfo};
-use deskhud_ui::{Locale, MessageKey, PetPickerMode, ShellPrefs, UiPreferences};
+use deskhud_ui::{
+    CatalogStore, Locale, MessageKey, PetPickerMode, ShellPrefs, UiPreferences, UiTheme,
+};
 
 fn viewport_id() -> egui::ViewportId {
     egui::ViewportId::from_hash_of("deskhud_settings")
@@ -27,6 +31,10 @@ const CARD_TEXT_H: f32 = 78.0;
 const CARD_LAYOUT_SETTLE: Duration = Duration::from_millis(220);
 /// 忽略滚动条出现等造成的微小宽度抖动，避免布局来回抖。
 const CARD_LAYOUT_DEADBAND: f32 = 16.0;
+/// 常规页下拉统一宽度（按钮截断，避免长文案撑宽）。
+const SETTINGS_COMBO_W: f32 = 200.0;
+/// 下拉弹层最大高度（超出滚动）。
+const SETTINGS_COMBO_POPUP_H: f32 = 240.0;
 
 /// 插件头与配置项共用的图标列，保证垂直对齐。
 mod plugin_layout {
@@ -45,22 +53,106 @@ mod plugin_layout {
     }
 }
 
+/// 设置窗色板：随当前 egui 深/浅模式切换（由草稿主题驱动）。
 mod tone {
-    use eframe::egui::Color32;
+    use std::cell::Cell;
 
-    pub const BG: Color32 = Color32::from_rgb(246, 247, 249);
-    pub const SIDE: Color32 = Color32::from_rgb(236, 238, 243);
-    pub const CARD: Color32 = Color32::from_rgb(255, 255, 255);
-    pub const TEXT: Color32 = Color32::from_rgb(28, 30, 36);
-    pub const MUTED: Color32 = Color32::from_rgb(110, 114, 124);
-    pub const LINE: Color32 = Color32::from_rgb(222, 225, 232);
-    pub const ACCENT: Color32 = Color32::from_rgb(47, 110, 220);
-    pub const ACCENT_HOVER: Color32 = Color32::from_rgb(70, 132, 236);
-    pub const ACCENT_PRESS: Color32 = Color32::from_rgb(36, 90, 190);
-    pub const ACCENT_SOFT: Color32 = Color32::from_rgb(232, 240, 255);
-    pub const STAGE: Color32 = Color32::from_rgb(228, 232, 240);
-    pub const SELECTED_RING: Color32 = Color32::from_rgb(70, 120, 220);
-    pub const HOVER: Color32 = Color32::from_rgb(242, 244, 248);
+    use eframe::egui::{Color32, Context, Theme};
+
+    thread_local! {
+        static DARK: Cell<bool> = const { Cell::new(false) };
+    }
+
+    pub fn sync(ctx: &Context) {
+        DARK.with(|c| c.set(matches!(ctx.theme(), Theme::Dark)));
+    }
+
+    fn dark() -> bool {
+        DARK.with(|c| c.get())
+    }
+
+    pub fn bg() -> Color32 {
+        if dark() {
+            Color32::from_rgb(30, 31, 34)
+        } else {
+            Color32::from_rgb(246, 247, 249)
+        }
+    }
+    pub fn side() -> Color32 {
+        if dark() {
+            Color32::from_rgb(37, 38, 43)
+        } else {
+            Color32::from_rgb(236, 238, 243)
+        }
+    }
+    pub fn card() -> Color32 {
+        if dark() {
+            Color32::from_rgb(43, 45, 49)
+        } else {
+            Color32::from_rgb(255, 255, 255)
+        }
+    }
+    pub fn text() -> Color32 {
+        if dark() {
+            Color32::from_rgb(232, 234, 237)
+        } else {
+            Color32::from_rgb(28, 30, 36)
+        }
+    }
+    pub fn muted() -> Color32 {
+        if dark() {
+            Color32::from_rgb(154, 160, 166)
+        } else {
+            Color32::from_rgb(110, 114, 124)
+        }
+    }
+    pub fn line() -> Color32 {
+        if dark() {
+            Color32::from_rgb(60, 64, 72)
+        } else {
+            Color32::from_rgb(222, 225, 232)
+        }
+    }
+    pub fn accent() -> Color32 {
+        Color32::from_rgb(47, 110, 220)
+    }
+    pub fn accent_hover() -> Color32 {
+        Color32::from_rgb(70, 132, 236)
+    }
+    pub fn accent_press() -> Color32 {
+        Color32::from_rgb(36, 90, 190)
+    }
+    pub fn accent_soft() -> Color32 {
+        if dark() {
+            Color32::from_rgb(40, 56, 88)
+        } else {
+            Color32::from_rgb(232, 240, 255)
+        }
+    }
+    pub fn stage() -> Color32 {
+        if dark() {
+            Color32::from_rgb(70, 74, 82)
+        } else {
+            Color32::from_rgb(228, 232, 240)
+        }
+    }
+    pub fn selected_ring() -> Color32 {
+        Color32::from_rgb(70, 120, 220)
+    }
+    pub fn hover() -> Color32 {
+        if dark() {
+            Color32::from_rgb(52, 54, 60)
+        } else {
+            Color32::from_rgb(242, 244, 248)
+        }
+    }
+    pub fn faint() -> Color32 {
+        if dark() {
+            Color32::from_rgb(48, 50, 56)
+        } else {
+            Color32::from_rgb(248, 249, 252)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,7 +160,12 @@ pub enum SettingsTab {
     Pet,
     Hud,
     General,
+    About,
 }
+
+const APP_HOMEPAGE: &str = "https://github.com/ko-eika/deskhud";
+/// 与根 `Cargo.toml` 中 `egui` / `eframe` 版本对齐；升级依赖时请同步。
+const APP_EGUI_VERSION: &str = "0.36";
 
 #[derive(Clone)]
 pub struct SettingsHost {
@@ -87,6 +184,8 @@ pub struct SettingsState {
     pub pet_options: HashMap<String, Vec<PetConfigOption>>,
     pub plugins: Vec<PluginInfo>,
     pub hud_items: Vec<(&'static str, HudContribution)>,
+    /// 外壳 + 包文案（打开设置时从主壳拷贝；草稿语言切换即时生效）。
+    pub catalogs: CatalogStore,
     pub locale_dirty: bool,
     /// 打开后需要 Focus 一次。
     focus_once: bool,
@@ -123,6 +222,7 @@ impl SettingsHost {
                 pet_options: HashMap::new(),
                 plugins: Vec::new(),
                 hud_items: Vec::new(),
+                catalogs: CatalogStore::new(),
                 locale_dirty: false,
                 focus_once: false,
                 place_once: false,
@@ -154,6 +254,7 @@ impl SettingsHost {
         pet_options: HashMap<String, Vec<PetConfigOption>>,
         plugins: Vec<PluginInfo>,
         hud_items: Vec<(&'static str, HudContribution)>,
+        catalogs: CatalogStore,
         tab: SettingsTab,
     ) {
         let mut s = self.lock();
@@ -164,6 +265,7 @@ impl SettingsHost {
         s.pet_options = pet_options;
         s.plugins = plugins;
         s.hud_items = hud_items;
+        s.catalogs = catalogs;
         s.tab = tab;
         s.focus_once = true;
         s.place_once = true;
@@ -241,8 +343,13 @@ impl SettingsHost {
     }
 
     fn draw(&self, ui: &mut egui::Ui) {
+        // 草稿主题即时预览（取消时主壳会恢复已应用偏好）
+        let draft_theme = self.lock().prefs.shell.ui_theme;
+        crate::theme::apply(ui.ctx(), draft_theme);
+        tone::sync(ui.ctx());
+
         // clear_color 对子窗也是透明；必须铺满不透明底，否则发黑且点击异常
-        let fill = tone::BG;
+        let fill = tone::bg();
         ui.painter()
             .rect_filled(ui.max_rect(), CornerRadius::ZERO, fill);
 
@@ -262,7 +369,7 @@ impl SettingsHost {
                 egui::Panel::left("deskhud_settings_nav")
                     .exact_size(SIDE_W)
                     .resizable(false)
-                    .frame(Frame::NONE.fill(tone::SIDE).inner_margin(Margin::symmetric(12, 16)))
+                    .frame(Frame::NONE.fill(tone::side()).inner_margin(Margin::symmetric(12, 16)))
                     .show(ui, |ui| {
                         self.draw_sidebar(ui);
                     });
@@ -273,7 +380,7 @@ impl SettingsHost {
                     .frame(
                         Frame::NONE
                             .fill(fill)
-                            .stroke(Stroke::new(1.0, tone::LINE))
+                            .stroke(Stroke::new(1.0, tone::line()))
                             .inner_margin(Margin::symmetric(20, 12)),
                     )
                     .show(ui, |ui| {
@@ -363,16 +470,17 @@ impl SettingsHost {
             RichText::new(title)
                 .size(18.0)
                 .strong()
-                .color(tone::TEXT),
+                .color(tone::text()),
         );
         ui.add_space(4.0);
-        ui.label(RichText::new("DeskHud").size(11.5).color(tone::MUTED));
+        ui.label(RichText::new("DeskHud").size(11.5).color(tone::muted()));
         ui.add_space(18.0);
 
         for (next, key) in [
             (SettingsTab::General, MessageKey::SettingsNavGeneral),
             (SettingsTab::Pet, MessageKey::SettingsNavPet),
             (SettingsTab::Hud, MessageKey::SettingsNavHud),
+            (SettingsTab::About, MessageKey::SettingsNavAbout),
         ] {
             let label = self.lock().prefs.t(key).to_string();
             let selected = tab == next;
@@ -438,11 +546,85 @@ impl SettingsHost {
             SettingsTab::General => self.draw_general_page(ui),
             SettingsTab::Pet => self.draw_pet_page(ui),
             SettingsTab::Hud => self.draw_hud_page(ui),
+            SettingsTab::About => self.draw_about_page(ui),
         }
     }
 
+    fn draw_about_page(&self, ui: &mut egui::Ui) {
+        let (nav, intro, version_l, license_l, author_l, homepage_l, stack) = {
+            let s = self.lock();
+            (
+                s.prefs.t(MessageKey::SettingsNavAbout).to_string(),
+                s.prefs.t(MessageKey::SettingsAboutIntro).to_string(),
+                s.prefs.t(MessageKey::SettingsAboutVersion).to_string(),
+                s.prefs.t(MessageKey::SettingsAboutLicense).to_string(),
+                s.prefs.t(MessageKey::MetaAuthor).to_string(),
+                s.prefs.t(MessageKey::MetaHomepage).to_string(),
+                s.prefs.t(MessageKey::SettingsAboutStack).to_string(),
+            )
+        };
+        page_header(ui, &nav, &intro);
+        ui.add_space(16.0);
+
+        // 版本 / 作者 / 许可证：编译期从本包 Cargo 元数据注入（继承 workspace.package）
+        let version = env!("CARGO_PKG_VERSION");
+        let author = env!("CARGO_PKG_AUTHORS");
+        let license = env!("CARGO_PKG_LICENSE");
+
+        section_card(ui, |ui| {
+            ui.label(
+                RichText::new("DeskHud")
+                    .size(20.0)
+                    .strong()
+                    .color(tone::text()),
+            );
+            ui.add_space(6.0);
+            ui.label(RichText::new(&stack).size(13.0).color(tone::muted()));
+            ui.add_space(14.0);
+            about_info_row(ui, &version_l, version);
+            ui.add_space(8.0);
+            about_info_row(ui, &author_l, author);
+            ui.add_space(8.0);
+            about_info_row(ui, &license_l, license);
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                ui.set_min_height(22.0);
+                ui.allocate_ui_with_layout(
+                    Vec2::new(72.0, 22.0),
+                    Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.label(RichText::new(&homepage_l).size(13.0).color(tone::muted()));
+                    },
+                );
+                ui.hyperlink_to(
+                    RichText::new(APP_HOMEPAGE).size(13.0).color(tone::accent()),
+                    APP_HOMEPAGE,
+                );
+            });
+        });
+
+        ui.add_space(12.0);
+        section_card(ui, |ui| {
+            about_info_row(ui, "Rust", concat!(env!("CARGO_PKG_RUST_VERSION"), "+"));
+            ui.add_space(8.0);
+            about_info_row(ui, "egui / eframe", APP_EGUI_VERSION);
+        });
+    }
+
     fn draw_pet_page(&self, ui: &mut egui::Ui) {
-        let (nav, intro, pets, active, size_key, selected_badge, mode, author_l, homepage_l) = {
+        let (
+            nav,
+            intro,
+            pets,
+            active,
+            size_key,
+            selected_badge,
+            mode,
+            author_l,
+            homepage_l,
+            catalogs,
+            locale,
+        ) = {
             let s = self.lock();
             (
                 s.prefs.t(MessageKey::SettingsNavPet).to_string(),
@@ -454,21 +636,19 @@ impl SettingsHost {
                 s.prefs.shell.pet_picker_mode,
                 s.prefs.t(MessageKey::MetaAuthor).to_string(),
                 s.prefs.t(MessageKey::MetaHomepage).to_string(),
+                s.catalogs.clone(),
+                s.prefs.locale,
             )
         };
 
-        // 标题单独一行；说明靠左、视图切换靠右，与下方内容左右对齐
-        ui.label(
-            RichText::new(&nav)
-                .size(22.0)
-                .strong()
-                .color(tone::TEXT),
-        );
-        ui.add_space(6.0);
+        // 标题 + 视图切换同一行；说明多行换行（含第三方风险提示，勿截断）
         ui.horizontal(|ui| {
             ui.set_height(30.0);
-            ui.add(
-                egui::Label::new(RichText::new(&intro).size(13.0).color(tone::MUTED)).truncate(),
+            ui.label(
+                RichText::new(&nav)
+                    .size(22.0)
+                    .strong()
+                    .color(tone::text()),
             );
             ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Some(m) = view_mode_icon_group(ui, mode) {
@@ -478,6 +658,8 @@ impl SettingsHost {
                 }
             });
         });
+        ui.add_space(6.0);
+        ui.label(RichText::new(&intro).size(13.0).color(tone::muted()));
         ui.add_space(14.0);
 
         let ctx = ui.ctx().clone();
@@ -519,6 +701,20 @@ impl SettingsHost {
                             }
                             let pet = &pets[i];
                             let selected = pet.id == active;
+                            let name = pack_field(
+                                &catalogs,
+                                locale,
+                                pet.id,
+                                "display_name",
+                                pet.display_name,
+                            );
+                            let desc = pack_field(
+                                &catalogs,
+                                locale,
+                                pet.id,
+                                "description",
+                                pet.description,
+                            );
                             let size_label = format!(
                                 "{}  {:.0}×{:.0}",
                                 size_key, pet.window_width, pet.window_height
@@ -530,8 +726,8 @@ impl SettingsHost {
                                 card_w,
                                 card_h,
                                 preview_side,
-                                pet.display_name,
-                                pet.description,
+                                &name,
+                                &desc,
                                 pet.id,
                                 &author_label,
                                 pet.author,
@@ -560,6 +756,20 @@ impl SettingsHost {
                         ui.add_space(8.0);
                     }
                     let selected = pet.id == active;
+                    let name = pack_field(
+                        &catalogs,
+                        locale,
+                        pet.id,
+                        "display_name",
+                        pet.display_name,
+                    );
+                    let desc = pack_field(
+                        &catalogs,
+                        locale,
+                        pet.id,
+                        "description",
+                        pet.description,
+                    );
                     let size_label = format!(
                         "{}  {:.0}×{:.0}",
                         size_key, pet.window_width, pet.window_height
@@ -568,8 +778,8 @@ impl SettingsHost {
                     let tex = textures.get(&pet_preview_key(pet.id));
                     let resp = pet_list_row(
                         ui,
-                        pet.display_name,
-                        pet.description,
+                        &name,
+                        &desc,
                         pet.id,
                         &author_label,
                         pet.author,
@@ -598,16 +808,46 @@ impl SettingsHost {
         }
 
         ui.add_space(16.0);
+        self.draw_pet_window_prefs(ui);
+        ui.add_space(16.0);
         self.draw_active_pet_options(ui);
     }
 
+    fn draw_pet_window_prefs(&self, ui: &mut egui::Ui) {
+        let (topmost_l, topmost_hint, mut topmost) = {
+            let s = self.lock();
+            (
+                s.prefs.t(MessageKey::SettingsTopmost).to_string(),
+                s.prefs.t(MessageKey::SettingsTopmostHint).to_string(),
+                s.prefs.shell.pet_topmost,
+            )
+        };
+        section_card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new(&topmost_l)
+                            .size(13.5)
+                            .strong()
+                            .color(tone::text()),
+                    );
+                    ui.label(RichText::new(&topmost_hint).size(12.0).color(tone::muted()));
+                });
+                ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                    toggle_switch(ui, &mut topmost);
+                });
+            });
+        });
+        self.lock().prefs.shell.pet_topmost = topmost;
+    }
+
     fn draw_active_pet_options(&self, ui: &mut egui::Ui) {
-        let (active_id, options, options_title) = {
+        let (active_id, options, options_title, catalogs, locale) = {
             let s = self.lock();
             let id = s.prefs.shell.active_pet_kind_id.clone();
             let opts = s.pet_options.get(&id).cloned().unwrap_or_default();
             let title = s.prefs.t(MessageKey::SettingsPetOptions).to_string();
-            (id, opts, title)
+            (id, opts, title, s.catalogs.clone(), s.prefs.locale)
         };
         if options.is_empty() {
             return;
@@ -617,7 +857,7 @@ impl SettingsHost {
             RichText::new(&options_title)
                 .size(16.0)
                 .strong()
-                .color(tone::TEXT),
+                .color(tone::text()),
         );
         ui.add_space(10.0);
         section_card(ui, |ui| {
@@ -627,6 +867,14 @@ impl SettingsHost {
                     ui.separator();
                     ui.add_space(10.0);
                 }
+                let label = pack_field(&catalogs, locale, &active_id, &format!("{}.label", opt.key), opt.label);
+                let description = pack_field(
+                    &catalogs,
+                    locale,
+                    &active_id,
+                    &format!("{}.description", opt.key),
+                    opt.description,
+                );
                 let mut on = self
                     .lock()
                     .prefs
@@ -635,15 +883,15 @@ impl SettingsHost {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(
-                            RichText::new(opt.label)
+                            RichText::new(&label)
                                 .size(13.5)
                                 .strong()
-                                .color(tone::TEXT),
+                                .color(tone::text()),
                         );
                         ui.label(
-                            RichText::new(opt.description)
+                            RichText::new(&description)
                                 .size(12.0)
-                                .color(tone::MUTED),
+                                .color(tone::muted()),
                         );
                     });
                     ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
@@ -660,7 +908,19 @@ impl SettingsHost {
     }
 
     fn draw_hud_page(&self, ui: &mut egui::Ui) {
-        let (nav, intro, plugins, items, empty, author_l, enabled_suffix, homepage_l) = {
+        let (
+            nav,
+            intro,
+            plugins,
+            items,
+            empty,
+            author_l,
+            enabled_suffix,
+            homepage_l,
+            disabled_hint,
+            catalogs,
+            locale,
+        ) = {
             let s = self.lock();
             (
                 s.prefs.t(MessageKey::SettingsNavHud).to_string(),
@@ -671,6 +931,9 @@ impl SettingsHost {
                 s.prefs.t(MessageKey::MetaAuthor).to_string(),
                 s.prefs.t(MessageKey::HudItemsEnabled).to_string(),
                 s.prefs.t(MessageKey::MetaHomepage).to_string(),
+                s.prefs.t(MessageKey::HudPluginDisabledHint).to_string(),
+                s.catalogs.clone(),
+                s.prefs.locale,
             )
         };
         page_header(ui, &nav, &intro);
@@ -733,10 +996,24 @@ impl SettingsHost {
                 let mut open = ui.data_mut(|d| *d.get_temp_mut_or(open_id, open_default));
                 let plugin_icon = textures.get(&plugin_icon_key(plugin.id));
 
+                let plugin_name = pack_field(
+                    &catalogs,
+                    locale,
+                    plugin.id,
+                    "display_name",
+                    plugin.display_name,
+                );
+                let plugin_desc = pack_field(
+                    &catalogs,
+                    locale,
+                    plugin.id,
+                    "description",
+                    plugin.description,
+                );
                 ui.horizontal(|ui| {
                     let toggle_reserve = 50.0;
                     let left_w = (ui.available_width() - toggle_reserve).max(120.0);
-                    let title = format!("{} ｜ {}", plugin.display_name, plugin.description);
+                    let title = format!("{} ｜ {}", plugin_name, plugin_desc);
                     let meta = format!(
                         "{}  ·  {} {}  ·  {}/{} {}",
                         plugin.id,
@@ -747,15 +1024,15 @@ impl SettingsHost {
                         enabled_suffix
                     );
                     let title_color = if plugin_on {
-                        tone::TEXT
+                        tone::text()
                     } else {
-                        tone::MUTED
+                        tone::muted()
                     };
                     let mut left = plugin_header_hit(
                         ui,
                         left_w,
                         open,
-                        plugin.display_name,
+                        &plugin_name,
                         plugin_icon,
                         &title,
                         &meta,
@@ -763,8 +1040,8 @@ impl SettingsHost {
                     );
                     left = attach_pack_tooltip(
                         left,
-                        plugin.display_name,
-                        plugin.description,
+                        &plugin_name,
+                        &plugin_desc,
                         plugin.id,
                         &author_l,
                         plugin.author,
@@ -807,7 +1084,7 @@ impl SettingsHost {
                                     ),
                                     egui::pos2(sep_rect.right(), sep_rect.center().y + 1.0),
                                 );
-                                ui.painter().rect_filled(line, 0.0, tone::LINE);
+                                ui.painter().rect_filled(line, 0.0, tone::line());
                                 ui.add_space(4.0);
                             }
                             let mut on = self.lock().prefs.hud.is_enabled(
@@ -816,6 +1093,13 @@ impl SettingsHost {
                                 c.default_enabled,
                             );
                             let item_id = format!("{}.{}", plugin.id, c.id);
+                            let item_label = pack_field(
+                                &catalogs,
+                                locale,
+                                plugin.id,
+                                &format!("{}.label", c.id),
+                                c.label,
+                            );
                             let item_icon =
                                 textures.get(&hud_item_icon_key(plugin.id, c.id));
                             ui.horizontal(|ui| {
@@ -828,14 +1112,14 @@ impl SettingsHost {
                                         ui.add_space(plugin_layout::ICON_TO_TEXT);
                                         ui.vertical(|ui| {
                                             ui.label(
-                                                RichText::new(c.label)
+                                                RichText::new(&item_label)
                                                     .size(13.5)
-                                                    .color(tone::TEXT),
+                                                    .color(tone::text()),
                                             );
                                             ui.label(
                                                 RichText::new(&item_id)
                                                     .size(11.0)
-                                                    .color(tone::MUTED),
+                                                    .color(tone::muted()),
                                             );
                                         });
                                     },
@@ -860,9 +1144,9 @@ impl SettingsHost {
                         ui.horizontal(|ui| {
                             ui.add_space(plugin_layout::icon_left());
                             ui.label(
-                                RichText::new("插件已关闭，条目暂时不会显示")
+                                RichText::new(&disabled_hint)
                                     .size(11.5)
-                                    .color(tone::MUTED),
+                                    .color(tone::muted()),
                             );
                         });
                     }
@@ -881,109 +1165,782 @@ impl SettingsHost {
         page_header(ui, &nav, "");
         ui.add_space(16.0);
 
-        let (locale_l, zh, en, locale, topmost_l, topmost_hint, topmost) = {
+        let (
+            locale_l,
+            zh,
+            en,
+            locale,
+            theme_l,
+            theme_light,
+            theme_dark,
+            theme_system,
+            theme,
+            font_l,
+            font_family_l,
+            font_style_l,
+            font_size_l,
+            font_preview,
+            font_id,
+            font_family,
+            font_style,
+            font_size,
+            locale_enum,
+        ) = {
             let s = self.lock();
             (
                 s.prefs.t(MessageKey::SettingsLocale).to_string(),
                 s.prefs.t(MessageKey::OptLocaleZh).to_string(),
                 s.prefs.t(MessageKey::OptLocaleEn).to_string(),
                 s.prefs.locale,
-                s.prefs.t(MessageKey::SettingsTopmost).to_string(),
-                s.prefs.t(MessageKey::SettingsTopmostHint).to_string(),
-                s.prefs.shell.pet_topmost,
+                s.prefs.t(MessageKey::SettingsTheme).to_string(),
+                s.prefs.t(MessageKey::OptThemeLight).to_string(),
+                s.prefs.t(MessageKey::OptThemeDark).to_string(),
+                s.prefs.t(MessageKey::OptThemeSystem).to_string(),
+                s.prefs.shell.ui_theme,
+                s.prefs.t(MessageKey::SettingsUiFont).to_string(),
+                s.prefs.t(MessageKey::SettingsUiFontFamily).to_string(),
+                s.prefs.t(MessageKey::SettingsUiFontStyle).to_string(),
+                s.prefs.t(MessageKey::SettingsUiFontSize).to_string(),
+                s.prefs.t(MessageKey::SettingsUiFontPreview).to_string(),
+                s.prefs.shell.ui_font_id.clone(),
+                s.prefs.shell.ui_font_family.clone(),
+                crate::fonts::normalize_style_name(&s.prefs.shell.ui_font_style),
+                s.prefs.shell.ui_font_size,
+                s.prefs.locale,
             )
         };
 
         let mut locale = locale;
-        let mut topmost = topmost;
+        let mut theme = theme;
+        let families = crate::fonts::list_font_families();
+        let mut family_key = if font_family.starts_with("fam.")
+            && families.iter().any(|f| f.family_key == font_family)
+        {
+            font_family
+        } else {
+            crate::fonts::family_key_for_font_id(&families, &font_id)
+        };
+        let mut font_style = font_style;
+        let mut font_size = font_size;
+        if let Some(fam) = families.iter().find(|f| f.family_key == family_key) {
+            let styles = fam.style_names();
+            if !styles
+                .iter()
+                .any(|s| crate::fonts::normalize_style_name(s) == font_style)
+            {
+                font_style = styles
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "Regular".into());
+            }
+        }
+        let family_label = crate::fonts::label_for_family(&families, &family_key);
+        let style_disp = match locale_enum {
+            Locale::ZhCn => crate::fonts::style_label_zh(&font_style),
+            Locale::En => crate::fonts::style_label_en(&font_style),
+        };
 
         section_card(ui, |ui| {
-            ui.label(
-                RichText::new(locale_l)
-                    .size(13.5)
-                    .strong()
-                    .color(tone::TEXT),
-            );
-            ui.add_space(10.0);
-            let combo_w = ui.available_width();
-            style_locale_combo(ui);
-            // `height` = 弹层 ScrollArea 最大高度（不是按钮高度）
-            egui::ComboBox::from_id_salt("settings_locale")
-                .width(combo_w)
-                .height(200.0)
-                // 与插件展开箭头同款描边 chevron（非默认实心三角）
-                .icon(locale_combo_chevron)
-                .popup_style(egui::style::StyleModifier::new(|style| {
-                    style.visuals.window_fill = tone::CARD;
-                    style.visuals.panel_fill = tone::CARD;
-                    style.visuals.extreme_bg_color = tone::CARD;
-                    style.visuals.faint_bg_color = Color32::from_rgb(248, 249, 252);
-                    style.visuals.window_stroke = Stroke::new(1.0, tone::LINE);
-                    style.visuals.popup_shadow = egui::Shadow {
-                        offset: [0, 4],
-                        blur: 14,
-                        spread: 0,
-                        color: Color32::from_black_alpha(28),
-                    };
-                    let stroke = Stroke::new(1.0, Color32::TRANSPARENT);
-                    for w in [
-                        &mut style.visuals.widgets.inactive,
-                        &mut style.visuals.widgets.hovered,
-                        &mut style.visuals.widgets.active,
-                        &mut style.visuals.widgets.open,
-                    ] {
-                        w.weak_bg_fill = Color32::TRANSPARENT;
-                        w.bg_fill = Color32::TRANSPARENT;
-                        w.bg_stroke = stroke;
-                    }
-                    style.visuals.selection.bg_fill = tone::ACCENT_SOFT;
-                    style.visuals.selection.stroke = Stroke::new(1.0, tone::SELECTED_RING);
-                }))
-                .selected_text(
-                    RichText::new(match locale {
-                        Locale::ZhCn => zh.as_str(),
-                        Locale::En => en.as_str(),
-                    })
-                    .size(13.5)
-                    .color(tone::TEXT),
-                )
-                .show_ui(ui, |ui| {
-                    ui.set_min_width((combo_w - 8.0).max(120.0));
-                    ui.spacing_mut().item_spacing.y = 0.0;
-                    ui.add_space(8.0);
-                    locale_combo_option(ui, &mut locale, Locale::ZhCn, &zh);
-                    ui.add_space(4.0);
-                    locale_combo_option(ui, &mut locale, Locale::En, &en);
-                    ui.add_space(8.0);
+            setting_row(ui, &theme_l, |ui| {
+                let theme_text = match theme {
+                    UiTheme::Light => theme_light.as_str(),
+                    UiTheme::Dark => theme_dark.as_str(),
+                    UiTheme::System => theme_system.as_str(),
+                };
+                settings_combo(ui, "settings_theme", SETTINGS_COMBO_W, theme_text, |ui| {
+                    theme_combo_option(ui, &mut theme, UiTheme::System, &theme_system);
+                    ui.add_space(2.0);
+                    theme_combo_option(ui, &mut theme, UiTheme::Light, &theme_light);
+                    ui.add_space(2.0);
+                    theme_combo_option(ui, &mut theme, UiTheme::Dark, &theme_dark);
                 });
+            });
         });
 
         ui.add_space(12.0);
 
         section_card(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(
-                        RichText::new(&topmost_l)
-                            .size(13.5)
-                            .strong()
-                            .color(tone::TEXT),
-                    );
-                    ui.label(RichText::new(&topmost_hint).size(12.0).color(tone::MUTED));
-                });
-                ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                    toggle_switch(ui, &mut topmost);
+            setting_row(ui, &locale_l, |ui| {
+                let locale_text = match locale {
+                    Locale::ZhCn => zh.as_str(),
+                    Locale::En => en.as_str(),
+                };
+                settings_combo(ui, "settings_locale", SETTINGS_COMBO_W, locale_text, |ui| {
+                    locale_combo_option(ui, &mut locale, Locale::ZhCn, &zh);
+                    ui.add_space(2.0);
+                    locale_combo_option(ui, &mut locale, Locale::En, &en);
                 });
             });
         });
+
+        ui.add_space(12.0);
+
+        section_card(ui, |ui| {
+            ui.label(
+                RichText::new(&font_l)
+                    .size(13.5)
+                    .strong()
+                    .color(tone::text()),
+            );
+            ui.add_space(8.0);
+            // 不缩进：标题下横线，圈出配置项区域
+            settings_full_rule(ui);
+            ui.add_space(8.0);
+
+            nested_settings_block(ui, |ui| {
+                setting_row_divided(ui, &font_family_l, true, |ui| {
+                    let opts: Vec<(String, String)> = families
+                        .iter()
+                        .map(|f| (f.family_key.clone(), f.label.clone()))
+                        .collect();
+                    searchable_combo(
+                        ui,
+                        "settings_ui_font_family",
+                        SETTINGS_COMBO_W,
+                        &family_label,
+                        &opts,
+                        |key, label, q| {
+                            if q.is_empty() {
+                                return false;
+                            }
+                            let q = q.to_lowercase();
+                            if label.to_lowercase().starts_with(&q) {
+                                return true;
+                            }
+                            families.iter().find(|f| f.family_key == key).is_some_and(|f| {
+                                f.search_terms
+                                    .iter()
+                                    .any(|term| term.to_lowercase().starts_with(&q))
+                            })
+                        },
+                        &mut family_key,
+                    );
+                });
+
+                let style_names: Vec<String> = families
+                    .iter()
+                    .find(|f| f.family_key == family_key)
+                    .map(|f| f.style_names())
+                    .unwrap_or_else(|| vec!["Regular".into()]);
+                setting_row_divided(ui, &font_style_l, true, |ui| {
+                    settings_combo(
+                        ui,
+                        "settings_ui_font_style",
+                        SETTINGS_COMBO_W,
+                        &style_disp,
+                        |ui| {
+                            for (i, st) in style_names.iter().enumerate() {
+                                if i > 0 {
+                                    ui.add_space(2.0);
+                                }
+                                let label = match locale_enum {
+                                    Locale::ZhCn => crate::fonts::style_label_zh(st),
+                                    Locale::En => crate::fonts::style_label_en(st),
+                                };
+                                string_combo_option(ui, &mut font_style, st, &label);
+                            }
+                        },
+                    );
+                });
+
+                // 最后一项底部不再画行内横线
+                setting_row_divided(ui, &font_size_l, false, |ui| {
+                    size_searchable_combo(
+                        ui,
+                        "settings_ui_font_size",
+                        SETTINGS_COMBO_W,
+                        &mut font_size,
+                    );
+                });
+            });
+
+            ui.add_space(8.0);
+            // 不缩进：配置区与预览之间的横线
+            settings_full_rule(ui);
+            ui.add_space(10.0);
+            ui.label(
+                RichText::new(&font_preview)
+                    .size(font_size.clamp(11.0, 18.0))
+                    .color(tone::text()),
+            );
+        });
+
+        if let Some(fam) = families.iter().find(|f| f.family_key == family_key) {
+            let styles = fam.style_names();
+            if !styles
+                .iter()
+                .any(|s| crate::fonts::normalize_style_name(s) == font_style)
+            {
+                font_style = styles
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "Regular".into());
+            }
+        }
+        let resolved_id = crate::fonts::resolve_font_id(&families, &family_key, &font_style);
 
         let mut s = self.lock();
         if s.prefs.locale != locale {
             s.prefs.locale = locale;
             s.locale_dirty = true;
         }
-        s.prefs.shell.pet_topmost = topmost;
+        s.prefs.shell.ui_theme = theme;
+        let font_changed = s.prefs.shell.ui_font_id != resolved_id
+            || s.prefs.shell.ui_font_family != family_key
+            || crate::fonts::normalize_style_name(&s.prefs.shell.ui_font_style) != font_style
+            || (s.prefs.shell.ui_font_size - font_size).abs() > 0.01;
+        s.prefs.shell.ui_font_id = resolved_id.clone();
+        s.prefs.shell.ui_font_family = family_key;
+        s.prefs.shell.ui_font_style = font_style;
+        s.prefs.shell.ui_font_size = font_size;
+        if font_changed {
+            crate::fonts::configure_typography(ui.ctx(), &resolved_id, font_size);
+        }
     }
+}
+
+fn setting_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
+    ui.horizontal(|ui| {
+        ui.set_height(40.0);
+        ui.allocate_ui_with_layout(
+            Vec2::new(72.0, 40.0),
+            Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.label(RichText::new(label).size(13.0).color(tone::text()));
+            },
+        );
+        ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+            add(ui);
+        });
+    });
+}
+
+/// 组合配置子区：左右缩进，形成层次。
+fn nested_settings_block(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
+    Frame::NONE
+        .inner_margin(Margin::symmetric(14, 0))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            add(ui);
+        });
+}
+
+/// 与卡片同宽的分隔线（不随子项缩进）。
+fn settings_full_rule(ui: &mut egui::Ui) {
+    let stroke = Stroke::new(1.0, tone::line());
+    let y = ui.cursor().min.y;
+    let x0 = ui.max_rect().left();
+    let x1 = ui.max_rect().right();
+    ui.painter().hline(x0..=x1, y, stroke);
+    ui.add_space(1.0);
+}
+
+/// 子配置行；`divider_below` 时在下方画分隔线。
+fn setting_row_divided(
+    ui: &mut egui::Ui,
+    label: &str,
+    divider_below: bool,
+    add: impl FnOnce(&mut egui::Ui),
+) {
+    setting_row(ui, label, add);
+    if divider_below {
+        ui.add_space(4.0);
+        let stroke = Stroke::new(1.0, tone::line());
+        let y = ui.cursor().min.y;
+        let x0 = ui.max_rect().left();
+        let x1 = ui.max_rect().right();
+        ui.painter().hline(x0..=x1, y, stroke);
+        ui.add_space(9.0);
+    }
+}
+
+fn theme_combo_option(ui: &mut egui::Ui, selected: &mut UiTheme, value: UiTheme, label: &str) {
+    let mut cur = format!("{selected:?}");
+    font_combo_option(ui, &mut cur, &format!("{value:?}"), label);
+    if cur == format!("{value:?}") {
+        *selected = value;
+    }
+}
+
+fn string_combo_option(ui: &mut egui::Ui, selected: &mut String, value: &str, label: &str) {
+    let mut cur = selected.clone();
+    font_combo_option(ui, &mut cur, value, label);
+    if cur == value {
+        *selected = value.to_string();
+    }
+}
+
+/// 统一普通下拉：定宽截断 + 同款 chevron + 弹层限高滚动。
+fn settings_combo(
+    ui: &mut egui::Ui,
+    id_salt: &'static str,
+    width: f32,
+    selected_text: impl Into<egui::WidgetText>,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
+    style_locale_combo(ui);
+    let salt = id_salt;
+    let response = egui::ComboBox::from_id_salt(id_salt)
+        .width(width)
+        .height(SETTINGS_COMBO_POPUP_H)
+        .truncate()
+        .icon(move |ui, rect, _visuals, open| {
+            settings_combo_chevron(ui, salt, rect, open);
+        })
+        .popup_style(settings_combo_popup_style())
+        .selected_text(selected_text.into())
+        .show_ui(ui, |ui| {
+            // ComboBox 内部默认 Extend，会把弹层撑得比按钮宽
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+            let w = ui.available_width();
+            ui.set_min_width(w);
+            ui.set_max_width(w);
+            ui.spacing_mut().item_spacing.y = 0.0;
+            ui.add_space(8.0);
+            add_contents(ui);
+            ui.add_space(8.0);
+        });
+    let _ = response;
+}
+
+/// 可搜索下拉（前缀补齐）：点开全选；输入替换选区；列表不过滤，跳到最佳前缀匹配并补齐且选中后缀。
+fn searchable_combo(
+    ui: &mut egui::Ui,
+    id_salt: &str,
+    width: f32,
+    selected_label: &str,
+    opts: &[(String, String)],
+    mut is_prefix: impl FnMut(&str, &str, &str) -> bool,
+    selected_key: &mut String,
+) {
+    let button_id = ui.make_persistent_id(id_salt);
+    let area_id = button_id.with("area");
+    let open_id = button_id.with("open");
+    let text_id = button_id.with("text");
+    let edit_id = button_id.with("edit");
+    let hi_id = button_id.with("highlight");
+    let typed_id = button_id.with("typed_len");
+    let suppress_id = button_id.with("suppress_match");
+    let ime_id = button_id.with("ime_composing");
+
+    let mut is_open = ui.data_mut(|d| *d.get_temp_mut_or_insert_with(open_id, || false));
+    let mut text = ui.data_mut(|d| {
+        d.get_temp_mut_or_insert_with(text_id, String::new).clone()
+    });
+    let mut highlight = ui.data_mut(|d| {
+        d.get_temp_mut_or_insert_with(hi_id, || selected_key.clone())
+            .clone()
+    });
+    let mut typed_len = ui.data_mut(|d| *d.get_temp_mut_or_insert_with(typed_id, || 0usize));
+    let mut suppress_match =
+        ui.data_mut(|d| *d.get_temp_mut_or_insert_with(suppress_id, || false));
+    let mut ime_composing =
+        ui.data_mut(|d| *d.get_temp_mut_or_insert_with(ime_id, || false));
+    // 本帧一次性跳转；勿用 scroll_to_me（长列表首帧高度未稳时会反复居中狂滚）
+    let mut scroll_jump: Option<f32> = None;
+
+    // 中文等 IME：预编辑期间禁止补齐/改选区，否则会打断候选窗
+    let ime_event_this_frame = update_ime_composing(ui, &mut ime_composing);
+
+    style_locale_combo(ui);
+    let height = ui.spacing().interact_size.y.max(40.0);
+    let (rect, bar_resp) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
+    let bar_w = bar_resp.rect.width();
+    let list_h = SETTINGS_COMBO_POPUP_H;
+    const ROW_GAP: f32 = 2.0;
+    const LIST_PAD_Y: f32 = 6.0;
+
+    let visuals = if is_open {
+        ui.visuals().widgets.open.clone()
+    } else {
+        ui.style().interact(&bar_resp).clone()
+    };
+    ui.painter().rect(
+        rect,
+        visuals.corner_radius,
+        visuals.weak_bg_fill,
+        visuals.bg_stroke,
+        egui::StrokeKind::Inside,
+    );
+
+    let pad = ui.spacing().button_padding;
+    let icon_size = Vec2::splat(ui.spacing().icon_width);
+    let inner = rect.shrink2(pad);
+    let icon_rect = Align2::RIGHT_CENTER.align_size_within_rect(icon_size, inner);
+    let text_rect = egui::Rect::from_min_max(
+        inner.min,
+        egui::pos2(
+            icon_rect.left() - ui.spacing().icon_spacing,
+            inner.max.y,
+        ),
+    );
+
+    let mut just_opened = false;
+
+    if !is_open && bar_resp.clicked() {
+        text = selected_label.to_string();
+        highlight = selected_key.clone();
+        typed_len = text.chars().count();
+        suppress_match = false;
+        is_open = true;
+        just_opened = true;
+        scroll_jump = Some(combo_scroll_offset(opts, &highlight, list_h));
+    } else if is_open
+        && bar_resp.clicked()
+        && ui.rect_contains_pointer(icon_rect.expand(6.0))
+        && !ui.rect_contains_pointer(text_rect)
+    {
+        is_open = false;
+    }
+
+    if is_open {
+        if just_opened {
+            ui.ctx().data_mut(|d| d.remove::<TextEditState>(edit_id));
+        }
+        let mut edit_text = text.clone();
+        let edit_resp = ui.put(
+            text_rect,
+            egui::TextEdit::singleline(&mut edit_text)
+                .id(edit_id)
+                .frame(Frame::NONE)
+                .desired_width(text_rect.width())
+                .text_color(tone::text()),
+        );
+
+        if edit_resp.changed() {
+            let typed = edit_text;
+            if ime_composing {
+                // 预编辑串由 TextEdit/IME 管理；只同步缓冲，不动光标与补齐
+                text = typed;
+            } else {
+                // 退格/删除：去掉补齐选区后不再自动匹配，直到再次输入字符
+                let deleting = ui.input(|i| {
+                    i.key_pressed(egui::Key::Backspace) || i.key_pressed(egui::Key::Delete)
+                });
+                if deleting {
+                    suppress_match = true;
+                    text = typed;
+                    typed_len = text.chars().count();
+                    set_text_edit_selection(ui.ctx(), edit_id, typed_len, typed_len);
+                } else {
+                    suppress_match = false;
+                    if typed.is_empty() {
+                        text = String::new();
+                        typed_len = 0;
+                    } else if let Some((key, label)) =
+                        opts.iter().find(|(k, l)| is_prefix(k, l, &typed))
+                    {
+                        let label_lower = label.to_lowercase();
+                        let typed_lower = typed.to_lowercase();
+                        let hi_changed = *key != highlight;
+                        text = label.clone();
+                        highlight = key.clone();
+                        if label_lower.starts_with(&typed_lower) {
+                            typed_len = typed.chars().count();
+                        } else {
+                            // 别名命中：整词选中，继续输入将整体替换
+                            typed_len = 0;
+                        }
+                        set_text_edit_selection(
+                            ui.ctx(),
+                            edit_id,
+                            typed_len,
+                            text.chars().count(),
+                        );
+                        if hi_changed {
+                            scroll_jump = Some(combo_scroll_offset(opts, &highlight, list_h));
+                        }
+                    } else {
+                        text = typed;
+                        typed_len = text.chars().count();
+                    }
+                }
+            }
+        }
+
+        if just_opened {
+            edit_resp.request_focus();
+            // 点开全选，下一次输入直接替换
+            set_text_edit_selection(ui.ctx(), edit_id, 0, text.chars().count());
+        }
+
+        // Enter 上屏候选时勿关闭下拉
+        if !ime_composing
+            && !ime_event_this_frame
+            && ui.input(|i| i.key_pressed(egui::Key::Enter))
+        {
+            *selected_key = highlight.clone();
+            is_open = false;
+        }
+    } else {
+        let shown = truncate_to_width(ui, selected_label, text_rect.width(), 13.5);
+        ui.painter().text(
+            egui::pos2(text_rect.left(), text_rect.center().y),
+            Align2::LEFT_CENTER,
+            shown,
+            FontId::proportional(13.5),
+            tone::text(),
+        );
+    }
+
+    settings_combo_chevron(ui, id_salt, icon_rect, is_open);
+
+    if is_open {
+        let before = selected_key.clone();
+        let popup_pos = egui::pos2(bar_resp.rect.left(), bar_resp.rect.bottom() + 2.0);
+        let hi = highlight.clone();
+        let jump = scroll_jump.take();
+
+        let area_inner = Area::new(area_id)
+            .order(Order::Foreground)
+            .fixed_pos(popup_pos)
+            .default_size(Vec2::new(bar_w, list_h))
+            .sense(Sense::click())
+            .show(ui.ctx(), |ui| {
+                settings_combo_popup_style().apply(ui.style_mut());
+                Frame::NONE
+                    .fill(tone::card())
+                    .stroke(Stroke::new(1.0, tone::line()))
+                    .corner_radius(CornerRadius::same(8))
+                    .shadow(egui::Shadow {
+                        offset: [0, 4],
+                        blur: 14,
+                        spread: 0,
+                        color: Color32::from_black_alpha(28),
+                    })
+                    .show(ui, |ui| {
+                        ui.set_min_size(Vec2::new(bar_w, list_h));
+                        ui.set_max_size(Vec2::new(bar_w, list_h));
+                        let mut scroll = egui::ScrollArea::vertical()
+                            .id_salt((id_salt, "scroll"))
+                            .max_height(list_h)
+                            .animated(false)
+                            .auto_shrink([false, false]);
+                        if let Some(off) = jump {
+                            scroll = scroll.vertical_scroll_offset(off);
+                        }
+                        scroll.show(ui, |ui| {
+                            ui.set_width(bar_w);
+                            ui.spacing_mut().item_spacing.y = 0.0;
+                            ui.add_space(LIST_PAD_Y);
+                            for (i, (key, label)) in opts.iter().enumerate() {
+                                if i > 0 {
+                                    ui.add_space(ROW_GAP);
+                                }
+                                let active = *key == hi;
+                                let resp = combo_option_row(ui, active, label);
+                                if resp.clicked() {
+                                    *selected_key = key.clone();
+                                }
+                            }
+                            ui.add_space(LIST_PAD_Y);
+                        });
+                    });
+            });
+
+        let click_away = !just_opened
+            && ui.input(|i| i.pointer.any_click())
+            && bar_resp.clicked_elsewhere()
+            && area_inner.response.clicked_elsewhere();
+        if click_away {
+            // 失焦时提交当前高亮项
+            *selected_key = highlight.clone();
+            is_open = false;
+        } else if *selected_key != before {
+            is_open = false;
+        }
+    }
+
+    if is_open {
+        ui.data_mut(|d| {
+            d.insert_temp(text_id, text.clone());
+            d.insert_temp(hi_id, highlight.clone());
+            d.insert_temp(typed_id, typed_len);
+            d.insert_temp(suppress_id, suppress_match);
+            d.insert_temp(ime_id, ime_composing);
+        });
+    } else {
+        ui.data_mut(|d| {
+            d.insert_temp(text_id, String::new());
+            d.insert_temp(hi_id, selected_key.clone());
+            d.insert_temp(typed_id, 0usize);
+            d.insert_temp(suppress_id, false);
+            d.insert_temp(ime_id, false);
+        });
+    }
+    ui.data_mut(|d| d.insert_temp(open_id, is_open));
+}
+
+/// 根据本帧 `ImeEvent` 更新组合态；返回是否收到任意 IME 事件。
+fn update_ime_composing(ui: &egui::Ui, composing: &mut bool) -> bool {
+    let mut saw = false;
+    ui.input(|i| {
+        for ev in &i.events {
+            let egui::Event::Ime(ime) = ev else {
+                continue;
+            };
+            saw = true;
+            match ime {
+                egui::ImeEvent::Preedit { text, .. } => {
+                    *composing = !text.is_empty();
+                }
+                egui::ImeEvent::Commit(_) => {
+                    *composing = false;
+                }
+                _ => {}
+            }
+        }
+    });
+    saw
+}
+
+/// 将高亮项滚到弹层可视区中部附近（一次性 offset，无动画）。
+fn combo_scroll_offset(opts: &[(String, String)], highlight: &str, list_h: f32) -> f32 {
+    const ROW_H: f32 = 36.0;
+    const ROW_GAP: f32 = 2.0;
+    const LIST_PAD_Y: f32 = 6.0;
+    let Some(idx) = opts.iter().position(|(k, _)| k == highlight) else {
+        return 0.0;
+    };
+    let y = LIST_PAD_Y + idx as f32 * (ROW_H + ROW_GAP);
+    (y - (list_h - ROW_H) * 0.5).max(0.0)
+}
+
+fn size_searchable_combo(ui: &mut egui::Ui, id_salt: &str, width: f32, font_size: &mut f32) {
+    let opts: Vec<(String, String)> = crate::fonts::FONT_SIZE_OPTIONS
+        .iter()
+        .map(|&sz| {
+            let s = format!("{sz:.0}");
+            (s.clone(), s)
+        })
+        .collect();
+    let selected_label = format!("{:.0}", *font_size);
+    let mut key = selected_label.clone();
+    searchable_combo(
+        ui,
+        id_salt,
+        width,
+        &selected_label,
+        &opts,
+        |_k, label, q| {
+            !q.is_empty() && label.to_lowercase().starts_with(&q.to_lowercase())
+        },
+        &mut key,
+    );
+    if let Ok(v) = key.parse::<f32>() {
+        *font_size = v.clamp(10.0, 22.0);
+    }
+}
+
+fn set_text_edit_selection(ctx: &egui::Context, edit_id: egui::Id, start: usize, end: usize) {
+    let mut state = TextEditState::load(ctx, edit_id).unwrap_or_default();
+    state
+        .cursor
+        .set_char_range(Some(CCursorRange::two(CCursor::new(start), CCursor::new(end))));
+    state.store(ctx, edit_id);
+}
+
+fn combo_option_row(ui: &mut egui::Ui, active: bool, label: &str) -> egui::Response {
+    let height = 36.0;
+    let pad_x = 14.0;
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::click());
+    let fill = if active {
+        tone::accent_soft()
+    } else if response.hovered() {
+        tone::hover()
+    } else {
+        Color32::TRANSPARENT
+    };
+    if fill.a() > 0 {
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(6), fill);
+    }
+    let text_max_w = (rect.width() - pad_x * 2.0).max(0.0);
+    let shown = truncate_to_width(ui, label, text_max_w, 13.0);
+    ui.painter().with_clip_rect(rect).text(
+        egui::pos2(rect.left() + pad_x, rect.center().y),
+        Align2::LEFT_CENTER,
+        shown,
+        FontId::proportional(13.0),
+        if active {
+            tone::accent()
+        } else {
+            tone::text()
+        },
+    );
+    response
+}
+
+
+fn truncate_to_width(ui: &egui::Ui, text: &str, max_w: f32, size: f32) -> String {
+    let galley = ui.painter().layout_no_wrap(
+        text.to_string(),
+        FontId::proportional(size),
+        tone::text(),
+    );
+    if galley.size().x <= max_w || max_w <= 0.0 {
+        return text.to_string();
+    }
+    let mut chars: Vec<char> = text.chars().collect();
+    let mut out = text.to_string();
+    while chars.len() > 1 {
+        chars.pop();
+        let candidate: String = chars.iter().collect::<String>() + "…";
+        let g = ui.painter().layout_no_wrap(
+            candidate.clone(),
+            FontId::proportional(size),
+            tone::text(),
+        );
+        if g.size().x <= max_w {
+            out = candidate;
+            break;
+        }
+    }
+    out
+}
+
+
+fn settings_combo_popup_style() -> egui::style::StyleModifier {
+    egui::style::StyleModifier::new(|style| {
+        style.visuals.window_fill = tone::card();
+        style.visuals.panel_fill = tone::card();
+        style.visuals.extreme_bg_color = tone::card();
+        style.visuals.faint_bg_color = tone::faint();
+        style.visuals.window_stroke = Stroke::new(1.0, tone::line());
+        style.visuals.popup_shadow = egui::Shadow {
+            offset: [0, 4],
+            blur: 14,
+            spread: 0,
+            color: Color32::from_black_alpha(28),
+        };
+        let stroke = Stroke::new(1.0, Color32::TRANSPARENT);
+        for w in [
+            &mut style.visuals.widgets.inactive,
+            &mut style.visuals.widgets.hovered,
+            &mut style.visuals.widgets.active,
+            &mut style.visuals.widgets.open,
+        ] {
+            w.weak_bg_fill = Color32::TRANSPARENT;
+            w.bg_fill = Color32::TRANSPARENT;
+            w.bg_stroke = stroke;
+        }
+        style.visuals.selection.bg_fill = tone::accent_soft();
+        style.visuals.selection.stroke = Stroke::new(1.0, tone::selected_ring());
+    })
+}
+
+fn font_combo_option(
+    ui: &mut egui::Ui,
+    selected_id: &mut String,
+    value: &str,
+    label: &str,
+) -> egui::Response {
+    let response = combo_option_row(ui, selected_id == value, label);
+    if response.clicked() {
+        *selected_id = value.to_string();
+    }
+    response
 }
 
 fn ensure_preview_texture(
@@ -1034,46 +1991,65 @@ fn page_header(ui: &mut egui::Ui, title: &str, intro: &str) {
         RichText::new(title)
             .size(22.0)
             .strong()
-            .color(tone::TEXT),
+            .color(tone::text()),
     );
     if !intro.is_empty() {
         ui.add_space(6.0);
-        ui.label(RichText::new(intro).size(13.0).color(tone::MUTED));
+        ui.label(RichText::new(intro).size(13.0).color(tone::muted()));
     }
 }
 
 fn empty_hint(ui: &mut egui::Ui, text: &str) {
     section_card(ui, |ui| {
-        ui.label(RichText::new(text).color(tone::MUTED));
+        ui.label(RichText::new(text).color(tone::muted()));
     });
 }
 
 /// 设置窗独立不透明视觉：避免继承宠窗全局透明 `window_fill` 导致 Combo 弹出层透底。
 fn opaque_settings_visuals(ui: &mut egui::Ui) {
+    let dark = matches!(ui.ctx().theme(), egui::Theme::Dark);
     let v = ui.visuals_mut();
-    v.window_fill = tone::CARD;
-    v.panel_fill = tone::BG;
-    v.extreme_bg_color = tone::CARD;
-    v.window_stroke = Stroke::new(1.0, tone::LINE);
+    v.dark_mode = dark;
+    v.window_fill = tone::card();
+    v.panel_fill = tone::bg();
+    v.extreme_bg_color = tone::card();
+    v.faint_bg_color = tone::faint();
+    v.window_stroke = Stroke::new(1.0, tone::line());
     v.popup_shadow = egui::Shadow {
         offset: [0, 3],
         blur: 10,
         spread: 0,
-        color: Color32::from_black_alpha(36),
+        color: Color32::from_black_alpha(if dark { 80 } else { 36 }),
     };
-    // Tooltip / 弹出层也走不透明卡底
-    v.widgets.noninteractive.bg_fill = tone::CARD;
-    v.widgets.inactive.bg_fill = tone::CARD;
+    v.override_text_color = Some(tone::text());
+    // Tooltip / 弹出层 / TextEdit 走主题色
+    let stroke = Stroke::new(1.0, tone::line());
+    for w in [
+        &mut v.widgets.noninteractive,
+        &mut v.widgets.inactive,
+        &mut v.widgets.hovered,
+        &mut v.widgets.active,
+        &mut v.widgets.open,
+    ] {
+        w.bg_fill = tone::card();
+        w.weak_bg_fill = tone::faint();
+        w.bg_stroke = stroke;
+        w.fg_stroke = Stroke::new(1.0, tone::text());
+    }
+    v.widgets.hovered.bg_fill = tone::hover();
+    v.widgets.hovered.weak_bg_fill = tone::hover();
+    v.selection.bg_fill = tone::accent_soft();
+    v.selection.stroke = Stroke::new(1.0, tone::selected_ring());
 }
 
-/// 语言下拉：闭合态加大内边距；弹层白底细边框。
+/// 语言 / 字体下拉：闭合态加大内边距；填充随主题。
 fn style_locale_combo(ui: &mut egui::Ui) {
     // 闭合按钮文字内边距（ComboBox 读 spacing.button_padding）
     ui.spacing_mut().button_padding = egui::vec2(14.0, 11.0);
     ui.spacing_mut().interact_size.y = 40.0;
 
-    let stroke = Stroke::new(1.0, tone::LINE);
-    let soft = Color32::from_rgb(252, 253, 255);
+    let stroke = Stroke::new(1.0, tone::line());
+    let fill = tone::faint();
     let w = &mut ui.visuals_mut().widgets;
     for state in [
         &mut w.inactive,
@@ -1081,32 +2057,33 @@ fn style_locale_combo(ui: &mut egui::Ui) {
         &mut w.active,
         &mut w.open,
     ] {
-        state.bg_fill = soft;
-        state.weak_bg_fill = soft;
+        state.bg_fill = fill;
+        state.weak_bg_fill = fill;
         state.bg_stroke = stroke;
+        state.fg_stroke = Stroke::new(1.0, tone::text());
         state.corner_radius = CornerRadius::same(8);
         state.expansion = 0.0;
     }
-    w.hovered.bg_fill = tone::HOVER;
-    w.hovered.weak_bg_fill = tone::HOVER;
-    w.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(200, 208, 222));
-    w.open.bg_fill = tone::CARD;
-    w.open.weak_bg_fill = tone::CARD;
-    w.open.bg_stroke = Stroke::new(1.0, tone::SELECTED_RING);
-    w.active.bg_fill = tone::ACCENT_SOFT;
-    w.active.weak_bg_fill = tone::ACCENT_SOFT;
+    w.hovered.bg_fill = tone::hover();
+    w.hovered.weak_bg_fill = tone::hover();
+    w.hovered.bg_stroke = Stroke::new(1.0, tone::line());
+    w.open.bg_fill = tone::card();
+    w.open.weak_bg_fill = tone::card();
+    w.open.bg_stroke = Stroke::new(1.0, tone::selected_ring());
+    w.active.bg_fill = tone::accent_soft();
+    w.active.weak_bg_fill = tone::accent_soft();
 }
 
 /// 下拉选项：固定行高 + 左右内边距，避免文字贴边显得塌。
 fn locale_combo_option(ui: &mut egui::Ui, locale: &mut Locale, value: Locale, label: &str) {
     let selected = *locale == value;
-    let height = 40.0;
+    let height = 36.0;
     let (rect, response) =
         ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::click());
     let fill = if selected {
-        tone::ACCENT_SOFT
+        tone::accent_soft()
     } else if response.hovered() {
-        tone::HOVER
+        tone::hover()
     } else {
         Color32::TRANSPARENT
     };
@@ -1120,9 +2097,9 @@ fn locale_combo_option(ui: &mut egui::Ui, locale: &mut Locale, value: Locale, la
         label,
         FontId::proportional(13.5),
         if selected {
-            tone::ACCENT
+            tone::accent()
         } else {
-            tone::TEXT
+            tone::text()
         },
     );
     if response.clicked() {
@@ -1132,14 +2109,28 @@ fn locale_combo_option(ui: &mut egui::Ui, locale: &mut Locale, value: Locale, la
 
 fn section_card(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)) {
     Frame::NONE
-        .fill(tone::CARD)
-        .stroke(Stroke::new(1.0, tone::LINE))
+        .fill(tone::card())
+        .stroke(Stroke::new(1.0, tone::line()))
         .corner_radius(CornerRadius::same(12))
         .inner_margin(Margin::symmetric(16, 14))
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             add_contents(ui);
         });
+}
+
+fn about_info_row(ui: &mut egui::Ui, label: &str, value: &str) {
+    ui.horizontal(|ui| {
+        ui.set_min_height(22.0);
+        ui.allocate_ui_with_layout(
+            Vec2::new(72.0, 22.0),
+            Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.label(RichText::new(label).size(13.0).color(tone::muted()));
+            },
+        );
+        ui.label(RichText::new(value).size(13.0).color(tone::text()));
+    });
 }
 
 /// iOS / Material 风格开关（替代 checkbox）。
@@ -1152,9 +2143,9 @@ fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
     }
     let t = ui.ctx().animate_bool_responsive(response.id, *on);
     let track_fill = Color32::from_rgb(
-        egui::lerp(tone::STAGE.r() as f32..=tone::ACCENT.r() as f32, t) as u8,
-        egui::lerp(tone::STAGE.g() as f32..=tone::ACCENT.g() as f32, t) as u8,
-        egui::lerp(tone::STAGE.b() as f32..=tone::ACCENT.b() as f32, t) as u8,
+        egui::lerp(tone::stage().r() as f32..=tone::accent().r() as f32, t) as u8,
+        egui::lerp(tone::stage().g() as f32..=tone::accent().g() as f32, t) as u8,
+        egui::lerp(tone::stage().b() as f32..=tone::accent().b() as f32, t) as u8,
     );
     let radius = rect.height() * 0.5;
     ui.painter().rect(
@@ -1179,6 +2170,19 @@ fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
 }
 
 /// 插件头可点区域：箭头 + 图标 + 限宽截断文案（无 Label，避免选中光标抢走点击）。
+/// 包动态键：`{pack_id}.{field}`，缺失时回退 host 元数据。
+fn pack_field(
+    catalogs: &CatalogStore,
+    locale: Locale,
+    pack_id: &str,
+    field: &str,
+    fallback: &str,
+) -> String {
+    catalogs
+        .t(locale, &format!("{pack_id}.{field}"), fallback)
+        .to_string()
+}
+
 fn plugin_header_hit(
     ui: &mut egui::Ui,
     width: f32,
@@ -1195,7 +2199,7 @@ fn plugin_header_hit(
 
     if response.hovered() {
         ui.painter()
-            .rect_filled(rect, CornerRadius::same(8), tone::HOVER);
+            .rect_filled(rect, CornerRadius::same(8), tone::hover());
     }
 
     let chev = egui::Rect::from_min_size(
@@ -1231,7 +2235,7 @@ fn plugin_header_hit(
         Align2::LEFT_CENTER,
         meta_draw,
         meta_font,
-        tone::MUTED,
+        tone::muted(),
     );
 
     response
@@ -1256,17 +2260,12 @@ fn paint_expand_chevron(
     );
 }
 
-/// 语言下拉：与插件同款描边 chevron；闭合向下、展开向上。
-fn locale_combo_chevron(
-    ui: &egui::Ui,
-    rect: egui::Rect,
-    _visuals: &egui::style::WidgetVisuals,
-    open: bool,
-) {
+/// 设置下拉箭头：按 salt 独立动画 id，避免多个 Combo 抢同一帧动画。
+fn settings_combo_chevron(ui: &egui::Ui, salt: &str, rect: egui::Rect, open: bool) {
     let hovered = ui.rect_contains_pointer(rect.expand(8.0));
     paint_stroke_chevron(
         ui,
-        ui.id().with("locale_chev"),
+        egui::Id::new(("settings_combo_chev", salt)),
         rect,
         open,
         hovered,
@@ -1289,7 +2288,7 @@ fn paint_stroke_chevron(
     let c = rect.center();
     let angle = base_angle + t * open_delta;
     let arm = 4.2;
-    let stroke = Stroke::new(1.6, if hovered { tone::TEXT } else { tone::MUTED });
+    let stroke = Stroke::new(1.6, if hovered { tone::text() } else { tone::muted() });
     let rot = |dx: f32, dy: f32| {
         let (s, co) = angle.sin_cos();
         egui::pos2(c.x + dx * co - dy * s, c.y + dx * s + dy * co)
@@ -1309,7 +2308,7 @@ fn paint_plugin_icon(
     fallback_name: &str,
 ) {
     ui.painter()
-        .rect_filled(rect, CornerRadius::same(10), tone::ACCENT_SOFT);
+        .rect_filled(rect, CornerRadius::same(10), tone::accent_soft());
     if let Some(tex) = icon {
         let pad = 3.0;
         let inner = rect.shrink(pad);
@@ -1338,7 +2337,7 @@ fn paint_plugin_icon(
         Align2::CENTER_CENTER,
         ch,
         FontId::proportional(14.0),
-        tone::ACCENT,
+        tone::accent(),
     );
 }
 
@@ -1347,7 +2346,7 @@ fn hud_item_icon(ui: &mut egui::Ui, icon: Option<&TextureHandle>) {
     let size = Vec2::splat(plugin_layout::ICON);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     ui.painter()
-        .rect_filled(rect, CornerRadius::same(10), tone::STAGE);
+        .rect_filled(rect, CornerRadius::same(10), tone::stage());
     if let Some(tex) = icon {
         let inner = rect.shrink(3.0);
         ui.painter().image(
@@ -1359,7 +2358,7 @@ fn hud_item_icon(ui: &mut egui::Ui, icon: Option<&TextureHandle>) {
         return;
     }
     let c = rect.center();
-    let stroke = Stroke::new(1.5, tone::MUTED);
+    let stroke = Stroke::new(1.5, tone::muted());
     ui.painter().rect_stroke(
         egui::Rect::from_center_size(c, Vec2::new(14.0, 10.0)),
         CornerRadius::same(2),
@@ -1399,8 +2398,8 @@ fn attach_pack_tooltip(
         opaque_tooltip_visuals(ui);
         ui.set_max_width(300.0);
         Frame::NONE
-            .fill(tone::CARD)
-            .stroke(Stroke::new(1.0, tone::LINE))
+            .fill(tone::card())
+            .stroke(Stroke::new(1.0, tone::line()))
             .corner_radius(CornerRadius::same(10))
             .inner_margin(Margin::symmetric(12, 10))
             .show(ui, |ui| {
@@ -1408,27 +2407,27 @@ fn attach_pack_tooltip(
                     RichText::new(&name)
                         .size(14.0)
                         .strong()
-                        .color(tone::TEXT),
+                        .color(tone::text()),
                 );
                 if !description.is_empty() {
                     ui.add_space(4.0);
                     ui.label(
                         RichText::new(&description)
                             .size(12.5)
-                            .color(tone::MUTED),
+                            .color(tone::muted()),
                     );
                 }
                 ui.add_space(8.0);
                 ui.separator();
                 ui.add_space(6.0);
-                ui.label(RichText::new(&id).size(12.0).color(tone::TEXT));
+                ui.label(RichText::new(&id).size(12.0).color(tone::text()));
                 ui.label(
                     RichText::new(&author_line)
                         .size(11.5)
-                        .color(tone::MUTED),
+                        .color(tone::muted()),
                 );
                 if let Some(ex) = &extra {
-                    ui.label(RichText::new(ex).size(11.5).color(tone::MUTED));
+                    ui.label(RichText::new(ex).size(11.5).color(tone::muted()));
                 }
                 if let Some(url) = &homepage {
                     ui.add_space(6.0);
@@ -1436,7 +2435,7 @@ fn attach_pack_tooltip(
                         ui.label(
                             RichText::new(&homepage_label)
                                 .size(11.0)
-                                .color(tone::MUTED),
+                                .color(tone::muted()),
                         );
                         ui.hyperlink_to(RichText::new(url).size(11.0), url);
                     });
@@ -1447,19 +2446,19 @@ fn attach_pack_tooltip(
 
 fn opaque_tooltip_visuals(ui: &mut egui::Ui) {
     let v = ui.visuals_mut();
-    v.window_fill = tone::CARD;
-    v.panel_fill = tone::CARD;
-    v.extreme_bg_color = tone::CARD;
-    v.override_text_color = Some(tone::TEXT);
+    v.window_fill = tone::card();
+    v.panel_fill = tone::card();
+    v.extreme_bg_color = tone::card();
+    v.override_text_color = Some(tone::text());
 }
 
 fn nav_item(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
     let (rect, response) =
         ui.allocate_exact_size(Vec2::new(ui.available_width(), 36.0), Sense::click());
     let bg = if selected {
-        tone::CARD
+        tone::card()
     } else if response.hovered() {
-        tone::HOVER
+        tone::hover()
     } else {
         Color32::TRANSPARENT
     };
@@ -1473,14 +2472,14 @@ fn nav_item(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
             Vec2::new(3.0, rect.height() - 16.0),
         );
         ui.painter()
-            .rect_filled(bar, CornerRadius::same(2), tone::ACCENT);
+            .rect_filled(bar, CornerRadius::same(2), tone::accent());
     }
     ui.painter().text(
         egui::pos2(rect.left() + 14.0, rect.center().y),
         Align2::LEFT_CENTER,
         label,
         FontId::proportional(14.0),
-        if selected { tone::ACCENT } else { tone::TEXT },
+        if selected { tone::accent() } else { tone::text() },
     );
     response
 }
@@ -1546,22 +2545,23 @@ fn pet_card_layout(available_w: f32) -> (usize, f32, f32, f32) {
 
 /// 网格 / 列表纯图标分段按钮；点选返回新模式。
 fn view_mode_icon_group(ui: &mut egui::Ui, mode: PetPickerMode) -> Option<PetPickerMode> {
-    const H: f32 = 30.0;
-    const CELL: f32 = 34.0;
+    const H: f32 = 28.0;
+    const CELL: f32 = 32.0;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(CELL * 2.0, H), Sense::hover());
+
+    // 一体轨道：单一描边，避免双线缝隙
     ui.painter().rect(
         rect,
         CornerRadius::same(8),
-        Color32::from_rgb(232, 234, 239),
-        Stroke::new(1.0, tone::LINE),
+        tone::faint(),
+        Stroke::new(1.0, tone::line()),
         egui::StrokeKind::Inside,
     );
 
-    let left = egui::Rect::from_min_size(rect.min, Vec2::new(CELL, H));
-    let right = egui::Rect::from_min_size(
-        egui::pos2(rect.left() + CELL, rect.top()),
-        Vec2::new(CELL, H),
-    );
+    let inner = rect.shrink(1.0);
+    let mid_x = inner.center().x;
+    let left = egui::Rect::from_min_max(inner.min, egui::pos2(mid_x, inner.bottom()));
+    let right = egui::Rect::from_min_max(egui::pos2(mid_x, inner.top()), inner.max);
 
     let grid_sel = mode == PetPickerMode::Grid;
     let list_sel = mode == PetPickerMode::List;
@@ -1570,80 +2570,76 @@ fn view_mode_icon_group(ui: &mut egui::Ui, mode: PetPickerMode) -> Option<PetPic
     let list_r = ui.interact(right, ui.id().with("pet_view_list"), Sense::click());
 
     if grid_sel {
-        ui.painter().rect(
-            left.shrink(1.5),
+        ui.painter().rect_filled(
+            left,
             CornerRadius {
                 nw: 7,
                 ne: 0,
                 sw: 7,
                 se: 0,
             },
-            tone::CARD,
-            Stroke::NONE,
-            egui::StrokeKind::Inside,
+            tone::card(),
         );
     } else if grid_r.hovered() {
         ui.painter().rect_filled(
-            left.shrink(1.5),
+            left,
             CornerRadius {
                 nw: 7,
                 ne: 0,
                 sw: 7,
                 se: 0,
             },
-            Color32::from_rgb(242, 244, 248),
+            tone::hover(),
         );
     }
     if list_sel {
-        ui.painter().rect(
-            right.shrink(1.5),
+        ui.painter().rect_filled(
+            right,
             CornerRadius {
                 nw: 0,
                 ne: 7,
                 sw: 0,
                 se: 7,
             },
-            tone::CARD,
-            Stroke::NONE,
-            egui::StrokeKind::Inside,
+            tone::card(),
         );
     } else if list_r.hovered() {
         ui.painter().rect_filled(
-            right.shrink(1.5),
+            right,
             CornerRadius {
                 nw: 0,
                 ne: 7,
                 sw: 0,
                 se: 7,
             },
-            Color32::from_rgb(242, 244, 248),
+            tone::hover(),
         );
     }
 
     ui.painter().line_segment(
         [
-            egui::pos2(rect.center().x, rect.top() + 6.0),
-            egui::pos2(rect.center().x, rect.bottom() - 6.0),
+            egui::pos2(mid_x, inner.top() + 5.0),
+            egui::pos2(mid_x, inner.bottom() - 5.0),
         ],
-        Stroke::new(1.0, Color32::from_rgb(210, 214, 222)),
+        Stroke::new(1.0, tone::line()),
     );
 
     draw_grid_icon(
         ui.painter(),
         left.center(),
         if grid_sel {
-            tone::ACCENT
+            tone::accent()
         } else {
-            tone::MUTED
+            tone::muted()
         },
     );
     draw_list_icon(
         ui.painter(),
         right.center(),
         if list_sel {
-            tone::ACCENT
+            tone::accent()
         } else {
-            tone::MUTED
+            tone::muted()
         },
     );
 
@@ -1710,11 +2706,11 @@ fn footer_primary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
     let size = Vec2::new(88.0, 32.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let fill = if response.is_pointer_button_down_on() {
-        tone::ACCENT_PRESS
+        tone::accent_press()
     } else if response.hovered() {
-        tone::ACCENT_HOVER
+        tone::accent_hover()
     } else {
-        tone::ACCENT
+        tone::accent()
     };
     ui.painter()
         .rect_filled(rect, CornerRadius::same(8), fill);
@@ -1732,20 +2728,25 @@ fn footer_secondary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
     let size = Vec2::new(88.0, 32.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let fill = if response.is_pointer_button_down_on() {
-        Color32::from_rgb(220, 223, 230)
+        tone::stage()
     } else if response.hovered() {
-        Color32::from_rgb(242, 244, 248)
+        tone::hover()
     } else {
-        Color32::from_rgb(236, 238, 242)
+        tone::faint()
     };
-    ui.painter()
-        .rect_filled(rect, CornerRadius::same(8), fill);
+    ui.painter().rect(
+        rect,
+        CornerRadius::same(8),
+        fill,
+        Stroke::new(1.0, tone::line()),
+        egui::StrokeKind::Inside,
+    );
     ui.painter().text(
         rect.center(),
         Align2::CENTER_CENTER,
         label,
         FontId::proportional(14.0),
-        tone::TEXT,
+        tone::text(),
     );
     response
 }
@@ -1765,11 +2766,22 @@ fn pet_list_row(
     homepage: Option<&str>,
     homepage_label: &str,
 ) -> egui::Response {
-    // 四行信息块高度；预览框边长与之相等 → 正方形且与信息等高
-    const TEXT_LINES: f32 = 4.0;
-    const LINE_H: f32 = 18.0;
-    let text_block_h = LINE_H * TEXT_LINES;
-    let thumb_side = text_block_h;
+    // 四行信息：按实际行高 + 行距排布，预览框边长与信息块等高
+    const NAME_SIZE: f32 = 15.0;
+    const DESC_SIZE: f32 = 12.0;
+    const META_SIZE: f32 = 11.5;
+    const SIZE_SIZE: f32 = 11.0;
+    const LINE_GAP: f32 = 4.0;
+    let (h_name, h_desc, h_meta, h_size) = ui.fonts_mut(|f| {
+        (
+            f.row_height(&FontId::proportional(NAME_SIZE)),
+            f.row_height(&FontId::proportional(DESC_SIZE)),
+            f.row_height(&FontId::proportional(META_SIZE)),
+            f.row_height(&FontId::proportional(SIZE_SIZE)),
+        )
+    });
+    let text_block_h = h_name + h_desc + h_meta + h_size + LINE_GAP * 3.0;
+    let thumb_side = text_block_h.max(72.0);
     let height = CARD_PAD * 2.0 + thumb_side;
     let (rect, response) =
         ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::click());
@@ -1785,16 +2797,16 @@ fn pet_list_row(
         homepage_label,
     );
     let bg = if selected {
-        tone::ACCENT_SOFT
+        tone::accent_soft()
     } else if response.hovered() {
-        Color32::from_rgb(252, 253, 255)
+        tone::hover()
     } else {
-        tone::CARD
+        tone::card()
     };
     let stroke = if selected {
-        Stroke::new(1.5, tone::SELECTED_RING)
+        Stroke::new(1.5, tone::selected_ring())
     } else {
-        Stroke::new(1.0, tone::LINE)
+        Stroke::new(1.0, tone::line())
     };
     let draw = rect.shrink(0.5);
     ui.painter().rect(
@@ -1810,14 +2822,15 @@ fn pet_list_row(
         Vec2::splat(thumb_side),
     );
     ui.painter()
-        .rect_filled(thumb, CornerRadius::same(8), tone::STAGE);
+        .rect_filled(thumb, CornerRadius::same(8), tone::stage());
     if let Some(tex) = preview {
         paint_preview_cover(ui, thumb, tex);
     }
 
     let text_left = thumb.right() + CARD_PAD;
     let text_right = draw.right() - CARD_PAD;
-    let text_top = draw.top() + CARD_PAD;
+    // 信息块在预览框高度内垂直居中
+    let text_top = thumb.top() + ((thumb_side - text_block_h) * 0.5).max(0.0);
     let name_max = if selected {
         let badge_w = ui.fonts_mut(|f| {
             f.layout_no_wrap(
@@ -1832,53 +2845,61 @@ fn pet_list_row(
     } else {
         (text_right - text_left).max(40.0)
     };
-    let name_draw = truncate_ui_text(ui, name, FontId::proportional(15.0), name_max);
+    let name_font = FontId::proportional(NAME_SIZE);
+    let desc_font = FontId::proportional(DESC_SIZE);
+    let meta_font = FontId::proportional(META_SIZE);
+    let size_font = FontId::proportional(SIZE_SIZE);
+    let name_draw = truncate_ui_text(ui, name, name_font.clone(), name_max);
     let desc_draw = truncate_ui_text(
         ui,
         description,
-        FontId::proportional(12.0),
+        desc_font.clone(),
         (text_right - text_left).max(40.0),
     );
     let author_draw = truncate_ui_text(
         ui,
         author_label,
-        FontId::proportional(11.5),
+        meta_font.clone(),
         (text_right - text_left).max(40.0),
     );
     let size_draw = truncate_ui_text(
         ui,
         size_label,
-        FontId::proportional(11.0),
+        size_font.clone(),
         (text_right - text_left).max(40.0),
     );
 
+    let mut y = text_top;
     ui.painter().text(
-        egui::pos2(text_left, text_top),
+        egui::pos2(text_left, y),
         Align2::LEFT_TOP,
         name_draw,
-        FontId::proportional(15.0),
-        tone::TEXT,
+        name_font,
+        tone::text(),
     );
+    y += h_name + LINE_GAP;
     ui.painter().text(
-        egui::pos2(text_left, text_top + LINE_H),
+        egui::pos2(text_left, y),
         Align2::LEFT_TOP,
         desc_draw,
-        FontId::proportional(12.0),
-        tone::MUTED,
+        desc_font,
+        tone::muted(),
     );
+    y += h_desc + LINE_GAP;
     ui.painter().text(
-        egui::pos2(text_left, text_top + LINE_H * 2.0),
+        egui::pos2(text_left, y),
         Align2::LEFT_TOP,
         author_draw,
-        FontId::proportional(11.5),
-        tone::MUTED,
+        meta_font,
+        tone::muted(),
     );
+    y += h_meta + LINE_GAP;
     ui.painter().text(
-        egui::pos2(text_left, text_top + LINE_H * 3.0),
+        egui::pos2(text_left, y),
         Align2::LEFT_TOP,
         size_draw,
-        FontId::proportional(11.0),
-        tone::MUTED,
+        size_font,
+        tone::muted(),
     );
     if selected {
         // 相对整行内容区（与预览框同高）垂直居中，而非贴在名称行顶
@@ -1887,7 +2908,7 @@ fn pet_list_row(
             Align2::RIGHT_CENTER,
             selected_badge,
             FontId::proportional(12.0),
-            tone::ACCENT,
+            tone::accent(),
         );
     }
     response
@@ -1926,18 +2947,18 @@ fn pet_preview_card(
     let draw = rect.shrink(1.0);
 
     let bg = if selected {
-        tone::ACCENT_SOFT
+        tone::accent_soft()
     } else if response.hovered() {
-        Color32::from_rgb(252, 253, 255)
+        tone::hover()
     } else {
-        tone::CARD
+        tone::card()
     };
     let stroke = if selected {
-        Stroke::new(1.5, tone::SELECTED_RING)
+        Stroke::new(1.5, tone::selected_ring())
     } else if response.hovered() {
-        Stroke::new(1.2, Color32::from_rgb(190, 198, 214))
+        Stroke::new(1.2, tone::line())
     } else {
-        Stroke::new(1.0, tone::LINE)
+        Stroke::new(1.0, tone::line())
     };
     ui.painter().rect(
         draw,
@@ -1955,7 +2976,7 @@ fn pet_preview_card(
         Vec2::splat(side),
     );
     ui.painter()
-        .rect_filled(stage, CornerRadius::same(10), tone::STAGE);
+        .rect_filled(stage, CornerRadius::same(10), tone::stage());
 
     if let Some(tex) = preview {
         paint_preview_cover(ui, stage, tex);
@@ -1965,7 +2986,7 @@ fn pet_preview_card(
             Align2::CENTER_CENTER,
             "—",
             FontId::proportional(28.0),
-            tone::MUTED,
+            tone::muted(),
         );
     }
 
@@ -2012,28 +3033,28 @@ fn pet_preview_card(
         Align2::LEFT_TOP,
         name_draw,
         FontId::proportional(14.5),
-        tone::TEXT,
+        tone::text(),
     );
     ui.painter().text(
         egui::pos2(text_left, text_top + 20.0),
         Align2::LEFT_TOP,
         desc_draw,
         FontId::proportional(12.0),
-        tone::MUTED,
+        tone::muted(),
     );
     ui.painter().text(
         egui::pos2(text_left, text_top + 38.0),
         Align2::LEFT_TOP,
         author_draw,
         FontId::proportional(11.5),
-        tone::MUTED,
+        tone::muted(),
     );
     ui.painter().text(
         egui::pos2(text_left, text_bottom),
         Align2::LEFT_BOTTOM,
         size_draw,
         FontId::proportional(11.5),
-        tone::MUTED,
+        tone::muted(),
     );
     if selected {
         ui.painter().text(
@@ -2041,7 +3062,7 @@ fn pet_preview_card(
             Align2::RIGHT_BOTTOM,
             selected_badge,
             FontId::proportional(11.5),
-            tone::ACCENT,
+            tone::accent(),
         );
     }
     response

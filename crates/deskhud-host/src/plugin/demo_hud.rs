@@ -13,7 +13,7 @@ impl Plugin for DemoHudPlugin {
             display_name: "演示 HUD",
             description: "示例插件：开关后在宠窗底部显示演示条（非真实数据源）",
             author: "DeskHud",
-            homepage: Some("https://github.com/deskhud/deskhud"),
+            homepage: Some("https://github.com/ko-eika/deskhud"),
             icon_png: Some(include_bytes!("../../assets/icon_hud_demo.png")),
         }
     }

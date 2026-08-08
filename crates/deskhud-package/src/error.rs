@@ -17,4 +17,7 @@ pub enum PackageError {
     /// 缺少入口或资源。
     #[error("missing entry: {0}")]
     MissingEntry(String),
+    /// Zip 读写失败。
+    #[error("zip: {0}")]
+    Zip(String),
 }

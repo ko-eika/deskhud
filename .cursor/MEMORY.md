@@ -1,4 +1,4 @@
-# DeskHud — Agent 记忆
+﻿# DeskHud — Agent 记忆
 
 ## 决策
 
@@ -25,6 +25,21 @@
 | 2026-08-07 | 现阶段只做开发者底座，不做商店 | 先稳定包格式 / SDK / 本地加载 |
 | 2026-08-07 | crate 拆为 ui / package / host / runtime / sdk / egui | 包格式、加载、契约、UI、Guest 解耦 |
 | 2026-08-07 | i18n 扫描合并 shell+pet+plugin 目录 | 产品要求语言可配置且包可自带文案 |
+| 2026-08-08 | 跨平台 MVP 与 Phase1 并行：`platform` + CI 三端 | 非 Win 拖移/降级全局输入；完整体验后置 |
+| 2026-08-08 | `.deskhud` zip IO + `PackageLoader` 扫目录/归档 | 原生内置映射；WASM 后接 |
+| 2026-08-08 | `CatalogStore` + runtime `build_catalog_store` | 包键前缀 `pet|hud.<id>.`；内置 `seed_builtin_packs` |
+| 2026-08-08 | 设置页消费 `CatalogStore` | 宠/插件/配置项/字体后缀随草稿语言切换 |
+| 2026-08-08 | 常规：主题+可搜索字体；置顶迁宠物页 | prefs `ui_theme`；主页 `ko-eika/deskhud` |
+| 2026-08-08 | 字体家族/样式/大小 + 深色控件色板 | 雅黑等友好名与别名搜索；分段按钮修边 |
+| 2026-08-08 | 常规页 UI 字体：内置 Noto SC + JetBrains Mono（OFL）+ 扫系统 | prefs `shell.ui_font_id`；设置即时预览 |
+| 2026-08-08 | 默认 UI 字体 JetBrains Mono / Regular / 13；列表按名排序 | 去掉内置置顶与 FontSuffix 文案 |
+| 2026-08-08 | README 徽章规范化；作者 KO.EIKA；版本 0.2.0 | workspace 版本与关于页 / 徽章对齐 |
+| 2026-08-08 | 中英双 README：`README.md` + `README_EN.md` | 标题 Markdown；正文加详；互链 |
+| 2026-08-09 | 内置 Noto Sans SC 补齐 7 字重（~56MB） | Thin…Black；DemiLight 样式解析 |
+| 2026-08-09 | 补充发版文档 `docs/release.md` | README 中英同步「发布」摘要 |
+| 2026-08-08 | 设置侧栏增加「关于」页 | 展示版本 / 作者 / 许可证 / 主页 |
+
+| 2026-08-08 | 内置字体多样式嵌入 + 与系统家族互补；设置左标签右下拉 | build 扫 assets/fonts；弹层内搜索防闪 |
 
 ## 注意
 
@@ -39,6 +54,6 @@
 
 ## 下一步
 
-- [ ] Phase 1：manifest + Pet/Plugin 行为契约  
-- [ ] Phase 2：CatalogStore 多源 i18n  
+- [ ] 更多 `PetEvent` / `HudFrame`  
 - [ ] Phase 3：wasmtime + sdk 示例  
+- [ ] 非 Win 透明/贴边加深  

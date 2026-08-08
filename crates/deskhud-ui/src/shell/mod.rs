@@ -13,6 +13,19 @@ pub enum PetPickerMode {
     List,
 }
 
+/// 应用主题偏好。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UiTheme {
+    /// 跟随系统。
+    #[default]
+    System,
+    /// 浅色。
+    Light,
+    /// 深色。
+    Dark,
+}
+
 /// 外壳窗口偏好。
 ///
 /// 注意：`pet_width` / `pet_height` 是当前激活宠的尺寸缓存，
@@ -48,6 +61,37 @@ pub struct ShellPrefs {
     /// 设置窗左上角 Y。
     #[serde(default)]
     pub settings_pos_y: Option<f32>,
+    /// 界面字体 ID：`builtin.<stem>` / `system.<path>`。
+    #[serde(default = "default_ui_font_id")]
+    pub ui_font_id: String,
+    /// 字体系列键：`fam.<code>`（缺省时由 `ui_font_id` 反推）。
+    #[serde(default = "default_ui_font_family")]
+    pub ui_font_family: String,
+    /// 字体样式名：`Regular` / `Bold` / `Light` …
+    #[serde(default = "default_ui_font_style")]
+    pub ui_font_style: String,
+    /// 界面字号（逻辑像素）。
+    #[serde(default = "default_ui_font_size")]
+    pub ui_font_size: f32,
+    /// 应用主题：浅色 / 深色 / 跟随系统。
+    #[serde(default)]
+    pub ui_theme: UiTheme,
+}
+
+fn default_ui_font_id() -> String {
+    "builtin.JetBrainsMono-Regular".into()
+}
+
+fn default_ui_font_family() -> String {
+    "fam.jetbrainsmono".into()
+}
+
+fn default_ui_font_style() -> String {
+    "Regular".into()
+}
+
+fn default_ui_font_size() -> f32 {
+    13.0
 }
 
 impl Default for ShellPrefs {
@@ -65,6 +109,11 @@ impl Default for ShellPrefs {
             settings_height: None,
             settings_pos_x: None,
             settings_pos_y: None,
+            ui_font_id: default_ui_font_id(),
+            ui_font_family: default_ui_font_family(),
+            ui_font_style: default_ui_font_style(),
+            ui_font_size: default_ui_font_size(),
+            ui_theme: UiTheme::default(),
         }
     }
 }

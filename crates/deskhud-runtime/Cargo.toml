@@ -10,5 +10,6 @@ authors.workspace = true
 [dependencies]
 deskhud-host = { workspace = true }
 deskhud-package = { workspace = true }
+deskhud-ui = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

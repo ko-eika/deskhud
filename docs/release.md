@@ -1,0 +1,86 @@
+# 发布指南
+
+DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布以本地 `cargo build --release` 产物为主，再用 git tag / GitHub Release 归档。
+
+## 版本号
+
+版本以根目录 [`Cargo.toml`](../Cargo.toml) 的 `workspace.package.version` 为准（设置「关于」页通过 `CARGO_PKG_VERSION` 注入）。
+
+发版前请同步：
+
+1. `Cargo.toml` → `[workspace.package] version`
+2. [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) 中的 version 徽章
+3. （可选）`CHANGELOG` / Release 说明正文
+
+## 发布前检查
+
+```bash
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p deskhud-package -p deskhud-ui -p deskhud-host -p deskhud-runtime --all-targets
+cargo check --workspace --all-targets
+```
+
+推送到 `main` / `master` 后，[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 会在 Windows / Ubuntu / macOS 上跑 `check` 与部分测试。
+
+## 构建发行二进制
+
+在目标平台上执行：
+
+```bash
+cargo build -p deskhud-egui --release
+```
+
+产物路径：
+
+| 平台 | 路径 |
+|------|------|
+| Windows | `target/release/deskhud.exe` |
+| macOS / Linux | `target/release/deskhud` |
+
+说明：
+
+- Windows 会通过 `winresource` 嵌入 `assets/icon.ico`；release 构建无控制台窗口。
+- 内置 JetBrains Mono + Noto Sans SC 全字重会使体积明显变大，属预期。
+- 渲染器固定为 **Glow（OpenGL）**；弱 GPU / 部分虚拟机可能无法启动或透明异常。
+- 体验最完整的目标平台仍是 **Windows**；macOS / Linux 为回退实现。
+
+### 可选：体积与符号
+
+根 `Cargo.toml` 已配置 release：`lto = "thin"`、`codegen-units = 1`、`strip = "symbols"`。一般无需额外 strip。
+
+## 打标签与 GitHub Release（建议流程）
+
+假设版本为 `0.2.0`：
+
+```bash
+# 1. 提交版本 bump 与说明文档更新
+git add -A
+git commit -m "chore: release 0.2.0"
+
+# 2. 打 annotated tag 并推送
+git tag -a v0.2.0 -m "DeskHud 0.2.0"
+git push origin HEAD
+git push origin v0.2.0
+
+# 3. 在 GitHub 创建 Release，上传对应平台的 deskhud 二进制
+#    （可附简短变更说明与校验和）
+```
+
+上传前可为产物生成校验：
+
+```bash
+# Windows (PowerShell)
+Get-FileHash target\release\deskhud.exe -Algorithm SHA256
+
+# macOS / Linux
+shasum -a 256 target/release/deskhud
+```
+
+## 尚未自动化（后续可做）
+
+- 按 tag 触发多平台 `cargo build --release` 并上传 Artifact / Release
+- 安装器（如 MSI / NSIS）与代码签名
+- 自动更新通道
+
+有需要时可在 `.github/workflows/` 增加 `release.yml`；在此之前请按上文手动构建与归档。
