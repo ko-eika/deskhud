@@ -1,0 +1,338 @@
+//! 内置：大眼小球；全局键鼠对话气泡 + 贴边/拖动演示。
+
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
+use std::sync::Mutex;
+
+use super::{
+    DockState, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind, PetKindInfo,
+    PetModifiers, PetMouseButton, PetPaint, PetPaintCtx,
+};
+
+/// 默认宠物 `pet.deskhud.specs`。
+#[derive(Debug)]
+pub struct BuiltinSpecsPet {
+    last_dock_bits: AtomicU8,
+    last_dragging: AtomicBool,
+    bubble_ms: AtomicU32,
+    bubble_text: Mutex<String>,
+    follow_eyes: AtomicBool,
+    key_tips: AtomicBool,
+    mouse_tips: AtomicBool,
+    hover_highlight: AtomicBool,
+    dock_tint: AtomicBool,
+}
+
+impl Default for BuiltinSpecsPet {
+    fn default() -> Self {
+        Self {
+            last_dock_bits: AtomicU8::new(0),
+            last_dragging: AtomicBool::new(false),
+            bubble_ms: AtomicU32::new(0),
+            bubble_text: Mutex::new(String::new()),
+            follow_eyes: AtomicBool::new(true),
+            key_tips: AtomicBool::new(true),
+            mouse_tips: AtomicBool::new(true),
+            hover_highlight: AtomicBool::new(true),
+            dock_tint: AtomicBool::new(true),
+        }
+    }
+}
+
+const SPECS_OPTIONS: &[PetConfigOption] = &[
+    PetConfigOption {
+        key: "follow_eyes",
+        label: "眼睛跟随指针",
+        description: "瞳孔跟随桌面光标方向转动",
+        default: true,
+    },
+    PetConfigOption {
+        key: "key_tips",
+        label: "按键提示",
+        description: "键盘按下时显示短气泡（如 Ctrl+C）",
+        default: true,
+    },
+    PetConfigOption {
+        key: "mouse_tips",
+        label: "鼠标提示",
+        description: "全局鼠标按键 / 滚轮时显示短气泡",
+        default: true,
+    },
+    PetConfigOption {
+        key: "hover_highlight",
+        label: "悬停高亮",
+        description: "指针停在宠上时身体略提亮",
+        default: true,
+    },
+    PetConfigOption {
+        key: "dock_tint",
+        label: "贴边变色",
+        description: "吸附屏幕边缘时改变身体颜色",
+        default: true,
+    },
+];
+
+fn dock_bits(d: DockState) -> u8 {
+    (u8::from(d.left))
+        | (u8::from(d.right) << 1)
+        | (u8::from(d.top) << 2)
+        | (u8::from(d.bottom) << 3)
+}
+
+fn is_modifier_key(key: PetKey) -> bool {
+    matches!(
+        key,
+        PetKey::Shift | PetKey::Ctrl | PetKey::Alt | PetKey::Super
+    )
+}
+
+fn key_label(key: PetKey) -> String {
+    match key {
+        PetKey::Space => "空格".into(),
+        PetKey::Escape => "Esc".into(),
+        PetKey::Tab => "Tab".into(),
+        PetKey::Enter => "Enter".into(),
+        PetKey::Backspace => "⌫".into(),
+        PetKey::Delete => "Del".into(),
+        PetKey::ArrowUp => "↑".into(),
+        PetKey::ArrowDown => "↓".into(),
+        PetKey::ArrowLeft => "←".into(),
+        PetKey::ArrowRight => "→".into(),
+        PetKey::Home => "Home".into(),
+        PetKey::End => "End".into(),
+        PetKey::PageUp => "PgUp".into(),
+        PetKey::PageDown => "PgDn".into(),
+        PetKey::Shift => "Shift".into(),
+        PetKey::Ctrl => "Ctrl".into(),
+        PetKey::Alt => "Alt".into(),
+        PetKey::Super => "Win".into(),
+        PetKey::CapsLock => "Caps".into(),
+        PetKey::Function(n) => format!("F{n}"),
+        PetKey::Letter(c) | PetKey::Digit(c) | PetKey::Punct(c) => c.to_string(),
+    }
+}
+
+fn format_shortcut(mods: PetModifiers, key: PetKey) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if mods.ctrl {
+        parts.push("Ctrl".into());
+    }
+    if mods.shift {
+        parts.push("Shift".into());
+    }
+    if mods.alt {
+        parts.push("Alt".into());
+    }
+    if mods.meta {
+        parts.push("Win".into());
+    }
+    parts.push(key_label(key));
+    parts.join("+")
+}
+
+impl BuiltinSpecsPet {
+    fn show_bubble(&self, text: impl Into<String>, ms: u32) {
+        if let Ok(mut g) = self.bubble_text.lock() {
+            *g = text.into();
+        }
+        self.bubble_ms.store(ms, Ordering::Relaxed);
+    }
+}
+
+impl PetKind for BuiltinSpecsPet {
+    fn info(&self) -> PetKindInfo {
+        PetKindInfo {
+            id: "pet.deskhud.specs",
+            display_name: "大眼球",
+            description: "全局跟鼠标看；键鼠短提示；悬停高亮",
+            author: "DeskHud",
+            homepage: Some("https://github.com/deskhud/deskhud"),
+            window_width: 160.0,
+            window_height: 168.0,
+            preview_png: Some(include_bytes!("../../assets/preview_specs.png")),
+        }
+    }
+
+    fn config_options(&self) -> &'static [PetConfigOption] {
+        SPECS_OPTIONS
+    }
+
+    fn apply_config(&self, config: PetConfigBag<'_>) {
+        self.follow_eyes
+            .store(config.get("follow_eyes", true), Ordering::Relaxed);
+        self.key_tips
+            .store(config.get("key_tips", true), Ordering::Relaxed);
+        self.mouse_tips
+            .store(config.get("mouse_tips", true), Ordering::Relaxed);
+        self.hover_highlight
+            .store(config.get("hover_highlight", true), Ordering::Relaxed);
+        self.dock_tint
+            .store(config.get("dock_tint", true), Ordering::Relaxed);
+    }
+
+    fn tick(&self, dt_secs: f32) {
+        let dec = (dt_secs * 1000.0).max(0.0) as u32;
+        let _ = self
+            .bubble_ms
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                Some(v.saturating_sub(dec))
+            });
+    }
+
+    fn on_event(&self, event: PetEvent) {
+        match event {
+            PetEvent::DragStarted => {
+                self.last_dragging.store(true, Ordering::Relaxed);
+            }
+            PetEvent::DragEnded { .. } => {
+                self.last_dragging.store(false, Ordering::Relaxed);
+            }
+            PetEvent::DockChanged { to, .. } => {
+                self.last_dock_bits.store(dock_bits(to), Ordering::Relaxed);
+            }
+            PetEvent::GlobalMousePressed { button, .. } => {
+                if !self.mouse_tips.load(Ordering::Relaxed) {
+                    return;
+                }
+                let text = match button {
+                    PetMouseButton::Primary => "左键",
+                    PetMouseButton::Secondary => "右键",
+                    PetMouseButton::Middle => "中键",
+                };
+                self.show_bubble(text, 1000);
+            }
+            PetEvent::GlobalMouseWheel { delta, .. } => {
+                if !self.mouse_tips.load(Ordering::Relaxed) {
+                    return;
+                }
+                if delta > 0 {
+                    self.show_bubble("滚轮↑", 800);
+                } else if delta < 0 {
+                    self.show_bubble("滚轮↓", 800);
+                }
+            }
+            PetEvent::GlobalKeyPressed { key, modifiers }
+            | PetEvent::KeyPressed { key, modifiers } => {
+                if !self.key_tips.load(Ordering::Relaxed) {
+                    return;
+                }
+                if is_modifier_key(key) {
+                    self.show_bubble(key_label(key), 900);
+                    return;
+                }
+                self.show_bubble(format_shortcut(modifiers, key), 1400);
+            }
+            PetEvent::GlobalMouseReleased { .. }
+            | PetEvent::GlobalKeyReleased { .. }
+            | PetEvent::MouseHover { .. }
+            | PetEvent::MousePressed { .. }
+            | PetEvent::MouseReleased { .. }
+            | PetEvent::MouseClicked { .. }
+            | PetEvent::MouseDoubleClicked { .. }
+            | PetEvent::KeyReleased { .. } => {}
+        }
+    }
+
+    fn paint(&self, ctx: PetPaintCtx<'_>) -> PetPaint {
+        let follow = ctx.config.get("follow_eyes", true);
+        let hover_hl = ctx.config.get("hover_highlight", true);
+        let dock_tint = ctx.config.get("dock_tint", true);
+        let tips_on = ctx.config.get("key_tips", true) || ctx.config.get("mouse_tips", true);
+
+        let _ = (
+            self.last_dock_bits.load(Ordering::Relaxed),
+            self.last_dragging.load(Ordering::Relaxed),
+        );
+        let dock = ctx.dock;
+        let dragging = ctx.drag.is_dragging();
+        let hovering = ctx.mouse.hovering;
+        let bubble_left = self.bubble_ms.load(Ordering::Relaxed);
+        let bubble_text = if tips_on && bubble_left > 0 {
+            self.bubble_text
+                .lock()
+                .ok()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.clone())
+        } else {
+            None
+        };
+        let global_lmb = ctx.mouse.global_primary_down;
+
+        let bounce_base = if dragging {
+            1.08 + (ctx.time_secs * 5.0).sin() as f32 * 0.04
+        } else if dock.bottom {
+            0.92 + (ctx.time_secs * 1.4).sin() as f32 * 0.015
+        } else if dock.top {
+            1.04 + (ctx.time_secs * 2.4).sin() as f32 * 0.02
+        } else {
+            1.0 + (ctx.time_secs * 2.0).sin() as f32 * 0.025
+        };
+
+        let mut body = [0.20, 0.58, 0.96];
+        if dock_tint {
+            if dock.left {
+                body = [0.18, 0.72, 0.78];
+            }
+            if dock.right {
+                body = [0.42, 0.48, 0.95];
+            }
+            if dock.top {
+                body = [0.55, 0.42, 0.92];
+            }
+            if dock.bottom {
+                body = [0.16, 0.50, 0.82];
+            }
+            if dock.is_corner() {
+                body = [
+                    (body[0] * 0.7 + 0.35_f32).min(1.0),
+                    (body[1] * 0.85_f32).min(1.0),
+                    (body[2] * 0.9 + 0.05_f32).min(1.0),
+                ];
+            }
+        }
+        if hover_hl && hovering && !dragging {
+            body = [
+                (body[0] + 0.08).min(1.0),
+                (body[1] + 0.06).min(1.0),
+                (body[2] + 0.04).min(1.0),
+            ];
+        }
+        if dragging {
+            body = [
+                (body[0] * 0.55 + 0.45).min(1.0),
+                (body[1] * 0.75 + 0.20).min(1.0),
+                (body[2] * 0.65 + 0.15).min(1.0),
+            ];
+        }
+
+        let mut pupil = [0.0_f32, 0.0];
+        if follow {
+            let dx = ctx.pointer_dir[0].clamp(-1.0, 1.0);
+            let dy = ctx.pointer_dir[1].clamp(-1.0, 1.0);
+            let max_shift = if dragging || global_lmb { 6.0 } else { 4.5 };
+            pupil = [dx * max_shift, dy * max_shift * 0.9];
+            if !dragging {
+                if dock.left {
+                    pupil[0] = (pupil[0] - 1.8).clamp(-max_shift, max_shift);
+                }
+                if dock.right {
+                    pupil[0] = (pupil[0] + 1.8).clamp(-max_shift, max_shift);
+                }
+                if dock.top {
+                    pupil[1] = (pupil[1] - 1.5).clamp(-max_shift, max_shift);
+                }
+                if dock.bottom {
+                    pupil[1] = (pupil[1] + 1.5).clamp(-max_shift, max_shift);
+                }
+            }
+        }
+
+        PetPaint {
+            body_rgb: body,
+            eye_rgb: [1.0, 1.0, 1.0],
+            bounce: bounce_base,
+            pupil_offset: pupil,
+            draw_eyes: true,
+            bubble_text,
+        }
+    }
+}

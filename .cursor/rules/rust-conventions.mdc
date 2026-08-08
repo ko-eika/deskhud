@@ -1,0 +1,12 @@
+---
+description: Rust 约定
+globs: "**/*.rs"
+alwaysApply: false
+---
+
+# Rust
+
+- `edition = "2024"`；公共 API 中文或中英文档注释，写清「为什么」。
+- 错误用 `thiserror`/`anyhow`（需要时再加）；避免 `unwrap` 进生产路径。
+- workspace 依赖用 `{ workspace = true }`。
+- `cargo fmt`；提交前尽量 `clippy -D warnings`。

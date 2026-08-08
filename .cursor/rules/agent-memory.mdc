@@ -1,0 +1,12 @@
+---
+description: Agent 记忆入口
+alwaysApply: true
+---
+
+# Agent 记忆
+
+- 入口：`AGENTS.md`
+- 笔记：`.cursor/MEMORY.md`
+- 规则：`.cursor/rules/*.mdc`
+
+变更架构或范围时：更新 `AGENTS.md`，并在 `MEMORY.md` 追加决策行。

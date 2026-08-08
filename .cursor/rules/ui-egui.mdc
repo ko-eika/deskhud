@@ -1,0 +1,21 @@
+---
+description: egui 桌宠壳边界
+globs: "crates/deskhud-egui/**"
+alwaysApply: false
+---
+
+# egui 壳
+
+- 透明无边框 + 置顶；**无托盘**；右键：设置 / 退出。
+- 统一设置窗（侧栏顺序：**常规 / 宠物 / 插件**；打开默认 **常规**）；宠窗尺寸来自 `PetKindInfo`，勿写死。
+- 宠物页：选择包 +「当前宠物行为」（`PetKind::config_options` → `[pet.config]`）；草稿打开时可预览。
+- 插件页：按插件折叠；图标来自包 `icon_png`，缺省用壳默认图。
+- 宠物设置预览用元数据静态图（`preview_png` / manifest `preview`），勿在设置页实时 paint。
+- 设置 deferred 视口：打开时 Focus（不 AlwaysOnTop）；同时临时取消宠窗置顶，避免挡住设置；尺寸只下发一次；子窗必须铺满不透明底。
+- 宠窗贴边：松手靠近工作区边缘则吸附；`DockState` 经 `PetPaintCtx.dock` / `PetEvent::DockChanged` 给宠物包；几何只在 egui。
+- 宠窗拖拽：`DragState` 经 `PetPaintCtx.drag` / `DragStarted`/`DragEnded` 给宠物包。
+- 键鼠：悬停/按下/单击/双击与获焦后键盘经 `PetEvent` + `MouseState` 转发；作者见 `docs/extension-guide.md`。
+- 宠物网格卡片按内容区宽均分列宽（稳定后再重算）；预览区 1:1；文案区固定高度；非正方形预览 cover 居中裁切。
+- Glow；主窗 `with_transparent(true)`；设置 / 菜单用 deferred viewport（子窗勿强开 transparent）。
+- 绘制消费 `PetKind::paint`（含 `PetPaintCtx.config`）；HUD 开关来自 prefs + `HudContribution`。
+- 禁止 `git2`；禁止按外形做窗口 RGN。

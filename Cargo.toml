@@ -1,0 +1,73 @@
+# =============================================================================
+# DeskHud — Cargo Workspace
+# =============================================================================
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/deskhud-ui",
+    "crates/deskhud-package",
+    "crates/deskhud-host",
+    "crates/deskhud-runtime",
+    "crates/deskhud-sdk",
+    "crates/deskhud-egui",
+]
+default-members = [
+    "crates/deskhud-ui",
+    "crates/deskhud-package",
+    "crates/deskhud-host",
+    "crates/deskhud-runtime",
+    "crates/deskhud-sdk",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+authors = ["DeskHud Contributors"]
+description = "DeskHud — extensible desktop pet packs + HUD plugins (egui)."
+keywords = ["desktop-pet", "hud", "egui"]
+categories = ["gui"]
+
+[workspace.dependencies]
+deskhud-ui = { path = "crates/deskhud-ui" }
+deskhud-package = { path = "crates/deskhud-package" }
+deskhud-host = { path = "crates/deskhud-host" }
+deskhud-runtime = { path = "crates/deskhud-runtime" }
+deskhud-sdk = { path = "crates/deskhud-sdk" }
+
+egui = "0.36"
+eframe = { version = "0.36", default-features = false, features = ["glow", "default_fonts"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+raw-window-handle = "0.6"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+thiserror = "2.0"
+
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Controls",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# Windows：把 .ico 嵌进 exe（资源管理器图标）
+winresource = "0.1"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

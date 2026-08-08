@@ -1,0 +1,5 @@
+# 固定 stable，避免无意切到 nightly。
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "default"

@@ -1,0 +1,14 @@
+[package]
+name = "deskhud-runtime"
+description = "DeskHud local package discovery and load (builtin / WASM)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+deskhud-host = { workspace = true }
+deskhud-package = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

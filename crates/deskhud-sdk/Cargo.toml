@@ -1,0 +1,13 @@
+[package]
+name = "deskhud-sdk"
+description = "DeskHud community guest SDK (pets + HUD plugins → wasm)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]

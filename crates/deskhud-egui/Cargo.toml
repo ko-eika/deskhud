@@ -1,0 +1,29 @@
+[package]
+name = "deskhud-egui"
+description = "DeskHud egui desktop-pet shell."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "deskhud"
+path = "src/main.rs"
+
+[dependencies]
+deskhud-host = { workspace = true }
+deskhud-ui = { workspace = true }
+eframe = { workspace = true }
+egui = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+raw-window-handle = { workspace = true }
+image = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
+
+[build-dependencies]
+winresource = { workspace = true }
