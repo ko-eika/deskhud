@@ -34,7 +34,7 @@ impl PetKind for MyPet {
 ```
 
 - `PetKind` 方法是 `&self`：需要可变状态时用内部 `Mutex` / `Atomic*`。
-- 预览图：`PetKindInfo.preview_png` 为图片字节（png/jpeg/gif/webp）；设置页 cover 裁切显示。
+- 预览图：`PetKindInfo.preview` 为图片字节（**svg**/png/jpeg/gif/webp）；设置页 cover 裁切显示（SVG 由壳栅格化）。
 - 来源：`author` / 可选 `homepage`；设置页展示「作者 …」，悬停可看主页。
 
 ### 1.3 每帧上下文：`PetPaintCtx`
@@ -99,7 +99,7 @@ impl PetKind for MyPet {
 packs/pet-deskhud-specs/   # 示例
   Cargo.toml               # 原生实现（compile-in；不会打进 .deskhud）
   manifest.toml
-  assets/preview.png
+  assets/preview.svg
   i18n/zh-CN.toml
   i18n/en.toml
   src/lib.rs
@@ -161,7 +161,7 @@ impl Plugin for MyPlugin {
             version: "1.0.0",
             engine: "0.2",
             // 与包一并打包；缺省则设置页用默认首字图标
-            icon_png: Some(include_bytes!("../assets/icon.png")),
+            icon: Some(include_bytes!("../assets/icon.svg")),
         }
     }
 
@@ -171,7 +171,7 @@ impl Plugin for MyPlugin {
             label: "时钟",
             default_enabled: true,
             // 条目图标按 id 对应；`None` → 程序默认图标
-            icon_png: Some(include_bytes!("../assets/clock.png")),
+            icon: Some(include_bytes!("../assets/clock.svg")),
         }]
     }
 }
@@ -179,7 +179,7 @@ impl Plugin for MyPlugin {
 
 - `HudContribution.id`：**插件内**唯一短名（如 `clock`）；prefs 键为 `hud.<org>.<id>.enable` / `….clock.enable`。
 - 壳层用 `UiPreferences.hud.is_active(plugin_id, contribution_id, default)` 决定是否展示。
-- **图标**：插件 `PluginInfo.icon_png` + 每条 `HudContribution.icon_png` 随包分发；缺省用壳内默认图（插件=首字徽章，条目=简易板图标）。
+- **图标**：插件 `PluginInfo.icon` + 每条 `HudContribution.icon` 随包分发（**svg**/png/jpeg/gif/webp）；缺省用壳内默认图（插件=首字徽章，条目=简易板图标）。
 
 ### 2.3 规划中的帧数据
 
@@ -196,9 +196,9 @@ impl Plugin for MyPlugin {
 ```text
 packs/hud-deskhud-demo/
   manifest.toml    # kind = "plugin"
-  assets/icon.png
-  assets/icon_clock.png
-  assets/icon_tip.png
+  assets/icon.svg
+  assets/icon_clock.svg
+  assets/icon_tip.svg
   i18n/…
   src/lib.rs       # 不进入 .deskhud
 ```
@@ -209,8 +209,8 @@ packs/hud-deskhud-demo/
 my-hud.deskhud/
   manifest.toml    # kind = "plugin"
   guest.wasm
-  assets/icon.png
-  assets/clock.png
+  assets/icon.svg
+  assets/clock.svg
   i18n/en.toml
 ```
 
@@ -223,11 +223,11 @@ version = "1.0.0"
 engine = "0.2"
 api_version = 1
 display_name = "时钟"
-icon = "assets/icon.png"
+icon = "assets/icon.svg"
 
 [[hud]]
 id = "clock"
-icon = "assets/clock.png"
+icon = "assets/clock.svg"
 ```
 
 `[[hud]].id` 必须与 Guest / `HudContribution.id` 一致，引擎据此加载条目图标。

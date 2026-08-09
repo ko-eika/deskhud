@@ -19,7 +19,7 @@ impl PetKind for ExtraPet {
             engine: "0.2",
             window_width: 120.0,
             window_height: 120.0,
-            preview_png: None,
+            preview: None,
         }
     }
     fn paint(&self, _: PetPaintCtx<'_>) -> PetPaint {
@@ -38,7 +38,7 @@ impl Plugin for ExtraPlugin {
             homepage: None,
             version: "0.0.1",
             engine: "0.2",
-            icon_png: None,
+            icon: None,
         }
     }
 }

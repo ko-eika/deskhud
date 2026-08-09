@@ -150,7 +150,7 @@ impl PetKind for BuiltinSpecsPet {
             homepage: Some("https://github.com/ko-eika/deskhud"),
             window_width: 160.0,
             window_height: 168.0,
-            preview_png: Some(include_bytes!("../assets/preview.png")),
+            preview: Some(include_bytes!("../assets/preview.svg")),
         }
     }
 

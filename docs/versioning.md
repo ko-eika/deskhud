@@ -29,13 +29,13 @@ DeskHud 区分三类版本，避免混用：
 id = "pet.community.cool_cat"
 kind = "pet"
 version = "1.0.3"    # 包自身
-engine = "0.3"       # 适配族
+engine = "0.4"       # 适配族
 api_version = 1      # Guest/契约 ABI
 ```
 
 ## `engine` 族匹配
 
-- 引擎处于 **`0.x`**：包的 `engine` 必须等于当前产品的 `MAJOR.MINOR`（例：引擎 `0.3.5` 只接受 `engine = "0.3"`）
+- 引擎处于 **`0.x`**：包的 `engine` 必须等于当前产品的 `MAJOR.MINOR`（例：引擎 `0.4.1` 只接受 `engine = "0.4"`）
 - 引擎 **`≥ 1.0.0`**：包的 `engine` 只需匹配 **MAJOR**（例：引擎 `1.4.2` 接受 `engine = "1"`）
 - 另：`api_version` 必须属于引擎当前支持的 ABI 集合
 

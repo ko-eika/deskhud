@@ -93,3 +93,7 @@
 | 2026-08-09 | 应用不再 suppress HUD；槽窗回调显式 Visible(true) | 应用后 Visible(false) 未恢复导致 HUD 消失 |
 | 2026-08-09 | 出厂宠/HUD 迁仓库根 packs/（与 crates 同级）；dist→dist/packs | builtins 命名不直观；与 packages 扫描根区分 |
 | 2026-08-09 | pack-builtins 默认输出 target/packages | 与 cargo 产物同树，clean 可清 |
+| 2026-08-09 | 设置页图标/预览支持 SVG（resvg 栅格化）；字段改 preview_image/icon_image；packs 资源换 SVG | 清晰度；exe 图标仍 PNG/ICO |
+| 2026-08-09 | 产品升 0.4.0 / engine 族 0.4 | SVG+preview_image/icon_image 为包可感知契约变更（0.x MINOR） |
+| 2026-08-09 | 图标字段定名 PluginInfo/HudContribution.icon（非 icon_image） | 与 manifest icon 对齐，更简约 |
+| 2026-08-09 | PetKindInfo.preview（非 preview_image） | 与 manifest preview 对齐 |

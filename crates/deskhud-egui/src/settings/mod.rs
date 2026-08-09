@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, Align2, Area, Color32, ColorImage, CornerRadius, CursorIcon, FontId, Frame, Layout,
+    self, Align2, Area, Color32, CornerRadius, CursorIcon, FontId, Frame, Layout,
     Margin, Order, RichText, Sense, Stroke, TextureHandle, TextureOptions, Vec2,
 };
 use eframe::egui::text::{CCursor, CCursorRange};
@@ -1117,7 +1117,8 @@ impl SettingsHost {
                         &ctx,
                         &mut s.preview_textures,
                         &plugin_icon_key(plugin.id),
-                        plugin.icon_png,
+                        plugin.icon,
+                        crate::image_decode::ICON_RASTER_EDGE,
                     );
                 }
                 for (pid, c) in &items {
@@ -1125,7 +1126,8 @@ impl SettingsHost {
                         &ctx,
                         &mut s.preview_textures,
                         &hud_item_icon_key(pid, c.id),
-                        c.icon_png,
+                        c.icon,
+                        crate::image_decode::ICON_RASTER_EDGE,
                     );
                 }
             }
@@ -2162,7 +2164,8 @@ fn ensure_preview_texture(
         ctx,
         cache,
         &pet_preview_key(pet.id),
-        pet.preview_png,
+        pet.preview,
+        crate::image_decode::PREVIEW_RASTER_EDGE,
     )
 }
 
@@ -2171,29 +2174,37 @@ fn ensure_bytes_texture(
     cache: &mut HashMap<String, TextureHandle>,
     key: &str,
     bytes: Option<&[u8]>,
+    max_edge: u32,
 ) -> Option<TextureHandle> {
     if let Some(tex) = cache.get(key) {
         return Some(tex.clone());
     }
     let bytes = bytes?;
-    let image = image::load_from_memory(bytes).ok()?.into_rgba8();
-    let size = [image.width() as usize, image.height() as usize];
-    let color = ColorImage::from_rgba_unmultiplied(size, image.as_raw());
+    let color = crate::image_decode::decode_to_color_image(bytes, max_edge)?;
     let tex = ctx.load_texture(key.to_string(), color, TextureOptions::LINEAR);
     cache.insert(key.to_string(), tex.clone());
     Some(tex)
 }
 
 fn pet_preview_key(pet_id: &str) -> String {
-    format!("pet_preview_{pet_id}")
+    format!(
+        "pet_preview_{pet_id}@{}",
+        crate::image_decode::PREVIEW_RASTER_EDGE
+    )
 }
 
 fn plugin_icon_key(plugin_id: &str) -> String {
-    format!("icon:plugin:{plugin_id}")
+    format!(
+        "icon:plugin:{plugin_id}@{}",
+        crate::image_decode::ICON_RASTER_EDGE
+    )
 }
 
 fn hud_item_icon_key(plugin_id: &str, contrib_id: &str) -> String {
-    format!("icon:hud:{plugin_id}.{contrib_id}")
+    format!(
+        "icon:hud:{plugin_id}.{contrib_id}@{}",
+        crate::image_decode::ICON_RASTER_EDGE
+    )
 }
 
 fn page_header(ui: &mut egui::Ui, title: &str, intro: &str) {

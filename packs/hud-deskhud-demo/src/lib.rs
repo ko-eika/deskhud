@@ -16,7 +16,7 @@ impl Plugin for DemoHudPlugin {
             description: "示例插件：开关后在宠窗底部显示演示条（非真实数据源）",
             author: "DeskHud",
             homepage: Some("https://github.com/ko-eika/deskhud"),
-            icon_png: Some(include_bytes!("../assets/icon.png")),
+            icon: Some(include_bytes!("../assets/icon.svg")),
         }
     }
 
@@ -26,13 +26,13 @@ impl Plugin for DemoHudPlugin {
                 id: "clock",
                 label: "演示时钟条",
                 default_enabled: true,
-                icon_png: Some(include_bytes!("../assets/icon_clock.png")),
+                icon: Some(include_bytes!("../assets/icon_clock.svg")),
             },
             HudContribution {
                 id: "tip",
                 label: "演示提示条",
                 default_enabled: false,
-                icon_png: Some(include_bytes!("../assets/icon_tip.png")),
+                icon: Some(include_bytes!("../assets/icon_tip.svg")),
             },
         ];
         ITEMS

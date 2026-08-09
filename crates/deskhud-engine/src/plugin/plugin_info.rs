@@ -17,6 +17,6 @@ pub struct PluginInfo {
     pub version: &'static str,
     /// 适配的引擎兼容族（如 `"0.2"` 或 `"1"`）。
     pub engine: &'static str,
-    /// 插件图标（png/jpeg/gif/webp）；与包一并分发。缺省时壳用默认图标。
-    pub icon_png: Option<&'static [u8]>,
+    /// 插件图标字节（svg/png/jpeg/gif/webp）；与包一并分发。缺省时壳用默认图标。
+    pub icon: Option<&'static [u8]>,
 }

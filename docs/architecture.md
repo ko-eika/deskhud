@@ -64,8 +64,8 @@ Host 契约（当前）：
 
 ## HUD 插件
 
-- 声明 `HudContribution[]`（id、默认开、标签、可选 `icon_png`）
-- `PluginInfo.icon_png`：插件图标；条目图标按 contribution id 对应
+- 声明 `HudContribution[]`（id、默认开、标签、可选 `icon`：svg/png/jpeg/gif/webp）
+- `PluginInfo.icon`：插件图标；条目图标按 contribution id 对应；设置页由壳栅格化 SVG
 - 每帧或按需产出 `HudFrame`（已启用条目的展示数据，仍在路线图）
 - prefs：
   - `[ui]`：主题 / 字体 / 设置窗几何

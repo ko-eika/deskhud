@@ -9,6 +9,6 @@ pub struct HudContribution {
     pub label: &'static str,
     /// 默认是否开启。
     pub default_enabled: bool,
-    /// 条目图标（png/jpeg/gif/webp）；与插件一并打包。缺省时壳用默认图标。
-    pub icon_png: Option<&'static [u8]>,
+    /// 条目图标字节（svg/png/jpeg/gif/webp）；与插件一并打包。缺省时壳用默认图标。
+    pub icon: Option<&'static [u8]>,
 }

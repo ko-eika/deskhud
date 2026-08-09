@@ -51,17 +51,17 @@ cargo build -p deskhud-egui --release
 
 ## 打标签与 GitHub Release（建议流程）
 
-假设版本为 `0.2.0`：
+假设版本为 `0.4.0`：
 
 ```bash
 # 1. 提交版本 bump 与说明文档更新
 git add -A
-git commit -m "chore: release 0.2.0"
+git commit -m "chore: release 0.4.0"
 
 # 2. 打 annotated tag 并推送
-git tag -a v0.2.0 -m "DeskHud 0.2.0"
+git tag -a v0.4.0 -m "DeskHud 0.4.0"
 git push origin HEAD
-git push origin v0.2.0
+git push origin v0.4.0
 
 # 3. 在 GitHub 创建 Release，上传对应平台的 deskhud 二进制
 #    （可附简短变更说明与校验和）

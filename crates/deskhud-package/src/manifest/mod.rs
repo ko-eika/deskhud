@@ -47,10 +47,10 @@ pub struct PackManifest {
     /// 宠物包主窗高（逻辑像素）。缺省 140。
     #[serde(default = "default_window_dim")]
     pub window_height: u32,
-    /// 设置页预览图相对路径（如 `assets/preview.png`；支持 png/jpeg/gif/webp）；缺省无。
+    /// 设置页预览图相对路径（如 `assets/preview.svg`；支持 svg/png/jpeg/gif/webp）；缺省无。
     #[serde(default)]
     pub preview: Option<String>,
-    /// 包图标相对路径（宠物/插件通用；如 `assets/icon.png`）。
+    /// 包图标相对路径（宠物/插件通用；如 `assets/icon.svg`）。
     #[serde(default)]
     pub icon: Option<String>,
     /// HUD 插件条目图标映射（`id` ↔ 包内图标路径）；与 Guest 声明的条目 id 对齐。
@@ -226,21 +226,21 @@ version = "0.3.0"
 engine = "0.3"
 api_version = 1
 display_name = "Clock"
-icon = "assets/icon.png"
+icon = "assets/icon.svg"
 
 [[hud]]
 id = "clock"
-icon = "assets/clock.png"
+icon = "assets/clock.svg"
 
 [[hud]]
 id = "tip"
 "#,
         )
         .unwrap();
-        assert_eq!(m.icon.as_deref(), Some("assets/icon.png"));
+        assert_eq!(m.icon.as_deref(), Some("assets/icon.svg"));
         assert_eq!(m.hud.len(), 2);
         assert_eq!(m.hud[0].id, "clock");
-        assert_eq!(m.hud[0].icon.as_deref(), Some("assets/clock.png"));
+        assert_eq!(m.hud[0].icon.as_deref(), Some("assets/clock.svg"));
         assert!(m.hud[1].icon.is_none());
     }
 

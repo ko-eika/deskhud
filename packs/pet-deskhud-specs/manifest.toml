@@ -1,7 +1,7 @@
 id = "pet.deskhud.specs"
 kind = "pet"
-version = "0.3.0"
-engine = "0.3"
+version = "0.4.0"
+engine = "0.4"
 api_version = 1
 display_name = "Big Eyes"
 description = "Follows the cursor; key/mouse tip bubbles; hover highlight"
@@ -9,4 +9,4 @@ author = "DeskHud"
 homepage = "https://github.com/ko-eika/deskhud"
 window_width = 160
 window_height = 168
-preview = "assets/preview.png"
+preview = "assets/preview.svg"

@@ -21,8 +21,8 @@ pub struct PetKindInfo {
     pub window_width: f32,
     /// 主宠窗逻辑像素高。
     pub window_height: f32,
-    /// 设置页静态预览图字节（可选；png/jpeg/gif/webp 等，内置宠用 `include_bytes!`）。
-    pub preview_png: Option<&'static [u8]>,
+    /// 设置页静态预览图字节（可选；svg/png/jpeg/gif/webp，内置宠用 `include_bytes!`）。
+    pub preview: Option<&'static [u8]>,
 }
 
 impl PetKindInfo {

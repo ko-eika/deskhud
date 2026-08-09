@@ -11,10 +11,10 @@ members = [
     "crates/deskhud-runtime",
     "crates/deskhud-sdk",
     "crates/deskhud-egui",
+    "crates/deskhud-xtask",
     "packs/pet-deskhud-specs",
     "packs/pet-deskhud-blob",
     "packs/hud-deskhud-demo",
-    "crates/deskhud-xtask",
 ]
 default-members = [
     "crates/deskhud-ui",
@@ -25,7 +25,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -56,6 +56,8 @@ toml = "0.8"
 thiserror = "2.0"
 
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+# 设置页图标/预览：SVG 栅格化（图标类无需系统字体）
+resvg = { version = "0.45", default-features = false }
 
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",

@@ -6,6 +6,7 @@
 mod app;
 mod fonts;
 mod hud_overlay;
+mod image_decode;
 mod pet_dock;
 mod pet_draw;
 mod pet_input;

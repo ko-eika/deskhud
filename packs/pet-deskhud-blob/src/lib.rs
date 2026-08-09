@@ -55,7 +55,7 @@ impl PetKind for BuiltinBlobPet {
             homepage: Some("https://github.com/ko-eika/deskhud"),
             window_width: 96.0,
             window_height: 96.0,
-            preview_png: Some(include_bytes!("../assets/preview.png")),
+            preview: Some(include_bytes!("../assets/preview.svg")),
         }
     }
 
