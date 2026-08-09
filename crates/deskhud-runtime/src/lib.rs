@@ -1,9 +1,9 @@
 //! # deskhud-runtime
 //!
 //! 本地包发现与加载：把 `packages/` 下的 `.deskhud` 变成可注册的
-//! [`PetKind`](deskhud_host::PetKind) / [`Plugin`](deskhud_host::Plugin)。
+//! [`PetKind`](deskhud_engine::PetKind) / [`Plugin`](deskhud_engine::Plugin)。
 //!
-//! - **内置**：仍由 [`HostRegistry`](deskhud_host::HostRegistry) 原生注册。
+//! - **内置**：`packs/*` 原生 crate（`pet-*` / `hud-*`），由本 crate 引导注册进空的 [`EngineRegistry`](deskhud_engine::EngineRegistry)。
 //! - **社区**：Phase 3 起经 WASM 适配器加载（本 crate 预留 `wasm` 模块）。
 
 #![deny(missing_docs)]

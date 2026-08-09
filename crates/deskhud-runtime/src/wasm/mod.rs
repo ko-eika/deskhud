@@ -1,6 +1,6 @@
 //! WASM Guest 适配（Phase 3）。
 //!
-//! 将社区 `guest.wasm` 适配为 [`deskhud_host::PetKind`] / [`deskhud_host::Plugin`]。
+//! 将社区 `guest.wasm` 适配为 [`deskhud_engine::PetKind`] / [`deskhud_engine::Plugin`]。
 //! 本阶段仅占位，避免过早拉入 wasmtime。
 
 use crate::RuntimeError;

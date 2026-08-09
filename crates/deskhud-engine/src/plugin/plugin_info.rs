@@ -13,6 +13,10 @@ pub struct PluginInfo {
     pub author: &'static str,
     /// 主页或仓库 URL（可选）。
     pub homepage: Option<&'static str>,
+    /// 包自身 SemVer（展示用）。
+    pub version: &'static str,
+    /// 适配的引擎兼容族（如 `"0.2"` 或 `"1"`）。
+    pub engine: &'static str,
     /// 插件图标（png/jpeg/gif/webp）；与包一并分发。缺省时壳用默认图标。
     pub icon_png: Option<&'static [u8]>,
 }

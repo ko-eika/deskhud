@@ -85,6 +85,18 @@ pub fn work_area_containing_px(x: i32, y: i32) -> (i32, i32, i32, i32) {
     (0, 0, 1920, 1080)
 }
 
+/// 回退：工作区即整屏几何。
+#[allow(dead_code)]
+pub fn work_area_for_display(d: &DisplayInfo) -> (i32, i32, i32, i32) {
+    (d.work_left, d.work_top, d.work_right, d.work_bottom)
+}
+
+/// 回退：无任务栏边距。
+#[allow(dead_code)]
+pub fn system_bar_insets_px(_d: &DisplayInfo) -> (i32, i32, i32, i32) {
+    (0, 0, 0, 0)
+}
+
 /// 带 ctx 的工作区（points→px）。
 pub fn work_area_from_ctx(ctx: &egui::Context) -> (i32, i32, i32, i32) {
     let (size, ppp) = ctx.input(|i| {
@@ -132,3 +144,72 @@ pub fn cursor_screen_px_from_ctx(ctx: &egui::Context) -> Option<(i32, i32)> {
     let sy = ((outer.min.y + pointer.y) * ppp).round() as i32;
     Some((sx, sy))
 }
+
+/// 一台显示器的屏幕像素几何。
+#[derive(Debug, Clone)]
+pub struct DisplayInfo {
+    /// 稳定标识。
+    pub id: String,
+    /// 左。
+    pub x: i32,
+    /// 上。
+    pub y: i32,
+    /// 宽。
+    pub width: i32,
+    /// 高。
+    pub height: i32,
+    /// 是否主显示器。
+    pub primary: bool,
+    /// 工作区左（物理像素）。
+    pub work_left: i32,
+    /// 工作区上。
+    pub work_top: i32,
+    /// 工作区右。
+    pub work_right: i32,
+    /// 工作区下。
+    pub work_bottom: i32,
+}
+
+/// 回退：单主屏占位。
+pub fn list_displays() -> Vec<DisplayInfo> {
+    vec![DisplayInfo {
+        id: "primary".into(),
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+        primary: true,
+        work_left: 0,
+        work_top: 0,
+        work_right: 1920,
+        work_bottom: 1080,
+    }]
+}
+
+/// 回退：无屏幕捕获。
+pub fn capture_screen_rgba(
+    _x: i32,
+    _y: i32,
+    _width: i32,
+    _height: i32,
+) -> Option<(u32, u32, Vec<u8>)> {
+    None
+}
+
+/// 无原生点击穿透。
+pub fn set_click_through(_hwnd: isize, _enabled: bool) {}
+
+/// 无原生点击穿透强制刷新。
+#[allow(dead_code)]
+pub fn force_click_through(_hwnd: isize, _enabled: bool) {}
+
+/// 无原生显隐。
+pub fn set_window_visible(_hwnd: isize, _visible: bool) {}
+
+/// 无按标题查找。
+pub fn find_window_by_title(_title: &str) -> Option<isize> {
+    None
+}
+
+/// 非 Windows：无 owner 概念，空操作。
+pub fn set_window_owner(_window: isize, _owner: Option<isize>) {}

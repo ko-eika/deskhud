@@ -12,7 +12,7 @@ name = "deskhud"
 path = "src/main.rs"
 
 [dependencies]
-deskhud-host = { workspace = true }
+deskhud-engine = { workspace = true }
 deskhud-runtime = { workspace = true }
 deskhud-ui = { workspace = true }
 eframe = { workspace = true }

@@ -10,7 +10,9 @@
 
 - [x] 定稿 `manifest.toml` 与 `.deskhud` 目录/zip 读写（`deskhud-package`）
 - [x] 本地扫描 `packages/`（目录 + `.deskhud`）并引导注册（清单 + 原生内置映射；WASM 后接）
+- [~] 引擎化 / 版本契约 / 内置 crate 化 / HUD 全屏布局（0.3）
 - 扩展 `PetKind`：更多 `PetEvent` / 中性 `PetFrame`
+- [x] HUD 全屏 overlay + 布局 prefs（帧数据仍待）
 - 扩展 `Plugin`：`HudFrame` 真实帧数据
 
 ## Phase 1b — 跨平台 MVP（与 Phase 1 并行）
@@ -44,3 +46,5 @@
 - 在线商店 / 签名分发
 - 插件权限（文件系统、网络等）
 - 非 Windows 完整体验对齐（全局钩子、Acrylic/Mica 等）
+
+版本与适配政策见 [`versioning.md`](./versioning.md)。

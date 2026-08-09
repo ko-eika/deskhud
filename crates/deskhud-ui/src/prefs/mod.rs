@@ -1,26 +1,20 @@
 //! UI 偏好聚合。
 
-use serde::{Deserialize, Serialize};
-
 use crate::hud::HudPrefs;
 use crate::i18n::{self, Locale, MessageKey};
 use crate::pet::PetPrefs;
 use crate::shell::ShellPrefs;
 
-/// 壳偏好。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// 壳偏好（内存模型；落盘形状见 `persist`）。
+#[derive(Debug, Clone, PartialEq)]
 pub struct UiPreferences {
     /// 语言。
-    #[serde(default)]
     pub locale: Locale,
-    /// 桌宠壳（窗体 / 当前宠 id）。
-    #[serde(default)]
+    /// 界面 / 设置窗（落盘 `[ui]`）；字体落盘 `[font]`。
     pub shell: ShellPrefs,
-    /// 宠物包配置 `[pet.config]`。
-    #[serde(default)]
+    /// 宠物窗体 + 包选项（落盘 `[pet]`）。
     pub pet: PetPrefs,
-    /// HUD 配置 `[hud.config]`。
-    #[serde(default)]
+    /// HUD（落盘 `[hud]`）。
     pub hud: HudPrefs,
 }
 
@@ -41,10 +35,19 @@ impl UiPreferences {
         i18n::t(self.locale, key)
     }
 
-    /// 加载后规范化（旧宠物 id → `pet.<组织>.<标识>`）。
+    /// 加载后规范化（旧宠物 id → `pet.<组织>.<标识>`；字体/全局键迁移）。
     pub fn normalize_ids(&mut self) {
-        self.shell.active_pet_kind_id =
-            migrate_pet_id(&self.shell.active_pet_kind_id).to_string();
+        self.pet.kind = migrate_pet_id(&self.pet.kind).to_string();
+        self.shell.ui_font_id = crate::shell::migrate_ui_font_id(&self.shell.ui_font_id);
+        self.shell.ui_font_family =
+            crate::shell::migrate_ui_font_family(&self.shell.ui_font_family);
+        self.hud.migrate_global_keys();
+        // 旧 `topmost` 已在 persist 合入 `[settings]`；确保不与 options 里残留键冲突
+        self.pet.options.remove("topmost");
+        self.pet.options.remove("pet_topmost");
+        self.pet
+            .options
+            .remove(crate::pet::PetPrefs::LEGACY_GLOBAL_TOPMOST_KEY);
     }
 }
 

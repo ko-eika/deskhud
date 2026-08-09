@@ -1,8 +1,8 @@
 <h1 align="center" style="margin: 30px 0 30px; font-weight: bold;">DeskHud</h1>
-<h4 align="center">An extensible desktop pet host</h4>
+<h4 align="center">An extensible desktop pet engine</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.2.0-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.3.0-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -13,7 +13,7 @@
 
 [简体中文](./README.md) | English
 
-DeskHud is an extensible **desktop pet host**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui / eframe**, with multi-language support and local community pack loading (a store comes later).
+DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui / eframe**, with multi-language support and local community pack loading (a store comes later).
 
 ## Features
 
@@ -76,7 +76,7 @@ deskhud-egui        Executable UI (pet window / menu / settings)
        ▼
 deskhud-runtime     Discover packs → load (native built-in / WASM) → register
        │
-       ├── deskhud-host      Contracts + built-in pets / demo plugins
+       ├── deskhud-engine      Contracts + built-in pets / demo plugins
        ├── deskhud-package   Manifest, pack I/O, pack i18n
        └── deskhud-ui        Locale, prefs, catalog merge (no egui)
 
@@ -105,7 +105,11 @@ cargo run -p deskhud-egui
 
 # Check / test
 cargo check --workspace
-cargo test -p deskhud-package -p deskhud-ui -p deskhud-host -p deskhud-runtime
+cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime
+
+# Export packs/ → target/packages/*.deskhud (manifest + assets + i18n)
+cargo pack-builtins
+cargo pack-builtin pet-deskhud-specs
 
 # Format & lint
 cargo fmt
@@ -122,7 +126,7 @@ Full checklist: [`docs/release.md`](./docs/release.md). Summary:
 # 1. Bump workspace.package.version in the root Cargo.toml; sync README badges
 # 2. Verify
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test -p deskhud-package -p deskhud-ui -p deskhud-host -p deskhud-runtime --all-targets
+cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime --all-targets
 
 # 3. Release build (on the target OS)
 cargo build -p deskhud-egui --release

@@ -13,7 +13,11 @@ pub struct PetKindInfo {
     pub author: &'static str,
     /// 主页或仓库 URL（可选）。
     pub homepage: Option<&'static str>,
-    /// 主宠窗逻辑像素宽（由皮肤/包决定，宿主不写死）。
+    /// 包自身 SemVer（展示用）。
+    pub version: &'static str,
+    /// 适配的引擎兼容族（如 `"0.2"` 或 `"1"`）。
+    pub engine: &'static str,
+    /// 主宠窗逻辑像素宽（由皮肤/包决定，引擎不写死）。
     pub window_width: f32,
     /// 主宠窗逻辑像素高。
     pub window_height: f32,

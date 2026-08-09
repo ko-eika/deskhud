@@ -2,9 +2,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use super::{
-    PetConfigBag, PetConfigOption, PetKind, PetKindInfo, PetPaint, PetPaintCtx,
-};
+use deskhud_engine::{PetConfigBag, PetConfigOption, PetKind, PetKindInfo, PetPaint, PetPaintCtx};
 
 /// `pet.deskhud.blob`。
 #[derive(Debug)]
@@ -49,13 +47,15 @@ impl PetKind for BuiltinBlobPet {
     fn info(&self) -> PetKindInfo {
         PetKindInfo {
             id: "pet.deskhud.blob",
+            version: deskhud_engine::ENGINE_PRODUCT_VERSION,
+            engine: deskhud_engine::ENGINE_COMPAT_FAMILY,
             display_name: "蓝点",
             description: "简洁圆点；拖动/贴边略变形态",
             author: "DeskHud",
             homepage: Some("https://github.com/ko-eika/deskhud"),
             window_width: 96.0,
             window_height: 96.0,
-            preview_png: Some(include_bytes!("../../assets/preview_blob.png")),
+            preview_png: Some(include_bytes!("../assets/preview.png")),
         }
     }
 

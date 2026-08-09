@@ -21,7 +21,11 @@ pub struct PackManifest {
     pub id: String,
     /// 宠物或插件。
     pub kind: PackKind,
-    /// 与宿主 Guest ABI 对齐的主版本。
+    /// 包自身 SemVer（仅展示 / 更新比较，不参与加载门闸）。
+    pub version: String,
+    /// 引擎兼容族，如 `"0.3"` 或 `"1"`（见 `docs/versioning.md`）。
+    pub engine: String,
+    /// 与引擎 Guest ABI 对齐的主版本。
     pub api_version: u32,
     /// 显示名回退（无 i18n 时用）。
     pub display_name: String,
@@ -59,13 +63,18 @@ pub struct PackManifest {
 pub struct PackHudEntry {
     /// 与 `HudContribution.id` / Guest 条目 id 一致。
     pub id: String,
-    /// 条目图标相对路径；缺省则宿主用默认图标。
+    /// 条目图标相对路径；缺省则引擎用默认图标。
     #[serde(default)]
     pub icon: Option<String>,
 }
 
 fn default_window_dim() -> u32 {
     140
+}
+
+fn version_looks_ok(version: &str) -> bool {
+    let v = version.trim();
+    !v.is_empty() && v.chars().any(|c| c.is_ascii_digit())
 }
 
 /// `kind.org.pack`：至少 `min_segments` 段，首段为 `kind`，段内仅 `[a-zA-Z0-9_-]`。
@@ -95,7 +104,7 @@ fn validate_namespaced_id(
 }
 
 impl PackManifest {
-    /// 当前宿主支持的 API 主版本。
+    /// 当前引擎支持的 API 主版本。
     pub const SUPPORTED_API_VERSION: u32 = 1;
 
     /// 校验必填与版本。
@@ -107,6 +116,14 @@ impl PackManifest {
             return Err(PackageError::InvalidManifest(
                 "display_name is empty".into(),
             ));
+        }
+        if !version_looks_ok(&self.version) {
+            return Err(PackageError::InvalidManifest(
+                "version is empty or missing a digit".into(),
+            ));
+        }
+        if self.engine.trim().is_empty() {
+            return Err(PackageError::InvalidManifest("engine is empty".into()));
         }
         if self.api_version != Self::SUPPORTED_API_VERSION {
             return Err(PackageError::InvalidManifest(format!(
@@ -140,6 +157,8 @@ mod tests {
             r#"
 id = "pet.community.cool_cat"
 kind = "pet"
+version = "0.3.0"
+engine = "0.3"
 api_version = 1
 display_name = "Cool Cat"
 entry = "guest.wasm"
@@ -147,6 +166,8 @@ entry = "guest.wasm"
         )
         .unwrap();
         assert_eq!(m.kind, PackKind::Pet);
+        assert_eq!(m.version, "0.3.0");
+        assert_eq!(m.engine, "0.3");
         assert_eq!(m.entry.as_deref(), Some("guest.wasm"));
     }
 
@@ -156,6 +177,8 @@ entry = "guest.wasm"
             r#"
 id = "hud.acme.clock"
 kind = "plugin"
+version = "0.3.0"
+engine = "0.3"
 api_version = 1
 display_name = "Clock"
 "#,
@@ -167,6 +190,8 @@ display_name = "Clock"
             r#"
 id = "demo.hud"
 kind = "plugin"
+version = "0.3.0"
+engine = "0.3"
 api_version = 1
 display_name = "Bad"
 "#,
@@ -181,6 +206,8 @@ display_name = "Bad"
             r#"
 id = "builtin.specs"
 kind = "pet"
+version = "0.3.0"
+engine = "0.3"
 api_version = 1
 display_name = "Bad"
 "#,
@@ -195,6 +222,8 @@ display_name = "Bad"
             r#"
 id = "hud.acme.clock"
 kind = "plugin"
+version = "0.3.0"
+engine = "0.3"
 api_version = 1
 display_name = "Clock"
 icon = "assets/icon.png"
@@ -213,5 +242,34 @@ id = "tip"
         assert_eq!(m.hud[0].id, "clock");
         assert_eq!(m.hud[0].icon.as_deref(), Some("assets/clock.png"));
         assert!(m.hud[1].icon.is_none());
+    }
+
+    #[test]
+    fn reject_empty_version_or_engine() {
+        let err = PackManifest::parse_toml(
+            r#"
+id = "pet.community.cool_cat"
+kind = "pet"
+version = ""
+engine = "0.3"
+api_version = 1
+display_name = "Cool Cat"
+"#,
+        )
+        .unwrap_err();
+        assert!(format!("{err}").contains("version"));
+
+        let err = PackManifest::parse_toml(
+            r#"
+id = "pet.community.cool_cat"
+kind = "pet"
+version = "0.3.0"
+engine = ""
+api_version = 1
+display_name = "Cool Cat"
+"#,
+        )
+        .unwrap_err();
+        assert!(format!("{err}").contains("engine"));
     }
 }

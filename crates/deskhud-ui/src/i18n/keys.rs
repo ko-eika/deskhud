@@ -85,9 +85,35 @@ pub enum MessageKey {
     SettingsUiFontPreview,
     /// 插件总开关关闭时的提示。
     HudPluginDisabledHint,
-    /// 置顶。
+    /// 插件卡：总开关旁标签。
+    HudPluginEnable,
+    /// 插件页：全局启用全部 HUD。
+    HudMasterEnable,
+    /// 插件页：全局已开启时的说明。
+    HudMasterEnableHint,
+    /// 插件页：全局已关闭时的说明。
+    HudMasterDisabledHint,
+    /// 调整 HUD / 插件布局。
+    HudLayoutEdit,
+    /// 布局编辑中提示。
+    HudLayoutEditingHint,
+    /// 应用 HUD 布局。
+    HudLayoutDone,
+    /// 取消 HUD 布局。
+    HudLayoutCancel,
+    /// 布局工具条提示。
+    HudLayoutHint,
+    /// 布局编辑：重置条目大小为 1×。
+    HudLayoutResetSize,
+    /// 右键：插件布局。
+    MenuHudLayout,
+    /// 右键：启用全部插件 HUD。
+    MenuHudEnable,
+    /// 右键：禁用全部插件 HUD。
+    MenuHudDisable,
+    /// 全局置顶。
     SettingsTopmost,
-    /// 置顶说明。
+    /// 全局置顶说明。
     SettingsTopmostHint,
     /// 简体中文。
     OptLocaleZh,

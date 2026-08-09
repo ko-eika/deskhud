@@ -17,7 +17,7 @@ DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布
 ```bash
 cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test -p deskhud-package -p deskhud-ui -p deskhud-host -p deskhud-runtime --all-targets
+cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime --all-targets
 cargo check --workspace --all-targets
 ```
 
@@ -84,3 +84,22 @@ shasum -a 256 target/release/deskhud
 - 自动更新通道
 
 有需要时可在 `.github/workflows/` 增加 `release.yml`；在此之前请按上文手动构建与归档。
+
+## 导出内置参考包（`.deskhud`）
+
+从仓库根 [`packs/`](../packs/) 导出对照用包（仅 `manifest.toml` + `assets/` + `i18n/`；原生实现仍 compile-in）：
+
+```bash
+# 全部 → target/packages/*.deskhud
+cargo pack-builtins
+
+# 单个（参数为 packs/ 下目录名）
+cargo pack-builtin pet-deskhud-specs
+cargo pack-builtin pet-deskhud-blob
+cargo pack-builtin hud-deskhud-demo
+
+# 指定输出目录
+cargo pack-builtins --out dist/my-packs
+```
+
+可将产物拷到 [`packages/`](../packages/) 做扫描侧验证。更多上下文见 [`docs/extension-guide.md`](./extension-guide.md) §1.6。

@@ -3,9 +3,9 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::Mutex;
 
-use super::{
-    DockState, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind, PetKindInfo,
-    PetModifiers, PetMouseButton, PetPaint, PetPaintCtx,
+use deskhud_engine::{
+    DockState, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind, PetKindInfo, PetModifiers,
+    PetMouseButton, PetPaint, PetPaintCtx,
 };
 
 /// 默认宠物 `pet.deskhud.specs`。
@@ -142,13 +142,15 @@ impl PetKind for BuiltinSpecsPet {
     fn info(&self) -> PetKindInfo {
         PetKindInfo {
             id: "pet.deskhud.specs",
+            version: deskhud_engine::ENGINE_PRODUCT_VERSION,
+            engine: deskhud_engine::ENGINE_COMPAT_FAMILY,
             display_name: "大眼球",
             description: "全局跟鼠标看；键鼠短提示；悬停高亮",
             author: "DeskHud",
-            homepage: Some("https://github.com/deskhud/deskhud"),
+            homepage: Some("https://github.com/ko-eika/deskhud"),
             window_width: 160.0,
             window_height: 168.0,
-            preview_png: Some(include_bytes!("../../assets/preview_specs.png")),
+            preview_png: Some(include_bytes!("../assets/preview.png")),
         }
     }
 

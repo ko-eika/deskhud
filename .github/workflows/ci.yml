@@ -37,4 +37,4 @@ jobs:
         run: cargo check --workspace --all-targets
 
       - name: cargo test (portable crates)
-        run: cargo test -p deskhud-package -p deskhud-ui -p deskhud-host -p deskhud-runtime --all-targets
+        run: cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime --all-targets

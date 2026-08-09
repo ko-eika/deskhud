@@ -183,6 +183,8 @@ mod tests {
         let manifest = PackManifest {
             id: "pet.example.roundtrip".into(),
             kind: PackKind::Pet,
+            version: "0.3.0".into(),
+            engine: "0.3".into(),
             api_version: PackManifest::SUPPORTED_API_VERSION,
             display_name: "Roundtrip".into(),
             description: "test".into(),

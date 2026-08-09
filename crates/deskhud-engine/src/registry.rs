@@ -1,41 +1,48 @@
-//! 宿主注册表。
+//! 引擎注册表。
 
 use std::sync::Arc;
 
-use crate::pet::{BuiltinBlobPet, BuiltinSpecsPet, PetKind, PetKindInfo};
-use crate::plugin::{DemoHudPlugin, HudContribution, Plugin, PluginInfo};
+use crate::pet::{PetKind, PetKindInfo};
+use crate::plugin::{HudContribution, Plugin, PluginInfo};
 
-/// 运行时宿主。
-pub struct HostRegistry {
+/// 引擎运行时注册表（宠物 + HUD 插件）。
+pub struct EngineRegistry {
     pets: Vec<Arc<dyn PetKind>>,
     plugins: Vec<Arc<dyn Plugin>>,
     active_pet_id: String,
 }
 
-impl Default for HostRegistry {
+impl Default for EngineRegistry {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl HostRegistry {
-    /// 默认：大眼球 + 蓝点；注册演示 HUD 插件。
+impl EngineRegistry {
+    /// 空注册表（不预装内置宠 / 插件；由 runtime 引导注册）。
     pub fn new() -> Self {
-        let specs = Arc::new(BuiltinSpecsPet::default()) as Arc<dyn PetKind>;
-        let blob = Arc::new(BuiltinBlobPet::default()) as Arc<dyn PetKind>;
-        let demo = Arc::new(DemoHudPlugin) as Arc<dyn Plugin>;
+        Self::empty()
+    }
+
+    /// [`Self::new`] 的别名。
+    pub fn empty() -> Self {
         Self {
-            active_pet_id: specs.info().id.to_string(),
-            pets: vec![specs, blob],
-            plugins: vec![demo],
+            pets: Vec::new(),
+            plugins: Vec::new(),
+            active_pet_id: String::new(),
         }
     }
 
-    /// 注册宠物（同 ID 替换）。
+    /// 注册宠物（同 ID 替换）。若当前无激活宠，则设为该宠。
     pub fn register_pet(&mut self, kind: Arc<dyn PetKind>) {
         let id = kind.info().id;
         self.pets.retain(|p| p.info().id != id);
         self.pets.push(kind);
+        if self.active_pet_id.is_empty()
+            || !self.pets.iter().any(|p| p.info().id == self.active_pet_id)
+        {
+            self.active_pet_id = id.to_string();
+        }
     }
 
     /// 注册插件（同 ID 替换）。
@@ -61,12 +68,16 @@ impl HostRegistry {
     }
 
     /// 当前宠物。
+    ///
+    /// # Panics
+    /// 注册表中没有任何宠物时 panic（引导层须先 `register_pet`）。
     pub fn active_pet(&self) -> Arc<dyn PetKind> {
         self.pets
             .iter()
             .find(|p| p.info().id == self.active_pet_id)
             .cloned()
-            .unwrap_or_else(|| self.pets[0].clone())
+            .or_else(|| self.pets.first().cloned())
+            .expect("EngineRegistry has no pets; bootstrap must register builtins first")
     }
 
     /// 已注册宠物（含绘制逻辑，供设置预览等）。

@@ -1,0 +1,8 @@
+display_name = "Blue Dot"
+description = "Simple blob; reacts to drag and docking"
+"hover_pulse.label" = "Hover pulse"
+"hover_pulse.description" = "Slight scale pulse while hovered"
+"dock_tint.label" = "Dock tint"
+"dock_tint.description" = "Body tint changes when docked"
+"drag_react.label" = "Drag feedback"
+"drag_react.description" = "Stronger bounce and brightness while dragging"

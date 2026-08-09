@@ -1,6 +1,6 @@
 //! 宠窗贴边：相对工作区检测与松手吸附（仅 UI 壳；结果以 [`DockState`] 交给宠物包）。
 
-use deskhud_host::DockState;
+use deskhud_engine::DockState;
 
 use crate::platform;
 

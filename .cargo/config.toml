@@ -1,0 +1,3 @@
+[alias]
+pack-builtins = "run -p deskhud-xtask -- pack-builtins"
+pack-builtin = "run -p deskhud-xtask -- pack-builtin"

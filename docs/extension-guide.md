@@ -1,10 +1,10 @@
 # DeskHud 扩展指南：宠物包与 HUD 插件
 
-面向社区 / 内置扩展作者。宿主契约在 [`deskhud-host`](../crates/deskhud-host)；UI 壳只做几何与输入转发，**扩展代码不要依赖 HWND、屏幕坐标或 egui**。
+面向社区 / 内置扩展作者。引擎契约在 [`deskhud-engine`](../crates/deskhud-engine)；UI 壳只做几何与输入转发，**扩展代码不要依赖 HWND、屏幕坐标或 egui**。
 
 当前阶段：
 
-- **内置扩展**：在 `deskhud-host` 实现 `PetKind` / `Plugin`，由 `HostRegistry` 注册。
+- **内置扩展**：在 `packs/` 实现 `PetKind` / `Plugin`（目录名 `pet-*` / `hud-*`），由 `deskhud-runtime` 引导注册进空的 `EngineRegistry`。
 - **社区扩展（规划）**：`.deskhud` 包 + WASM Guest（`deskhud-sdk` / `deskhud-runtime`），语义与下文 host 契约对齐。
 
 ---
@@ -18,7 +18,7 @@
 ### 1.2 实现入口：`PetKind`
 
 ```rust
-use deskhud_host::{PetEvent, PetKind, PetKindInfo, PetPaint, PetPaintCtx};
+use deskhud_engine::{PetEvent, PetKind, PetKindInfo, PetPaint, PetPaintCtx};
 
 struct MyPet;
 
@@ -43,10 +43,10 @@ impl PetKind for MyPet {
 |------|------|
 | `time_secs` | 运行时间 |
 | `pointer_dir` | **全局**光标相对宠心方向（约 `[-1,1]`）；不要求悬停在宠上 |
-| `status_line` | 宿主短文案（可空） |
-| `dock` | [`DockState`](../crates/deskhud-host/src/pet/dock_state.rs) 贴边（四边可组合） |
-| `drag` | [`DragState`](../crates/deskhud-host/src/pet/drag_state.rs) 是否在拖窗 |
-| `mouse` | [`MouseState`](../crates/deskhud-host/src/pet/mouse_state.rs) 局部悬停/按下 + **全局**按键 |
+| `status_line` | 引擎短文案（可空） |
+| `dock` | [`DockState`](../crates/deskhud-engine/src/pet/dock_state.rs) 贴边（四边可组合） |
+| `drag` | [`DragState`](../crates/deskhud-engine/src/pet/drag_state.rs) 是否在拖窗 |
+| `mouse` | [`MouseState`](../crates/deskhud-engine/src/pet/mouse_state.rs) 局部悬停/按下 + **全局**按键 |
 
 #### 全局 vs 局部（重要）
 
@@ -73,7 +73,7 @@ impl PetKind for MyPet {
 | `DockChanged { from, to }` | 贴边变化（含松手吸附、切宠改尺寸后重锚定） |
 | `MouseHover { inside }` | 指针进入 / 离开宠可点区域（局部） |
 | `MousePressed` / `MouseReleased` | 在宠上按下 / 抬起（局部） |
-| `MouseClicked` / `MouseDoubleClicked` | 单击 / 双击（局部；右键仍开宿主菜单） |
+| `MouseClicked` / `MouseDoubleClicked` | 单击 / 双击（局部；右键仍开引擎菜单） |
 | `GlobalMousePressed` / `GlobalMouseReleased` | 桌面任意处鼠标键边沿（全局） |
 | `GlobalMouseWheel { delta }` | 桌面滚轮（全局低层钩子；正=上） |
 | `GlobalKeyPressed` / `GlobalKeyReleased` | 桌面键盘子集边沿（全局采样；含空格） |
@@ -91,17 +91,42 @@ impl PetKind for MyPet {
 - 切宠导致窗尺寸变化 → 壳按原贴边边用新尺寸重锚定。
 - 包内根据 `ctx.dock` / `Drag*` 做姿势、音效、表情即可。
 
-### 1.6 包格式（规划）
+### 1.6 包格式与导出 `.deskhud`
+
+出厂包源在仓库根 [`packs/`](../packs/)（`pet-*` / `hud-*`），目录布局与分发包一致：
 
 ```text
-my-pet.deskhud/
-  manifest.toml    # kind = "pet"
-  guest.wasm       # 社区包
+packs/pet-deskhud-specs/   # 示例
+  Cargo.toml               # 原生实现（compile-in；不会打进 .deskhud）
+  manifest.toml
   assets/preview.png
   i18n/zh-CN.toml
+  i18n/en.toml
+  src/lib.rs
 ```
 
-`manifest` 字段见 `deskhud-package`；本地扫描根目录为仓库 `packages/`。
+导出 **仅** 打包 `manifest.toml` + `assets/` + `i18n/`（不含 `src/` / `Cargo.toml`）：
+
+```bash
+# 导出 packs/ 下全部出厂包 → target/packages/*.deskhud
+cargo pack-builtins
+
+# 导出单个目录名（packs/ 下的文件夹名）
+cargo pack-builtin pet-deskhud-specs
+cargo pack-builtin hud-deskhud-demo
+
+# 自定义输出目录
+cargo pack-builtins --out path/to/out
+```
+
+说明：
+
+- 别名定义在 [`.cargo/config.toml`](../.cargo/config.toml)，实际由 `deskhud-xtask` 执行。
+- 运行时仍以原生 crate **compile-in**；导出的 `.deskhud` 用于规范校验 / 对照社区包布局。
+- 社区 WASM 包另含 `guest.wasm`（Phase 3）；本地扫描根为 [`packages/`](../packages/)。
+- 默认输出在 `target/packages/`（随 `cargo clean` 清理）；需要长期保留可用 `--out`。
+
+`manifest` 字段见 `deskhud-package` / [`docs/versioning.md`](./versioning.md)。
 
 ### 1.7 内置演示
 
@@ -121,7 +146,7 @@ my-pet.deskhud/
 ### 2.2 实现入口：`Plugin`
 
 ```rust
-use deskhud_host::{HudContribution, Plugin, PluginInfo};
+use deskhud_engine::{HudContribution, Plugin, PluginInfo};
 
 struct MyPlugin;
 
@@ -133,6 +158,8 @@ impl Plugin for MyPlugin {
             description: "…",
             author: "acme",
             homepage: None,
+            version: "1.0.0",
+            engine: "0.2",
             // 与包一并打包；缺省则设置页用默认首字图标
             icon_png: Some(include_bytes!("../assets/icon.png")),
         }
@@ -162,7 +189,21 @@ impl Plugin for MyPlugin {
 
 社区 WASM 侧对应 `deskhud-sdk::PluginGuest` / `HudItem`（`icon` 为包内相对路径）。
 
-### 2.4 包格式（规划）
+### 2.4 包格式与导出
+
+与宠物包相同，用 `cargo pack-builtins` / `cargo pack-builtin <目录名>` 从 `packs/` 导出。HUD 示例：
+
+```text
+packs/hud-deskhud-demo/
+  manifest.toml    # kind = "plugin"
+  assets/icon.png
+  assets/icon_clock.png
+  assets/icon_tip.png
+  i18n/…
+  src/lib.rs       # 不进入 .deskhud
+```
+
+社区目标形态（WASM，规划）额外包含 `guest.wasm`：
 
 ```text
 my-hud.deskhud/
@@ -178,6 +219,8 @@ my-hud.deskhud/
 ```toml
 id = "hud.acme.clock"
 kind = "plugin"
+version = "1.0.0"
+engine = "0.2"
 api_version = 1
 display_name = "时钟"
 icon = "assets/icon.png"
@@ -187,7 +230,7 @@ id = "clock"
 icon = "assets/clock.png"
 ```
 
-`[[hud]].id` 必须与 Guest / `HudContribution.id` 一致，宿主据此加载条目图标。
+`[[hud]].id` 必须与 Guest / `HudContribution.id` 一致，引擎据此加载条目图标。
 
 ---
 
@@ -222,26 +265,50 @@ icon = "assets/clock.png"
 
 ### 3.3 用户配置（prefs）
 
-壳层窗体等仍在 `[shell]`；包相关开关/参数进对应 config 表，**键用全路径**：
+分类落盘（键序稳定）；旧 `[shell]` / `[pet.config]` / `[hud.config]` 启动时自动迁移：
 
 ```toml
-[shell]
-active_pet_kind_id = "pet.deskhud.specs"
+[settings]
+width = 720.0
+height = 520.0
 
-[pet.config]
+[theme]
+mode = "system"
+locale = "zh-cn"
+
+[font]
+id = "JetBrainsMono-Regular"
+family = "jetbrainsmono"
+style = "Regular"
+size = 13.0
+
+[pet]
+"pet.global.kind" = "pet.deskhud.specs"
+"pet.global.width" = 140.0
+"pet.global.height" = 140.0
+"pet.global.topmost" = true
+"pet.global.picker_mode" = "grid"
 "pet.deskhud.specs.follow_eyes" = true
 "pet.deskhud.specs.key_tips" = false
 
-[hud.config]
+[hud]
+"hud.global.enable" = true
 "hud.deskhud.demo.enable" = true
 "hud.deskhud.demo.clock.enable" = true
 "hud.deskhud.demo.tip.enable" = false
+"hud.deskhud.demo.tip.display" = "primary"
+"hud.deskhud.demo.tip.x" = 0.54
+"hud.deskhud.demo.tip.y" = 0.82
+"hud.deskhud.demo.tip.scale" = 1.0
 ```
 
-| 键 | 含义 |
-|----|------|
-| `hud.<组织>.<标识>.enable` | 插件总开关 |
-| `hud.<组织>.<标识>.<条目>.enable` | 该条目开关 |
+节顺序固定：`[settings]` → `[theme]`（含 mode / locale）→ `[font]` → `[pet]` → `[hud]`。  
+`[pet]` / `[hud]`：先写全部 `*.global.*`，再按引擎注册的宠/插件顺序写出；同包内 `id` / `enable` 优先，其余按包内配置定义序，布局属性（`display` / `x` / `y` / `scale`）靠后。
+| 分区 / 键 | 含义 |
+|-----------|------|
+| `[ui]` | 主题、字体、设置窗几何 |
+| `[pet]` | 当前宠、尺寸/位置/置顶 + 包选项扁平键 |
+| `[hud]` | 插件/条目开关 + 布局扁平键 |
 | `pet.<组织>.<标识>.<键>` | 宠物包自定义配置（由 `PetKind::config_options` 声明） |
 
 宠配置在设置 → 宠物页下部「当前宠物行为」；设置打开时草稿会即时预览。
@@ -257,7 +324,7 @@ active_pet_kind_id = "pet.deskhud.specs"
 ## 4. 硬约束（必读）
 
 1. **禁止**在扩展里依赖 egui、`git2`、任意原生 dll 分发（社区默认 WASM）。
-2. **禁止**宿主 crate 依赖 `deskhud-sdk`；sdk 仅 examples / 社区包使用。
+2. **禁止**引擎 crate 依赖 `deskhud-sdk`；sdk 仅 examples / 社区包使用。
 3. 第三方 crate 版本只写在仓库根 `[workspace.dependencies]`。
 4. UI 是唯一壳：`deskhud-egui`；无托盘、无第二套 UI 框架。
 5. 一能力一目录；新建模块优先独立目录（见 `.cursor/rules/`）。
@@ -267,14 +334,16 @@ active_pet_kind_id = "pet.deskhud.specs"
 ## 5. 本地开发检查清单
 
 ```powershell
-cargo check -p deskhud-host
-cargo test -p deskhud-host
+cargo check -p deskhud-engine
+cargo test -p deskhud-engine
 cargo run -p deskhud-egui
 ```
 
-1. 实现 `PetKind` 或 `Plugin` 并在 `HostRegistry::new`（或后续包加载）注册。
+1. 实现 `PetKind` 或 `Plugin`，由 runtime / 包加载调用 `register_pet` / `register_plugin`。
 2. 宠物：验证贴边 / 拖动 / 悬停 / 单击获焦后键盘。
 3. HUD：设置 → **插件** 按插件折叠列表开关条目；演示条画在宠窗底部。
 4. 宠物：设置 → 宠物页切换包，并验证「当前宠物行为」开关（跟眼 / 提示等）。
 
 更细架构与路线图：[`architecture.md`](./architecture.md)、[`roadmap.md`](./roadmap.md)。
+
+版本与适配政策见 [`versioning.md`](./versioning.md)。

@@ -2,7 +2,7 @@
 
 use std::sync::LazyLock;
 
-use deskhud_host::{PetKey, PetModifiers, PetMouseButton};
+use deskhud_engine::{PetKey, PetModifiers, PetMouseButton};
 use eframe::egui::{self, Key, PointerButton};
 
 pub fn modifiers_from_egui(m: &egui::Modifiers) -> PetModifiers {

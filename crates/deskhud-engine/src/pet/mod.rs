@@ -1,7 +1,5 @@
 //! 可扩展桌宠类型。
 
-mod builtin_blob;
-mod builtin_specs;
 mod dock_state;
 mod drag_state;
 mod modifiers;
@@ -14,8 +12,6 @@ mod pet_kind;
 mod pet_kind_info;
 mod pet_paint;
 
-pub use builtin_blob::BuiltinBlobPet;
-pub use builtin_specs::BuiltinSpecsPet;
 pub use dock_state::DockState;
 pub use drag_state::DragState;
 pub use modifiers::PetModifiers;

@@ -7,17 +7,17 @@
 - **宠物包（pet pack）**：皮肤资源 + 行为逻辑；同一时间一个激活宠。
 - **HUD 插件（hud plugin）**：可贡献 0..N 条 HUD；prefs 支持「插件总开关」与「单条 HUD 开关」。
 
-社区作者用 `deskhud-sdk` 编写逻辑，打成 `.deskhud`；宿主用 `deskhud-runtime` 本地加载。内置实现走原生 Rust，但实现同一套 `deskhud-host` 契约，对 UI 无感。
+社区作者用 `deskhud-sdk` 编写逻辑，打成 `.deskhud`；引擎用 `deskhud-runtime` 本地加载。内置实现走原生 Rust，但实现同一套 `deskhud-engine` 契约，对 UI 无感。
 
 ## 依赖方向（禁止反向）
 
 ```
 deskhud-egui
   → deskhud-runtime
-       → deskhud-host
+       → deskhud-engine
        → deskhud-package
        → deskhud-ui
-deskhud-sdk          （仅示例 / 社区包依赖；宿主不依赖 sdk）
+deskhud-sdk          （仅示例 / 社区包依赖；引擎不依赖 sdk）
 ```
 
 - UI 不得依赖 `git2`、不得引入第二套 UI。
@@ -40,7 +40,9 @@ my-cool-pet.deskhud/
 
 - `id`：稳定全 ID — 宠物 `pet.<组织>.<标识>`，插件 `hud.<组织>.<标识>`
 - `kind`：`pet` | `plugin`
-- `api_version`：与宿主 ABI 对齐
+- `version`：包自身 SemVer（展示 / 更新比较）
+- `engine`：引擎兼容族（加载门闸；见 [`versioning.md`](./versioning.md)）
+- `api_version`：与引擎 Guest ABI 对齐
 - `display_name` / `description` / `author` / `homepage`
 - `icon`：包图标相对路径；插件另可 `[[hud]]` 声明条目 `id` + `icon`
 - `preview`：设置页预览图（宠物）
@@ -65,10 +67,13 @@ Host 契约（当前）：
 - 声明 `HudContribution[]`（id、默认开、标签、可选 `icon_png`）
 - `PluginInfo.icon_png`：插件图标；条目图标按 contribution id 对应
 - 每帧或按需产出 `HudFrame`（已启用条目的展示数据，仍在路线图）
-- prefs（`[hud.config]`）：
-  - `hud.<org>.<id>.enable`：插件总开关
-  - `hud.<org>.<id>.<item>.enable`：单条开关
+- prefs：
+  - `[ui]`：主题 / 字体 / 设置窗几何
+  - `[pet]`：当前宠、尺寸位置置顶 + `pet.<org>.<id>.*` 选项
+  - `[hud]`：`hud.<org>.<id>[.<item>].enable` 与布局 `display/x/y/scale`
   - 插件关 → 其下全部不显示
+  - 可继续加同前缀自定义键，便于扩展
+- 布局编辑：关闭全部 HUD 小窗与设置/菜单，打开**单个**截图式编辑视口（虚线工作区 + 半透明遮罩 + 底栏重置/取消/完成）；子窗勿 `with_transparent(true)`，半透明靠截图底+遮罩模拟。
 
 ## 设置窗
 
@@ -91,3 +96,5 @@ Host 契约（当前）：
 - 默认仅 WASM 能力（算逻辑 + 读包内资源）。
 - 不开放任意 OS / 网络，除非日后做显式权限模型。
 - 禁止社区原生 dll。
+
+版本与适配政策见 [`versioning.md`](./versioning.md)。

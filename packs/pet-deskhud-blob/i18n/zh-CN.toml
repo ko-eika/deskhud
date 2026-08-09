@@ -1,0 +1,8 @@
+display_name = "蓝点"
+description = "简洁圆点；拖动/贴边略变形态"
+"hover_pulse.label" = "悬停轻弹"
+"hover_pulse.description" = "指针停在宠上时略微放大呼吸"
+"dock_tint.label" = "贴边变色"
+"dock_tint.description" = "吸附边缘时身体颜色变化"
+"drag_react.label" = "拖动反馈"
+"drag_react.description" = "拖动时加强弹跳与提亮"

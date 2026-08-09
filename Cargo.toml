@@ -7,21 +7,25 @@ resolver = "2"
 members = [
     "crates/deskhud-ui",
     "crates/deskhud-package",
-    "crates/deskhud-host",
+    "crates/deskhud-engine",
     "crates/deskhud-runtime",
     "crates/deskhud-sdk",
     "crates/deskhud-egui",
+    "packs/pet-deskhud-specs",
+    "packs/pet-deskhud-blob",
+    "packs/hud-deskhud-demo",
+    "crates/deskhud-xtask",
 ]
 default-members = [
     "crates/deskhud-ui",
     "crates/deskhud-package",
-    "crates/deskhud-host",
+    "crates/deskhud-engine",
     "crates/deskhud-runtime",
     "crates/deskhud-sdk",
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -34,9 +38,12 @@ categories = ["gui"]
 [workspace.dependencies]
 deskhud-ui = { path = "crates/deskhud-ui" }
 deskhud-package = { path = "crates/deskhud-package" }
-deskhud-host = { path = "crates/deskhud-host" }
+deskhud-engine = { path = "crates/deskhud-engine" }
 deskhud-runtime = { path = "crates/deskhud-runtime" }
 deskhud-sdk = { path = "crates/deskhud-sdk" }
+pet-deskhud-specs = { path = "packs/pet-deskhud-specs" }
+pet-deskhud-blob = { path = "packs/pet-deskhud-blob" }
+hud-deskhud-demo = { path = "packs/hud-deskhud-demo" }
 
 egui = "0.36"
 eframe = { version = "0.36", default-features = false, features = ["glow", "default_fonts"] }

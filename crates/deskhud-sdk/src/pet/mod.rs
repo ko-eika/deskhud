@@ -1,6 +1,6 @@
 //! 宠物包 Guest API（骨架）。
 //!
-//! Phase 3 将提供与 `deskhud-host::PetKind` / `PetEvent` 对齐的导出宏。
+//! Phase 3 将提供与 `deskhud-engine::PetKind` / `PetEvent` 对齐的导出宏。
 //! 扩展说明见仓库 `docs/extension-guide.md`。
 
 /// 宠物 Guest 应实现的逻辑钩子（设计稿；WASM 导出尚未接线）。

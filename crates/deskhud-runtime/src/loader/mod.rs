@@ -4,11 +4,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use deskhud_package::{
-    open_pack, read_catalog_dir, read_manifest_dir, PackCatalog, PackManifest, PackageError,
+    engine_family_of_product, open_pack, pack_engine_matches, read_catalog_dir, read_manifest_dir,
+    PackCatalog, PackManifest, PackageError,
 };
 use tracing::{info, warn};
 
 use crate::{default_package_dirs, RuntimeError};
+
+/// 本 crate / workspace 的引擎产品 SemVer（发现时用于 `engine` 门闸）。
+const RUNTIME_PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 已发现但尚未实例化的包。
 #[derive(Debug, Clone)]
@@ -19,6 +23,15 @@ pub struct DiscoveredPack {
     pub archive: Option<PathBuf>,
     /// 清单。
     pub manifest: PackManifest,
+    /// 不适配原因（如 `engine` 族不匹配）；有值则仍列入发现列表，但勿注册 WASM。
+    pub incompatible_reason: Option<String>,
+}
+
+impl DiscoveredPack {
+    /// 是否可通过后续注册（`engine` 族与产品匹配）。
+    pub fn is_compatible(&self) -> bool {
+        self.incompatible_reason.is_none()
+    }
 }
 
 /// 扫描并解析清单；WASM 实例化见 [`crate::wasm`]。
@@ -59,7 +72,20 @@ impl PackageLoader {
                 }
                 match self.load_entry(&path) {
                     Ok(Some(pack)) => {
-                        info!(id = %pack.manifest.id, root = %pack.root.display(), "discovered pack");
+                        if let Some(reason) = &pack.incompatible_reason {
+                            warn!(
+                                id = %pack.manifest.id,
+                                root = %pack.root.display(),
+                                %reason,
+                                "discovered incompatible pack"
+                            );
+                        } else {
+                            info!(
+                                id = %pack.manifest.id,
+                                root = %pack.root.display(),
+                                "discovered pack"
+                            );
+                        }
                         out.push(pack);
                     }
                     Ok(None) => {}
@@ -76,11 +102,11 @@ impl PackageLoader {
                 return Ok(None);
             }
             let manifest = read_manifest_dir(path)?;
-            return Ok(Some(DiscoveredPack {
-                root: path.to_path_buf(),
-                archive: None,
+            return Ok(Some(make_discovered(
+                path.to_path_buf(),
+                None,
                 manifest,
-            }));
+            )));
         }
         let ext = path
             .extension()
@@ -92,11 +118,11 @@ impl PackageLoader {
         }
         let opened = open_pack(path, &self.cache_dir)?;
         let manifest = read_manifest_dir(&opened.path)?;
-        Ok(Some(DiscoveredPack {
-            root: opened.path,
-            archive: opened.archive,
+        Ok(Some(make_discovered(
+            opened.path,
+            opened.archive,
             manifest,
-        }))
+        )))
     }
 
     /// 读取包内某一 locale 的目录（文件可不存在）。
@@ -106,6 +132,31 @@ impl PackageLoader {
     ) -> Result<Option<PackCatalog>, RuntimeError> {
         Ok(read_catalog_dir(pack_root, locale).map_err(PackageError::from)?)
     }
+}
+
+fn make_discovered(
+    root: PathBuf,
+    archive: Option<PathBuf>,
+    manifest: PackManifest,
+) -> DiscoveredPack {
+    let incompatible_reason = engine_incompatible_reason(&manifest);
+    DiscoveredPack {
+        root,
+        archive,
+        manifest,
+        incompatible_reason,
+    }
+}
+
+fn engine_incompatible_reason(manifest: &PackManifest) -> Option<String> {
+    if pack_engine_matches(&manifest.engine, RUNTIME_PRODUCT_VERSION) {
+        return None;
+    }
+    let need = engine_family_of_product(RUNTIME_PRODUCT_VERSION);
+    Some(format!(
+        "engine `{}` incompatible (need `{}` for product {})",
+        manifest.engine, need, RUNTIME_PRODUCT_VERSION
+    ))
 }
 
 fn default_pack_cache_dir() -> Option<PathBuf> {

@@ -1,4 +1,4 @@
-//! 右键菜单：设置 / 退出（轻量；配置集中在统一设置窗）。
+//! 右键菜单：设置 / 置顶 / 插件 / 插件布局 / 退出。
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -13,23 +13,25 @@ fn viewport_id() -> egui::ViewportId {
 }
 
 const ROW_H: f32 = 34.0;
-const MENU_MIN_W: f32 = 140.0;
-/// 内容区最大宽（不含边距）；更长则「…」截断。
-const MENU_MAX_CONTENT_W: f32 = 220.0;
+const SEP_H: f32 = 9.0;
+const MENU_MIN_W: f32 = 160.0;
+const MENU_MAX_CONTENT_W: f32 = 240.0;
 const MENU_PAD_X: f32 = 8.0;
+const MENU_PAD_Y: f32 = 8.0;
 const TEXT_INSET: f32 = 10.0;
 const DISMISS_GRACE: Duration = Duration::from_millis(280);
 const LABEL_FONT: f32 = 13.5;
+/// 菜单行数：设置 / 置顶 / 插件 / 插件布局 / 退出。
+const MENU_ROWS: usize = 5;
+/// 分隔线条数。
+const MENU_SEPS: usize = 2;
 
 fn menu_height() -> f32 {
-    10.0 + ROW_H + 4.0 + ROW_H + 10.0
-}
-
-fn menu_labels(prefs: &UiPreferences) -> [String; 2] {
-    [
-        prefs.t(MessageKey::MenuSettings).to_string(),
-        prefs.t(MessageKey::MenuQuit).to_string(),
-    ]
+    // 与 Frame 上下边距一致；行间 item_spacing 在 draw 里清零，避免底项被裁
+    MENU_PAD_Y * 2.0
+        + MENU_ROWS as f32 * ROW_H
+        + MENU_SEPS as f32 * SEP_H
+        + 2.0
 }
 
 fn measure_text_width(ctx: &egui::Context, text: &str) -> f32 {
@@ -47,7 +49,8 @@ fn compute_menu_width(ctx: &egui::Context, labels: &[String]) -> f32 {
         content = content.max(measure_text_width(ctx, label));
     }
     let content = content.min(MENU_MAX_CONTENT_W);
-    (content + TEXT_INSET + MENU_PAD_X * 2.0).clamp(MENU_MIN_W, MENU_MAX_CONTENT_W + TEXT_INSET + MENU_PAD_X * 2.0)
+    (content + TEXT_INSET + MENU_PAD_X * 2.0)
+        .clamp(MENU_MIN_W, MENU_MAX_CONTENT_W + TEXT_INSET + MENU_PAD_X * 2.0)
 }
 
 fn ellipsize(ctx: &egui::Context, text: &str, max_w: f32) -> String {
@@ -94,7 +97,16 @@ pub struct PetMenuState {
     pub menu_w: f32,
     pub width_ready: bool,
     pub locale_prefs: UiPreferences,
+    /// 当前全局插件（HUD）是否启用。
+    pub master_enabled: bool,
+    /// 当前宠窗是否置顶。
+    pub pet_topmost: bool,
     pub open_settings: bool,
+    pub begin_hud_layout: bool,
+    /// 点击后请求切换全局启用：`Some(new_enabled)`。
+    pub toggle_master: Option<bool>,
+    /// 点击后请求切换宠置顶：`Some(new_topmost)`。
+    pub toggle_topmost: Option<bool>,
     pub quit: bool,
 }
 
@@ -114,7 +126,12 @@ impl PetMenuHost {
                 menu_w: MENU_MIN_W,
                 width_ready: false,
                 locale_prefs: prefs,
+                master_enabled: true,
+                pet_topmost: true,
                 open_settings: false,
+                begin_hud_layout: false,
+                toggle_master: None,
+                toggle_topmost: None,
                 quit: false,
             })),
         }
@@ -134,8 +151,14 @@ impl PetMenuHost {
         }
     }
 
-    pub fn open_at(&self, prefs: &UiPreferences, cursor_points: egui::Pos2, ppp: f32) {
-        // 首帧前用保守宽度贴边；字体测量后在 show 里再校正
+    pub fn open_at(
+        &self,
+        prefs: &UiPreferences,
+        cursor_points: egui::Pos2,
+        ppp: f32,
+        master_enabled: bool,
+        pet_topmost: bool,
+    ) {
         let provisional_w = MENU_MIN_W.max(180.0);
         let (x, y) = platform::fit_popup_pos_points(
             (cursor_points.x, cursor_points.y),
@@ -155,7 +178,12 @@ impl PetMenuHost {
         s.width_ready = false;
         s.anchor = egui::pos2(x, y);
         s.locale_prefs = prefs.clone();
+        s.master_enabled = master_enabled;
+        s.pet_topmost = pet_topmost;
         s.open_settings = false;
+        s.begin_hud_layout = false;
+        s.toggle_master = None;
+        s.toggle_topmost = None;
         s.quit = false;
     }
 
@@ -170,46 +198,57 @@ impl PetMenuHost {
         }
 
         if !self.lock().width_ready {
-            let labels = {
+            let (labels, ppp, cursor) = {
                 let s = self.lock();
-                menu_labels(&s.locale_prefs)
+                let labels = vec![
+                    s.locale_prefs.t(MessageKey::MenuSettings).to_string(),
+                    s.locale_prefs.t(MessageKey::SettingsTopmost).to_string(),
+                    s.locale_prefs.t(MessageKey::SettingsNavHud).to_string(),
+                    s.locale_prefs.t(MessageKey::MenuHudLayout).to_string(),
+                    s.locale_prefs.t(MessageKey::MenuQuit).to_string(),
+                ];
+                (labels, s.ppp, s.cursor)
             };
             let w = compute_menu_width(ctx, &labels);
             let mut s = self.lock();
             s.menu_w = w;
             s.width_ready = true;
-            let (x, y) = platform::fit_popup_pos_points(
-                (s.cursor.x, s.cursor.y),
-                w,
-                menu_height(),
-                s.ppp,
-            );
+            let (x, y) =
+                platform::fit_popup_pos_points((cursor.x, cursor.y), w, menu_height(), ppp);
             s.anchor = egui::pos2(x, y);
         }
 
-        let (anchor, focus_once, menu_w) = {
+        let (anchor, focus_once, menu_w, topmost) = {
             let s = self.lock();
-            (s.anchor, s.focus_once, s.menu_w)
+            (s.anchor, s.focus_once, s.menu_w, s.pet_topmost)
         };
         let height = menu_height();
         let shared = self.clone();
+        let level = if topmost {
+            egui::WindowLevel::AlwaysOnTop
+        } else {
+            egui::WindowLevel::Normal
+        };
+        let mut builder = egui::ViewportBuilder::default()
+            .with_title("")
+            .with_decorations(false)
+            .with_title_shown(false)
+            .with_titlebar_shown(false)
+            .with_titlebar_buttons_shown(false)
+            .with_position(anchor)
+            .with_inner_size([menu_w, height])
+            .with_transparent(false)
+            .with_resizable(false)
+            .with_taskbar(false)
+            .with_active(true)
+            .with_visible(true)
+            .with_window_level(level);
+        if topmost {
+            builder = builder.with_always_on_top();
+        }
         ctx.show_viewport_deferred(
             viewport_id(),
-            egui::ViewportBuilder::default()
-                .with_title("")
-                .with_decorations(false)
-                .with_title_shown(false)
-                .with_titlebar_shown(false)
-                .with_titlebar_buttons_shown(false)
-                .with_position(anchor)
-                .with_inner_size([menu_w, height])
-                .with_transparent(false)
-                .with_resizable(false)
-                .with_taskbar(false)
-                .with_always_on_top()
-                .with_active(true)
-                .with_visible(true)
-                .with_window_level(egui::WindowLevel::AlwaysOnTop),
+            builder,
             move |ui, _| shared.draw(ui),
         );
 
@@ -219,6 +258,7 @@ impl PetMenuHost {
             viewport_id(),
             egui::ViewportCommand::InnerSize(egui::vec2(menu_w, height)),
         );
+        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::WindowLevel(level));
         if focus_once {
             self.lock().focus_once = false;
             ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Focus);
@@ -283,20 +323,49 @@ impl PetMenuHost {
                 Frame::NONE
                     .fill(fill)
                     .stroke(Stroke::NONE)
-                    .inner_margin(Margin::symmetric(MENU_PAD_X as i8, 8)),
+                    .inner_margin(Margin::symmetric(MENU_PAD_X as i8, MENU_PAD_Y as i8)),
             )
             .show(ui, |ui| {
+                // 高度按固定行高计算，禁止 egui 默认行距把底项挤出视口
+                ui.spacing_mut().item_spacing.y = 0.0;
                 let mut s = self.lock();
                 let settings = s.locale_prefs.t(MessageKey::MenuSettings).to_string();
+                let topmost_l = s.locale_prefs.t(MessageKey::SettingsTopmost).to_string();
+                let plugins = s.locale_prefs.t(MessageKey::SettingsNavHud).to_string();
+                let layout = s.locale_prefs.t(MessageKey::MenuHudLayout).to_string();
                 let quit = s.locale_prefs.t(MessageKey::MenuQuit).to_string();
                 let max_text_w = (ui.available_width() - TEXT_INSET).max(24.0);
-                let settings_draw = ellipsize(&ctx, &settings, max_text_w);
-                let quit_draw = ellipsize(&ctx, &quit, max_text_w);
-                if action_row(ui, &settings_draw).clicked() {
+                let master_on = s.master_enabled;
+                let topmost_on = s.pet_topmost;
+
+                if action_row(ui, &ellipsize(&ctx, &settings, max_text_w)).clicked() {
                     s.open_settings = true;
                     close = true;
                 }
-                if action_row(ui, &quit_draw).clicked() {
+
+                if check_row(ui, &ellipsize(&ctx, &topmost_l, max_text_w), topmost_on).clicked()
+                {
+                    s.toggle_topmost = Some(!topmost_on);
+                    close = true;
+                }
+
+                menu_separator(ui);
+
+                if check_row(ui, &ellipsize(&ctx, &plugins, max_text_w), master_on).clicked() {
+                    s.toggle_master = Some(!master_on);
+                    close = true;
+                }
+
+                ui.add_enabled_ui(master_on, |ui| {
+                    if action_row(ui, &ellipsize(&ctx, &layout, max_text_w)).clicked() {
+                        s.begin_hud_layout = true;
+                        close = true;
+                    }
+                });
+
+                menu_separator(ui);
+
+                if action_row(ui, &ellipsize(&ctx, &quit, max_text_w)).clicked() {
                     s.quit = true;
                     close = true;
                 }
@@ -319,6 +388,18 @@ impl PetMenuHost {
     }
 }
 
+fn menu_separator(ui: &mut egui::Ui) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), SEP_H), Sense::hover());
+    let y = rect.center().y;
+    ui.painter().line_segment(
+        [
+            egui::pos2(rect.left() + 4.0, y),
+            egui::pos2(rect.right() - 4.0, y),
+        ],
+        Stroke::new(1.0, Color32::from_rgb(220, 222, 230)),
+    );
+}
+
 fn action_row(ui: &mut egui::Ui, label: &str) -> egui::Response {
     let (rect, response) =
         ui.allocate_exact_size(Vec2::new(ui.available_width(), ROW_H), Sense::click());
@@ -336,5 +417,34 @@ fn action_row(ui: &mut egui::Ui, label: &str) -> egui::Response {
         FontId::proportional(LABEL_FONT),
         Color32::from_rgb(28, 28, 32),
     );
+    response
+}
+
+fn check_row(ui: &mut egui::Ui, label: &str, checked: bool) -> egui::Response {
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), ROW_H), Sense::click());
+    if response.hovered() {
+        ui.painter().rect_filled(
+            rect,
+            CornerRadius::same(6),
+            Color32::from_rgb(232, 236, 244),
+        );
+    }
+    ui.painter().text(
+        egui::pos2(rect.left() + TEXT_INSET, rect.center().y),
+        Align2::LEFT_CENTER,
+        label,
+        FontId::proportional(LABEL_FONT),
+        Color32::from_rgb(28, 28, 32),
+    );
+    if checked {
+        ui.painter().text(
+            egui::pos2(rect.right() - 12.0, rect.center().y),
+            Align2::RIGHT_CENTER,
+            "✓",
+            FontId::proportional(14.0),
+            Color32::from_rgb(46, 120, 210),
+        );
+    }
     response
 }

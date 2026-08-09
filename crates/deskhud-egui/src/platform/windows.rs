@@ -2,7 +2,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicUsize, Ordering};
 
-    use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, LRESULT, POINT, RECT, TRUE, WPARAM};
     use windows_sys::Win32::Graphics::Dwm::{
         DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
         DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_COLOR_NONE, DWMWA_SYSTEMBACKDROP_TYPE,
@@ -11,22 +11,25 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicUsize, Orderin
         DWM_BLURBEHIND,
     };
     use windows_sys::Win32::Graphics::Gdi::{
-        CreateRectRgn, DeleteObject, GetMonitorInfoW, MonitorFromPoint, ScreenToClient,
-        MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateRectRgn, DeleteDC, DeleteObject,
+        EnumDisplayMonitors, GetDC, GetDIBits, GetMonitorInfoW, MonitorFromPoint, ReleaseDC,
+        ScreenToClient, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+        HGDIOBJ, MONITORINFO, MONITOR_DEFAULTTONEAREST, SRCCOPY,
     };
     use windows_sys::Win32::UI::Controls::MARGINS;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, CallWindowProcW, DefWindowProcW, GetCursorPos, GetForegroundWindow,
-        GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, SetWindowLongPtrW, SetWindowsHookExW,
-        SetWindowPos, GWLP_WNDPROC, GWL_EXSTYLE, GWL_STYLE, MSLLHOOKSTRUCT,
-        SM_CXSCREEN, SM_CYSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-        SWP_NOZORDER, WH_MOUSE_LL, WM_MOUSEWHEEL, WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCPAINT,
-        WS_BORDER, WS_CAPTION, WS_DLGFRAME, WS_EX_APPWINDOW, WS_EX_CLIENTEDGE, WS_EX_DLGMODALFRAME,
-        WS_EX_NOACTIVATE, WS_EX_STATICEDGE, WS_EX_TOOLWINDOW, WS_EX_WINDOWEDGE, WS_MAXIMIZEBOX,
-        WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME, WS_VISIBLE,
+        CallNextHookEx, CallWindowProcW, DefWindowProcW, FindWindowW, GetCursorPos, GetForegroundWindow,
+        GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, IsWindow, SetWindowLongPtrW,
+        SetWindowsHookExW, SetWindowPos, ShowWindow, GWLP_HWNDPARENT, GWLP_WNDPROC, GWL_EXSTYLE,
+        GWL_STYLE, MSLLHOOKSTRUCT, HWND_TOP, SM_CXSCREEN, SM_CYSCREEN, SWP_FRAMECHANGED,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE,
+        WH_MOUSE_LL, WM_MOUSEWHEEL, WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCPAINT, WS_BORDER, WS_CAPTION,
+        WS_DLGFRAME, WS_EX_APPWINDOW, WS_EX_CLIENTEDGE, WS_EX_DLGMODALFRAME, WS_EX_LAYERED,
+        WS_EX_NOACTIVATE, WS_EX_STATICEDGE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_EX_WINDOWEDGE,
+        WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME, WS_VISIBLE,
     };
 
     static SUBCLASS_HWND: AtomicIsize = AtomicIsize::new(0);
@@ -498,3 +501,300 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicUsize, Orderin
         y = y.clamp(wt + margin, max_y);
         (x as f32 / ppp, y as f32 / ppp)
     }
+
+
+/// 一台显示器的屏幕像素几何。
+#[derive(Debug, Clone)]
+pub struct DisplayInfo {
+    /// 稳定标识；主屏为 `primary`，其它为 `x_y_w_h`。
+    pub id: String,
+    /// 左。
+    pub x: i32,
+    /// 上。
+    pub y: i32,
+    /// 宽。
+    pub width: i32,
+    /// 高。
+    pub height: i32,
+    /// 是否主显示器。
+    pub primary: bool,
+    /// 工作区左（`rcWork.left`，物理像素，已扣任务栏）。
+    pub work_left: i32,
+    /// 工作区上。
+    pub work_top: i32,
+    /// 工作区右。
+    pub work_right: i32,
+    /// 工作区下。
+    pub work_bottom: i32,
+}
+
+struct EnumState {
+    out: Vec<DisplayInfo>,
+}
+
+unsafe extern "system" fn enum_mon_proc(
+    hmon: windows_sys::Win32::Graphics::Gdi::HMONITOR,
+    _hdc: windows_sys::Win32::Graphics::Gdi::HDC,
+    _rect: *mut RECT,
+    lparam: LPARAM,
+) -> BOOL {
+    unsafe {
+        let state = &mut *(lparam as *mut EnumState);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            rcMonitor: RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            },
+            rcWork: RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            },
+            dwFlags: 0,
+        };
+        if GetMonitorInfoW(hmon, &mut info) == 0 {
+            return TRUE;
+        }
+        let x = info.rcMonitor.left;
+        let y = info.rcMonitor.top;
+        let width = info.rcMonitor.right - info.rcMonitor.left;
+        let height = info.rcMonitor.bottom - info.rcMonitor.top;
+        let primary = (info.dwFlags & 1) != 0; // MONITORINFOF_PRIMARY
+        let id = if primary {
+            "primary".to_string()
+        } else {
+            format!("{x}_{y}_{width}_{height}")
+        };
+        state.out.push(DisplayInfo {
+            id,
+            x,
+            y,
+            width,
+            height,
+            primary,
+            work_left: info.rcWork.left,
+            work_top: info.rcWork.top,
+            work_right: info.rcWork.right,
+            work_bottom: info.rcWork.bottom,
+        });
+        TRUE
+    }
+}
+
+/// 捕获指定屏幕矩形为 RGBA（物理像素）。失败返回 `None`。
+pub fn capture_screen_rgba(x: i32, y: i32, width: i32, height: i32) -> Option<(u32, u32, Vec<u8>)> {
+    if width <= 0 || height <= 0 {
+        return None;
+    }
+    let w = width as u32;
+    let h = height as u32;
+    unsafe {
+        let hdc_screen = GetDC(std::ptr::null_mut());
+        if hdc_screen.is_null() {
+            return None;
+        }
+        let hdc_mem = CreateCompatibleDC(hdc_screen);
+        if hdc_mem.is_null() {
+            ReleaseDC(std::ptr::null_mut(), hdc_screen);
+            return None;
+        }
+        let hbmp = CreateCompatibleBitmap(hdc_screen, width, height);
+        if hbmp.is_null() {
+            DeleteDC(hdc_mem);
+            ReleaseDC(std::ptr::null_mut(), hdc_screen);
+            return None;
+        }
+        let old = SelectObject(hdc_mem, hbmp as HGDIOBJ);
+        let ok = BitBlt(hdc_mem, 0, 0, width, height, hdc_screen, x, y, SRCCOPY);
+        if ok == 0 {
+            SelectObject(hdc_mem, old);
+            DeleteObject(hbmp as HGDIOBJ);
+            DeleteDC(hdc_mem);
+            ReleaseDC(std::ptr::null_mut(), hdc_screen);
+            return None;
+        }
+
+        let mut info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width,
+                biHeight: -height, // top-down
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB as u32,
+                biSizeImage: 0,
+                biXPelsPerMeter: 0,
+                biYPelsPerMeter: 0,
+                biClrUsed: 0,
+                biClrImportant: 0,
+            },
+            bmiColors: [std::mem::zeroed()],
+        };
+        let mut bgra = vec![0u8; (w * h * 4) as usize];
+        let got = GetDIBits(
+            hdc_mem,
+            hbmp,
+            0,
+            h,
+            bgra.as_mut_ptr() as *mut _,
+            &mut info,
+            DIB_RGB_COLORS,
+        );
+        SelectObject(hdc_mem, old);
+        DeleteObject(hbmp as HGDIOBJ);
+        DeleteDC(hdc_mem);
+        ReleaseDC(std::ptr::null_mut(), hdc_screen);
+        if got == 0 {
+            return None;
+        }
+        // BGRA → RGBA
+        for px in bgra.chunks_exact_mut(4) {
+            px.swap(0, 2);
+            px[3] = 255;
+        }
+        Some((w, h, bgra))
+    }
+}
+
+/// 枚举所有显示器（屏幕像素）。
+pub fn list_displays() -> Vec<DisplayInfo> {
+    let mut state = EnumState { out: Vec::new() };
+    unsafe {
+        let _ = EnumDisplayMonitors(
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            Some(enum_mon_proc),
+            &mut state as *mut _ as LPARAM,
+        );
+    }
+    if state.out.is_empty() {
+        let w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+        let h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+        state.out.push(DisplayInfo {
+            id: "primary".into(),
+            x: 0,
+            y: 0,
+            width: w,
+            height: h,
+            primary: true,
+            work_left: 0,
+            work_top: 0,
+            work_right: w,
+            work_bottom: h,
+        });
+    }
+    state.out
+}
+
+/// 切换点击穿透（布局编辑关时 HUD 层应穿透）。
+pub fn set_click_through(hwnd: isize, enabled: bool) {
+    set_click_through_inner(hwnd, enabled, false);
+}
+
+/// 强制刷新命中测试（即使 EXSTYLE 未变也刷 FRAMECHANGED）。
+#[allow(dead_code)]
+pub fn force_click_through(hwnd: isize, enabled: bool) {
+    set_click_through_inner(hwnd, enabled, true);
+}
+
+fn set_click_through_inner(hwnd: isize, enabled: bool, force: bool) {
+    if hwnd == 0 {
+        return;
+    }
+    unsafe {
+        let hwnd = hwnd as HWND;
+        if IsWindow(hwnd) == 0 {
+            return;
+        }
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let mut desired = ex;
+        if enabled {
+            desired |= WS_EX_LAYERED as isize | WS_EX_TRANSPARENT as isize;
+        } else {
+            desired &= !(WS_EX_TRANSPARENT as isize);
+            desired |= WS_EX_LAYERED as isize;
+        }
+        if desired != ex {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desired);
+        } else if !force {
+            return;
+        }
+        // 不刷 FRAMECHANGED 时，部分环境下清掉 TRANSPARENT 不生效 → 宠窗假死（点不透/无右键）
+        // 置顶改 z-order 后也需要强制再刷一次。
+        let _ = SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        );
+    }
+}
+
+/// 显示/隐藏原生窗（编辑模式立刻藏掉残留 HUD 小窗）。
+pub fn set_window_visible(hwnd: isize, visible: bool) {
+    if hwnd == 0 {
+        return;
+    }
+    unsafe {
+        let _ = ShowWindow(
+            hwnd as HWND,
+            if visible { SW_SHOWNOACTIVATE } else { SW_HIDE },
+        );
+    }
+}
+
+/// 按窗口标题查找 HWND（用于 HUD overlay）。
+pub fn find_window_by_title(title: &str) -> Option<isize> {
+    use std::os::windows::ffi::OsStrExt;
+    let wide: Vec<u16> = std::ffi::OsStr::new(title)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let hwnd = unsafe { FindWindowW(std::ptr::null(), wide.as_ptr()) };
+    if hwnd.is_null() {
+        None
+    } else {
+        Some(hwnd as isize)
+    }
+}
+
+/// 窗口叠放铁律：
+///
+/// - **全局置顶**只跟 `prefs.shell.topmost`：宠 / HUD / 设置 / 菜单同一 `WindowLevel`。
+/// - 禁止「宠置顶 + 设置普通」之类的混用（Windows 下会逼出点击穿透，并易与多窗 z-order 卡死）。
+/// - 开设置时靠同层 + Focus，不再给宠窗开 click-through。
+pub fn set_window_owner(window: isize, owner: Option<isize>) {
+    if window == 0 {
+        return;
+    }
+    unsafe {
+        let hwnd = window as HWND;
+        if IsWindow(hwnd) == 0 {
+            return;
+        }
+        let owner_hwnd = owner.unwrap_or(0) as isize;
+        let current = GetWindowLongPtrW(hwnd, GWLP_HWNDPARENT);
+        // 已是目标 owner 时勿再 SetWindowPos，否则设置窗每帧 HWND_TOP 易与 HUD 抢 z-order
+        if current == owner_hwnd {
+            return;
+        }
+        let _ = SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, owner_hwnd);
+        // 勿 SWP_SHOWWINDOW：关窗途中再 Show 会打乱视口生命周期，易 AV
+        let _ = SetWindowPos(
+            hwnd,
+            HWND_TOP,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
+    }
+}

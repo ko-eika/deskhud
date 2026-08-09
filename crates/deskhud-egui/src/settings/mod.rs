@@ -1,4 +1,4 @@
-//! 统一设置窗：侧栏（常规 / 宠物 / 插件）+ 右侧内容。
+﻿//! 统一设置窗：侧栏（常规 / 宠物 / 插件）+ 右侧内容。
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -10,10 +10,12 @@ use eframe::egui::{
 };
 use eframe::egui::text::{CCursor, CCursorRange};
 use eframe::egui::text_edit::TextEditState;
-use deskhud_host::{HudContribution, PetConfigOption, PetKindInfo, PluginInfo};
+use deskhud_engine::{HudContribution, PetConfigOption, PetKindInfo, PluginInfo};
 use deskhud_ui::{
     CatalogStore, Locale, MessageKey, PetPickerMode, ShellPrefs, UiPreferences, UiTheme,
 };
+
+use crate::platform;
 
 fn viewport_id() -> egui::ViewportId {
     egui::ViewportId::from_hash_of("deskhud_settings")
@@ -170,6 +172,7 @@ const APP_EGUI_VERSION: &str = "0.36";
 #[derive(Clone)]
 pub struct SettingsHost {
     inner: Arc<Mutex<SettingsState>>,
+    hud_overlay: Arc<Mutex<crate::hud_overlay::HudOverlayHost>>,
 }
 
 pub struct SettingsState {
@@ -208,10 +211,29 @@ pub struct SettingsState {
     /// 已为当前 settle 预约过一次重绘，避免每帧 request_repaint。
     card_settle_repaint_armed: bool,
     preview_textures: HashMap<String, TextureHandle>,
+    /// 请求开始 HUD 布局编辑。
+    pub hud_layout_begin: bool,
+    /// 请求完成并写回草稿布局。
+    pub hud_layout_finish: bool,
+    /// 请求取消布局编辑。
+    pub hud_layout_cancel: bool,
+    /// 当前是否在布局编辑（UI 显示用）。
+    pub hud_layout_editing: bool,
+    /// 布局编辑切入后，下一帧再 Close 设置视口。
+    pub hud_layout_close_viewport: bool,
+    /// 设置窗 HWND（owner 叠放用）。
+    settings_hwnd: Option<isize>,
+    /// 设置窗已下发的置顶，避免拖动时每帧 WindowLevel。
+    last_sent_topmost: Option<bool>,
+    /// 打开设置时冻结的置顶（草稿切换不改窗层级，否则设置页会丢输入）。
+    session_topmost: bool,
 }
 
 impl SettingsHost {
-    pub fn new(prefs: UiPreferences) -> Self {
+    pub fn new(
+        prefs: UiPreferences,
+        hud_overlay: Arc<Mutex<crate::hud_overlay::HudOverlayHost>>,
+    ) -> Self {
         Self {
             inner: Arc::new(Mutex::new(SettingsState {
                 open: false,
@@ -235,7 +257,16 @@ impl SettingsHost {
                 card_observe_since: None,
                 card_settle_repaint_armed: false,
                 preview_textures: HashMap::new(),
+                hud_layout_begin: false,
+                hud_layout_finish: false,
+                hud_layout_cancel: false,
+                hud_layout_editing: false,
+                hud_layout_close_viewport: false,
+                settings_hwnd: None,
+                last_sent_topmost: None,
+                session_topmost: true,
             })),
+            hud_overlay,
         }
     }
 
@@ -245,6 +276,44 @@ impl SettingsHost {
 
     pub fn is_open(&self) -> bool {
         self.lock().open
+    }
+
+    /// 进入 HUD 布局编辑：先藏设置窗；真正 Close 延到下一帧（同帧 Close 易 AV）。
+    pub fn force_close_for_layout_edit(&self, ctx: &egui::Context) {
+        let mut s = self.lock();
+        s.open = false;
+        s.focus_once = false;
+        s.place_once = false;
+        s.discard_draft = false;
+        s.pending_flush = false;
+        s.hud_layout_editing = true;
+        s.hud_layout_close_viewport = true;
+        let hwnd = s.settings_hwnd.take();
+        drop(s);
+        if let Some(h) = hwnd {
+            platform::set_window_owner(h, None);
+            platform::set_window_visible(h, false);
+        }
+        // 本帧只隐藏，不 Close；下一帧 `finish_layout_edit_close` 再关
+        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Visible(false));
+        ctx.request_repaint_after(std::time::Duration::from_millis(16));
+    }
+
+    /// 布局编辑已切入后，安全关掉设置视口（在 ROOT `logic` 里调用）。
+    pub fn finish_layout_edit_close(&self, ctx: &egui::Context) {
+        let do_close = {
+            let mut s = self.lock();
+            if !s.hud_layout_close_viewport {
+                return;
+            }
+            s.hud_layout_close_viewport = false;
+            true
+        };
+        if do_close {
+            ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Visible(false));
+            ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::CancelClose);
+            ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Close);
+        }
     }
 
     pub fn open(
@@ -269,6 +338,10 @@ impl SettingsHost {
         s.tab = tab;
         s.focus_once = true;
         s.place_once = true;
+        // 会话内窗口层级跟打开瞬间的已应用值；草稿置顶只影响「应用」后
+        s.session_topmost = prefs.shell.topmost;
+        s.last_sent_topmost = Some(prefs.shell.topmost);
+        s.settings_hwnd = None;
         s.apply_requested = false;
         s.pending_flush = false;
         s.discard_draft = false;
@@ -289,23 +362,43 @@ impl SettingsHost {
             s.prefs.t(MessageKey::SettingsTitle).to_string()
         };
 
+        let topmost = self.lock().session_topmost;
+        let level = if topmost {
+            egui::WindowLevel::AlwaysOnTop
+        } else {
+            egui::WindowLevel::Normal
+        };
         let shared = self.clone();
-        ctx.show_viewport_deferred(
-            viewport_id(),
-            egui::ViewportBuilder::default()
-                .with_title(title.clone())
-                .with_decorations(true)
-                .with_transparent(false)
-                .with_resizable(true)
-                .with_min_inner_size([ShellPrefs::SETTINGS_MIN_W, ShellPrefs::SETTINGS_MIN_H])
-                .with_taskbar(true)
-                .with_visible(true)
-                .with_icon(crate::icon()),
-            move |ui, _| shared.draw(ui),
-        );
+        let mut builder = egui::ViewportBuilder::default()
+            .with_title(title.clone())
+            .with_decorations(true)
+            .with_transparent(false)
+            .with_resizable(true)
+            .with_min_inner_size([ShellPrefs::SETTINGS_MIN_W, ShellPrefs::SETTINGS_MIN_H])
+            .with_taskbar(true)
+            .with_visible(true)
+            .with_icon(crate::icon())
+            .with_window_level(level);
+        if topmost {
+            builder = builder.with_always_on_top();
+        }
+        ctx.show_viewport_deferred(viewport_id(), builder, move |ui, _| shared.draw(ui));
 
         // 延迟视口首次 builder 标题不会随 locale 草稿更新；每帧同步
-        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Title(title));
+        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Title(title.clone()));
+
+        {
+            let mut s = self.lock();
+            // HWND 只解析一次，拖动时勿每帧 FindWindow
+            let hwnd_ok = s.settings_hwnd.is_some_and(|h| h != 0);
+            if !hwnd_ok {
+                if let Some(h) = platform::find_window_by_title(&title) {
+                    s.settings_hwnd = Some(h);
+                    platform::set_window_owner(h, None);
+                }
+            }
+            // 勿在草稿切换置顶时改设置窗 WindowLevel（会让设置页丢命中，需拖窗才恢复）
+        }
 
         let (place_once, focus_once, size, pos) = {
             let s = self.lock();
@@ -357,10 +450,22 @@ impl SettingsHost {
         opaque_settings_visuals(ui);
 
         let mut close = false;
+        let mut discard_on_close = true;
         let ctx = ui.ctx().clone();
 
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            close = true;
+            let editing = self.lock().hud_layout_editing;
+            if editing {
+                self.lock().hud_layout_cancel = true;
+                self.lock().hud_layout_editing = false;
+                if let Ok(mut h) = self.hud_overlay.lock() {
+                    h.request_cancel();
+                }
+                ctx.request_repaint_of(egui::ViewportId::ROOT);
+            } else {
+                close = true;
+                discard_on_close = true;
+            }
         }
 
         egui::CentralPanel::default()
@@ -384,7 +489,7 @@ impl SettingsHost {
                             .inner_margin(Margin::symmetric(20, 12)),
                     )
                     .show(ui, |ui| {
-                        self.draw_footer(ui, &mut close);
+                        self.draw_footer(ui, &mut close, &mut discard_on_close);
                     });
 
                 egui::CentralPanel::default()
@@ -405,7 +510,13 @@ impl SettingsHost {
         let user_close = ctx.input(|i| i.viewport().close_requested());
         if close || user_close {
             self.capture_geometry(ui);
-            self.close_viewport(&ctx, true);
+            // 窗口关闭 / Esc / 取消 → 丢弃草稿；应用 → 保留已提交内容
+            let discard = if user_close && !close {
+                true
+            } else {
+                discard_on_close
+            };
+            self.close_viewport(&ctx, discard);
         }
     }
 
@@ -416,9 +527,17 @@ impl SettingsHost {
         s.place_once = false;
         s.discard_draft = discard;
         s.pending_flush = true;
+        s.last_sent_topmost = None;
+        let hwnd = s.settings_hwnd.take();
         drop(s);
+        if let Some(h) = hwnd {
+            // 解除与宠窗的 owner，避免设置隐藏后仍粘在置顶层
+            platform::set_window_owner(h, None);
+        }
         ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::CancelClose);
         ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Visible(false));
+        // 不再同帧 Close（易 AV）；停止 show_viewport_deferred 后 egui 会回收视口
+        ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
 
     fn capture_geometry(&self, ui: &egui::Ui) {
@@ -499,44 +618,51 @@ impl SettingsHost {
         }
     }
 
-    fn draw_footer(&self, ui: &mut egui::Ui, close: &mut bool) {
-        let (reset_l, apply_l, cancel_l) = {
+    fn draw_footer(&self, ui: &mut egui::Ui, close: &mut bool, discard_on_close: &mut bool) {
+        let (reset_l, apply_l, cancel_l, dirty) = {
             let s = self.lock();
             (
                 s.prefs.t(MessageKey::ActionReset).to_string(),
                 s.prefs.t(MessageKey::ActionApply).to_string(),
                 s.prefs.t(MessageKey::ActionCancel).to_string(),
+                settings_draft_dirty(&s.prefs, &s.baseline),
             )
         };
         // right_to_left：先画的在最右 → 视觉从左到右为 重置 / 应用 / 取消
         ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
             if footer_secondary_button(ui, &cancel_l).clicked() {
                 *close = true;
+                *discard_on_close = true;
             }
             ui.add_space(8.0);
-            if footer_primary_button(ui, &apply_l).clicked() {
-                let mut s = self.lock();
-                s.baseline = s.prefs.clone();
-                s.apply_requested = true;
-            }
+            ui.add_enabled_ui(dirty, |ui| {
+                if footer_primary_button(ui, &apply_l).clicked() {
+                    self.capture_geometry(ui);
+                    let mut s = self.lock();
+                    s.baseline = s.prefs.clone();
+                    s.apply_requested = true;
+                }
+            });
             ui.add_space(8.0);
-            if footer_secondary_button(ui, &reset_l).clicked() {
-                let mut s = self.lock();
-                let mode = s.prefs.shell.pet_picker_mode;
-                let geo = (
-                    s.prefs.shell.settings_width,
-                    s.prefs.shell.settings_height,
-                    s.prefs.shell.settings_pos_x,
-                    s.prefs.shell.settings_pos_y,
-                );
-                s.prefs = s.baseline.clone();
-                s.prefs.shell.pet_picker_mode = mode;
-                s.prefs.shell.settings_width = geo.0;
-                s.prefs.shell.settings_height = geo.1;
-                s.prefs.shell.settings_pos_x = geo.2;
-                s.prefs.shell.settings_pos_y = geo.3;
-                s.card_layout = None;
-            }
+            ui.add_enabled_ui(dirty, |ui| {
+                if footer_secondary_button(ui, &reset_l).clicked() {
+                    let mut s = self.lock();
+                    let mode = s.prefs.pet.picker_mode;
+                    let geo = (
+                        s.prefs.shell.settings_width,
+                        s.prefs.shell.settings_height,
+                        s.prefs.shell.settings_pos_x,
+                        s.prefs.shell.settings_pos_y,
+                    );
+                    s.prefs = s.baseline.clone();
+                    s.prefs.pet.picker_mode = mode;
+                    s.prefs.shell.settings_width = geo.0;
+                    s.prefs.shell.settings_height = geo.1;
+                    s.prefs.shell.settings_pos_x = geo.2;
+                    s.prefs.shell.settings_pos_y = geo.3;
+                    s.card_layout = None;
+                }
+            });
         });
     }
 
@@ -630,10 +756,10 @@ impl SettingsHost {
                 s.prefs.t(MessageKey::SettingsNavPet).to_string(),
                 s.prefs.t(MessageKey::SettingsPetIntro).to_string(),
                 s.pets.clone(),
-                s.prefs.shell.active_pet_kind_id.clone(),
+                s.prefs.pet.kind.clone(),
                 s.prefs.t(MessageKey::SettingsPetWindowSize).to_string(),
                 s.prefs.t(MessageKey::SettingsPetSelected).to_string(),
-                s.prefs.shell.pet_picker_mode,
+                s.prefs.pet.picker_mode,
                 s.prefs.t(MessageKey::MetaAuthor).to_string(),
                 s.prefs.t(MessageKey::MetaHomepage).to_string(),
                 s.catalogs.clone(),
@@ -653,7 +779,7 @@ impl SettingsHost {
             ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Some(m) = view_mode_icon_group(ui, mode) {
                     let mut s = self.lock();
-                    s.prefs.shell.pet_picker_mode = m;
+                    s.prefs.pet.picker_mode = m;
                     s.card_layout = None;
                 }
             });
@@ -670,7 +796,7 @@ impl SettingsHost {
             }
         }
         let textures = self.lock().preview_textures.clone();
-        let mode = self.lock().prefs.shell.pet_picker_mode;
+        let mode = self.lock().prefs.pet.picker_mode;
 
         let mut pick: Option<String> = None;
         match mode {
@@ -802,49 +928,19 @@ impl SettingsHost {
             let mut s = self.lock();
             if let Some(pet) = s.pets.iter().find(|p| p.id == id) {
                 let (w, h) = (pet.window_width, pet.window_height);
-                s.prefs.shell.active_pet_kind_id = id;
-                s.prefs.shell.apply_pet_window_size(w, h);
+                s.prefs.pet.kind = id;
+                s.prefs.pet.apply_window_size(w, h);
             }
         }
 
         ui.add_space(16.0);
-        self.draw_pet_window_prefs(ui);
-        ui.add_space(16.0);
         self.draw_active_pet_options(ui);
-    }
-
-    fn draw_pet_window_prefs(&self, ui: &mut egui::Ui) {
-        let (topmost_l, topmost_hint, mut topmost) = {
-            let s = self.lock();
-            (
-                s.prefs.t(MessageKey::SettingsTopmost).to_string(),
-                s.prefs.t(MessageKey::SettingsTopmostHint).to_string(),
-                s.prefs.shell.pet_topmost,
-            )
-        };
-        section_card(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(
-                        RichText::new(&topmost_l)
-                            .size(13.5)
-                            .strong()
-                            .color(tone::text()),
-                    );
-                    ui.label(RichText::new(&topmost_hint).size(12.0).color(tone::muted()));
-                });
-                ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                    toggle_switch(ui, &mut topmost);
-                });
-            });
-        });
-        self.lock().prefs.shell.pet_topmost = topmost;
     }
 
     fn draw_active_pet_options(&self, ui: &mut egui::Ui) {
         let (active_id, options, options_title, catalogs, locale) = {
             let s = self.lock();
-            let id = s.prefs.shell.active_pet_kind_id.clone();
+            let id = s.prefs.pet.kind.clone();
             let opts = s.pet_options.get(&id).cloned().unwrap_or_default();
             let title = s.prefs.t(MessageKey::SettingsPetOptions).to_string();
             (id, opts, title, s.catalogs.clone(), s.prefs.locale)
@@ -918,6 +1014,10 @@ impl SettingsHost {
             enabled_suffix,
             homepage_l,
             disabled_hint,
+            enable_l,
+            master_l,
+            master_on_hint,
+            master_off_hint,
             catalogs,
             locale,
         ) = {
@@ -932,237 +1032,349 @@ impl SettingsHost {
                 s.prefs.t(MessageKey::HudItemsEnabled).to_string(),
                 s.prefs.t(MessageKey::MetaHomepage).to_string(),
                 s.prefs.t(MessageKey::HudPluginDisabledHint).to_string(),
+                s.prefs.t(MessageKey::HudPluginEnable).to_string(),
+                s.prefs.t(MessageKey::HudMasterEnable).to_string(),
+                s.prefs.t(MessageKey::HudMasterEnableHint).to_string(),
+                s.prefs.t(MessageKey::HudMasterDisabledHint).to_string(),
                 s.catalogs.clone(),
                 s.prefs.locale,
             )
         };
-        page_header(ui, &nav, &intro);
-        ui.add_space(16.0);
-
-        if items.is_empty() {
-            empty_hint(ui, &empty);
-            return;
-        }
-
-        let ctx = ui.ctx().clone();
         {
-            let mut s = self.lock();
-            for plugin in &plugins {
-                let _ = ensure_bytes_texture(
-                    &ctx,
-                    &mut s.preview_textures,
-                    &plugin_icon_key(plugin.id),
-                    plugin.icon_png,
-                );
-            }
-            for (pid, c) in &items {
-                let _ = ensure_bytes_texture(
-                    &ctx,
-                    &mut s.preview_textures,
-                    &hud_item_icon_key(pid, c.id),
-                    c.icon_png,
-                );
-            }
-        }
-        let textures = self.lock().preview_textures.clone();
-
-        let mut any_plugin = false;
-        for plugin in &plugins {
-            let contribs: Vec<_> = items
-                .iter()
-                .filter(|(pid, _)| *pid == plugin.id)
-                .map(|(_, c)| c.clone())
-                .collect();
-            if contribs.is_empty() {
-                continue;
-            }
-            any_plugin = true;
-
-            let (mut plugin_on, open_default) = {
+            let (editing, edit_l, editing_hint, mut master_on) = {
                 let s = self.lock();
-                (s.prefs.hud.is_plugin_enabled(plugin.id), true)
+                (
+                    s.hud_layout_editing,
+                    s.prefs.t(MessageKey::HudLayoutEdit).to_string(),
+                    s.prefs.t(MessageKey::HudLayoutEditingHint).to_string(),
+                    s.prefs.hud.is_master_enabled(),
+                )
             };
-            let enabled_n = {
-                let s = self.lock();
-                contribs
-                    .iter()
-                    .filter(|c| s.prefs.hud.is_enabled(plugin.id, c.id, c.default_enabled))
-                    .count()
-            };
-
-            ui.add_space(4.0);
+            ui.label(
+                RichText::new(&nav)
+                    .size(22.0)
+                    .strong()
+                    .color(tone::text()),
+            );
+            if !intro.is_empty() {
+                ui.add_space(6.0);
+                ui.label(RichText::new(&intro).size(13.0).color(tone::muted()));
+            }
+            ui.add_space(12.0);
             section_card(ui, |ui| {
-                let open_id = ui.make_persistent_id(("hud_plugin_open", plugin.id));
-                let mut open = ui.data_mut(|d| *d.get_temp_mut_or(open_id, open_default));
-                let plugin_icon = textures.get(&plugin_icon_key(plugin.id));
-
-                let plugin_name = pack_field(
-                    &catalogs,
-                    locale,
-                    plugin.id,
-                    "display_name",
-                    plugin.display_name,
-                );
-                let plugin_desc = pack_field(
-                    &catalogs,
-                    locale,
-                    plugin.id,
-                    "description",
-                    plugin.description,
-                );
                 ui.horizontal(|ui| {
-                    let toggle_reserve = 50.0;
-                    let left_w = (ui.available_width() - toggle_reserve).max(120.0);
-                    let title = format!("{} ｜ {}", plugin_name, plugin_desc);
-                    let meta = format!(
-                        "{}  ·  {} {}  ·  {}/{} {}",
-                        plugin.id,
-                        author_l,
-                        plugin.author,
-                        enabled_n,
-                        contribs.len(),
-                        enabled_suffix
-                    );
-                    let title_color = if plugin_on {
-                        tone::text()
-                    } else {
-                        tone::muted()
-                    };
-                    let mut left = plugin_header_hit(
-                        ui,
-                        left_w,
-                        open,
-                        &plugin_name,
-                        plugin_icon,
-                        &title,
-                        &meta,
-                        title_color,
-                    );
-                    left = attach_pack_tooltip(
-                        left,
-                        &plugin_name,
-                        &plugin_desc,
-                        plugin.id,
-                        &author_l,
-                        plugin.author,
-                        None,
-                        plugin.homepage,
-                        &homepage_l,
-                    );
-                    if left.clicked() {
-                        open = !open;
-                    }
-
+                    ui.vertical(|ui| {
+                        ui.label(
+                            RichText::new(&master_l)
+                                .size(14.0)
+                                .strong()
+                                .color(tone::text()),
+                        );
+                        ui.label(
+                            RichText::new(if master_on {
+                                master_on_hint.as_str()
+                            } else {
+                                master_off_hint.as_str()
+                            })
+                            .size(12.0)
+                            .color(tone::muted()),
+                        );
+                    });
                     ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                        if toggle_switch(ui, &mut plugin_on).changed() {
-                            self.lock()
-                                .prefs
-                                .hud
-                                .set_plugin_enabled(plugin.id, plugin_on);
+                        if toggle_switch(ui, &mut master_on).changed() {
+                            self.lock().prefs.hud.set_master_enabled(master_on);
                         }
                     });
                 });
+            });
+            ui.add_space(10.0);
+            if editing {
+                ui.label(
+                    RichText::new(editing_hint)
+                        .size(12.5)
+                        .color(tone::muted()),
+                );
+            } else if !items.is_empty() {
+                ui.add_enabled_ui(master_on, |ui| {
+                    if hud_layout_action_button(ui, &edit_l).clicked() {
+                        self.lock().hud_layout_begin = true;
+                        ui.ctx().request_repaint_of(egui::ViewportId::ROOT);
+                    }
+                });
+            }
+            ui.add_space(14.0);
 
-                ui.data_mut(|d| *d.get_temp_mut_or(open_id, open_default) = open);
+            if items.is_empty() {
+                empty_hint(ui, &empty);
+                return;
+            }
 
-                if open {
-                    ui.add_space(8.0);
-                    ui.add_enabled_ui(plugin_on, |ui| {
-                        for (i, c) in contribs.iter().enumerate() {
-                            if i > 0 {
-                                ui.add_space(4.0);
-                                // 分隔线从图标列起，强化「挂在插件下」的层级
-                                let full = ui.available_width();
-                                let (sep_rect, _) = ui.allocate_exact_size(
-                                    Vec2::new(full, 1.0),
-                                    Sense::hover(),
-                                );
-                                let line = egui::Rect::from_min_max(
-                                    egui::pos2(
-                                        sep_rect.left() + plugin_layout::icon_left(),
-                                        sep_rect.center().y,
-                                    ),
-                                    egui::pos2(sep_rect.right(), sep_rect.center().y + 1.0),
-                                );
-                                ui.painter().rect_filled(line, 0.0, tone::line());
-                                ui.add_space(4.0);
+            let ctx = ui.ctx().clone();
+            {
+                let mut s = self.lock();
+                for plugin in &plugins {
+                    let _ = ensure_bytes_texture(
+                        &ctx,
+                        &mut s.preview_textures,
+                        &plugin_icon_key(plugin.id),
+                        plugin.icon_png,
+                    );
+                }
+                for (pid, c) in &items {
+                    let _ = ensure_bytes_texture(
+                        &ctx,
+                        &mut s.preview_textures,
+                        &hud_item_icon_key(pid, c.id),
+                        c.icon_png,
+                    );
+                }
+            }
+            let textures = self.lock().preview_textures.clone();
+
+            // 总开关关闭时：布局入口与各插件调整一并禁用
+            ui.add_enabled_ui(master_on, |ui| {
+                let mut any_plugin = false;
+                for plugin in &plugins {
+                    let contribs: Vec<_> = items
+                        .iter()
+                        .filter(|(pid, _)| *pid == plugin.id)
+                        .map(|(_, c)| c.clone())
+                        .collect();
+                    if contribs.is_empty() {
+                        continue;
+                    }
+                    any_plugin = true;
+
+                    let (mut plugin_on, open_default) = {
+                        let s = self.lock();
+                        (s.prefs.hud.is_plugin_enabled(plugin.id), true)
+                    };
+                    let enabled_n = {
+                        let s = self.lock();
+                        contribs
+                            .iter()
+                            .filter(|c| {
+                                s.prefs
+                                    .hud
+                                    .is_enabled(plugin.id, c.id, c.default_enabled)
+                            })
+                            .count()
+                    };
+
+                    ui.add_space(4.0);
+                    section_card(ui, |ui| {
+                        let open_id = ui.make_persistent_id(("hud_plugin_open", plugin.id));
+                        let mut open =
+                            ui.data_mut(|d| *d.get_temp_mut_or(open_id, open_default));
+                        let plugin_icon = textures.get(&plugin_icon_key(plugin.id));
+
+                        let plugin_name = pack_field(
+                            &catalogs,
+                            locale,
+                            plugin.id,
+                            "display_name",
+                            plugin.display_name,
+                        );
+                        let plugin_desc = pack_field(
+                            &catalogs,
+                            locale,
+                            plugin.id,
+                            "description",
+                            plugin.description,
+                        );
+                        ui.horizontal(|ui| {
+                            let toggle_reserve = 96.0;
+                            let left_w = (ui.available_width() - toggle_reserve).max(120.0);
+                            let title = format!("{} ｜ {}", plugin_name, plugin_desc);
+                            let meta = format!(
+                                "{}  ·  {} {}  ·  {}/{} {}",
+                                plugin.id,
+                                author_l,
+                                plugin.author,
+                                enabled_n,
+                                contribs.len(),
+                                enabled_suffix
+                            );
+                            let title_color = if plugin_on {
+                                tone::text()
+                            } else {
+                                tone::muted()
+                            };
+                            let mut left = plugin_header_hit(
+                                ui,
+                                left_w,
+                                open,
+                                &plugin_name,
+                                plugin_icon,
+                                &title,
+                                &meta,
+                                title_color,
+                            );
+                            left = attach_pack_tooltip(
+                                left,
+                                &plugin_name,
+                                &plugin_desc,
+                                plugin.id,
+                                &author_l,
+                                plugin.author,
+                                None,
+                                plugin.homepage,
+                                &homepage_l,
+                            );
+                            if left.clicked() {
+                                open = !open;
                             }
-                            let mut on = self.lock().prefs.hud.is_enabled(
-                                plugin.id,
-                                c.id,
-                                c.default_enabled,
-                            );
-                            let item_id = format!("{}.{}", plugin.id, c.id);
-                            let item_label = pack_field(
-                                &catalogs,
-                                locale,
-                                plugin.id,
-                                &format!("{}.label", c.id),
-                                c.label,
-                            );
-                            let item_icon =
-                                textures.get(&hud_item_icon_key(plugin.id, c.id));
-                            ui.horizontal(|ui| {
-                                ui.with_layout(
-                                    Layout::left_to_right(egui::Align::Center),
-                                    |ui| {
-                                        // 与插件图标左边缘对齐
-                                        ui.add_space(plugin_layout::icon_left());
-                                        hud_item_icon(ui, item_icon);
-                                        ui.add_space(plugin_layout::ICON_TO_TEXT);
-                                        ui.vertical(|ui| {
-                                            ui.label(
-                                                RichText::new(&item_label)
-                                                    .size(13.5)
-                                                    .color(tone::text()),
-                                            );
-                                            ui.label(
-                                                RichText::new(&item_id)
-                                                    .size(11.0)
-                                                    .color(tone::muted()),
-                                            );
-                                        });
-                                    },
-                                );
-                                ui.with_layout(
-                                    Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if toggle_switch(ui, &mut on).changed() {
-                                            self.lock().prefs.hud.set_enabled(
-                                                plugin.id,
-                                                c.id,
-                                                on,
-                                            );
-                                        }
-                                    },
+
+                            ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                                if toggle_switch(ui, &mut plugin_on).changed() {
+                                    self.lock()
+                                        .prefs
+                                        .hud
+                                        .set_plugin_enabled(plugin.id, plugin_on);
+                                }
+                                ui.add_space(6.0);
+                                ui.label(
+                                    RichText::new(&enable_l)
+                                        .size(12.5)
+                                        .color(if plugin_on {
+                                            tone::text()
+                                        } else {
+                                            tone::muted()
+                                        }),
                                 );
                             });
+                        });
+
+                        ui.data_mut(|d| *d.get_temp_mut_or(open_id, open_default) = open);
+
+                        if open {
+                            ui.add_space(8.0);
+                            ui.add_enabled_ui(plugin_on, |ui| {
+                                for (i, c) in contribs.iter().enumerate() {
+                                    if i > 0 {
+                                        ui.add_space(4.0);
+                                        let full = ui.available_width();
+                                        let (sep_rect, _) = ui.allocate_exact_size(
+                                            Vec2::new(full, 1.0),
+                                            Sense::hover(),
+                                        );
+                                        let line = egui::Rect::from_min_max(
+                                            egui::pos2(
+                                                sep_rect.left() + plugin_layout::icon_left(),
+                                                sep_rect.center().y,
+                                            ),
+                                            egui::pos2(
+                                                sep_rect.right(),
+                                                sep_rect.center().y + 1.0,
+                                            ),
+                                        );
+                                        ui.painter().rect_filled(line, 0.0, tone::line());
+                                        ui.add_space(4.0);
+                                    }
+                                    let mut on = self.lock().prefs.hud.is_enabled(
+                                        plugin.id,
+                                        c.id,
+                                        c.default_enabled,
+                                    );
+                                    let item_id = format!("{}.{}", plugin.id, c.id);
+                                    let item_label = pack_field(
+                                        &catalogs,
+                                        locale,
+                                        plugin.id,
+                                        &format!("{}.label", c.id),
+                                        c.label,
+                                    );
+                                    let item_icon =
+                                        textures.get(&hud_item_icon_key(plugin.id, c.id));
+                                    ui.horizontal(|ui| {
+                                        ui.with_layout(
+                                            Layout::left_to_right(egui::Align::Center),
+                                            |ui| {
+                                                ui.add_space(plugin_layout::icon_left());
+                                                hud_item_icon(ui, item_icon);
+                                                ui.add_space(plugin_layout::ICON_TO_TEXT);
+                                                ui.vertical(|ui| {
+                                                    ui.label(
+                                                        RichText::new(&item_label)
+                                                            .size(13.5)
+                                                            .color(tone::text()),
+                                                    );
+                                                    ui.label(
+                                                        RichText::new(&item_id)
+                                                            .size(11.0)
+                                                            .color(tone::muted()),
+                                                    );
+                                                });
+                                            },
+                                        );
+                                        ui.with_layout(
+                                            Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                if toggle_switch(ui, &mut on).changed() {
+                                                    self.lock().prefs.hud.set_enabled(
+                                                        plugin.id,
+                                                        c.id,
+                                                        on,
+                                                    );
+                                                }
+                                            },
+                                        );
+                                    });
+                                }
+                            });
+                            if !plugin_on {
+                                ui.add_space(6.0);
+                                ui.horizontal(|ui| {
+                                    ui.add_space(plugin_layout::icon_left());
+                                    ui.label(
+                                        RichText::new(&disabled_hint)
+                                            .size(11.5)
+                                            .color(tone::muted()),
+                                    );
+                                });
+                            }
                         }
                     });
-                    if !plugin_on {
-                        ui.add_space(6.0);
-                        ui.horizontal(|ui| {
-                            ui.add_space(plugin_layout::icon_left());
-                            ui.label(
-                                RichText::new(&disabled_hint)
-                                    .size(11.5)
-                                    .color(tone::muted()),
-                            );
-                        });
-                    }
+                    ui.add_space(8.0);
+                }
+
+                if !any_plugin {
+                    empty_hint(ui, &empty);
                 }
             });
-            ui.add_space(8.0);
-        }
-
-        if !any_plugin {
-            empty_hint(ui, &empty);
         }
     }
 
     fn draw_general_page(&self, ui: &mut egui::Ui) {
         let nav = self.lock().prefs.t(MessageKey::SettingsNavGeneral).to_string();
         page_header(ui, &nav, "");
+        ui.add_space(16.0);
+
+        let (topmost_l, topmost_hint, mut topmost) = {
+            let s = self.lock();
+            (
+                s.prefs.t(MessageKey::SettingsTopmost).to_string(),
+                s.prefs.t(MessageKey::SettingsTopmostHint).to_string(),
+                s.prefs.shell.topmost,
+            )
+        };
+        section_card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new(&topmost_l)
+                            .size(13.5)
+                            .strong()
+                            .color(tone::text()),
+                    );
+                    ui.label(RichText::new(&topmost_hint).size(12.0).color(tone::muted()));
+                });
+                ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                    toggle_switch(ui, &mut topmost);
+                });
+            });
+        });
+        self.lock().prefs.shell.topmost = topmost;
         ui.add_space(16.0);
 
         let (
@@ -1213,9 +1425,7 @@ impl SettingsHost {
         let mut locale = locale;
         let mut theme = theme;
         let families = crate::fonts::list_font_families();
-        let mut family_key = if font_family.starts_with("fam.")
-            && families.iter().any(|f| f.family_key == font_family)
-        {
+        let mut family_key = if families.iter().any(|f| f.family_key == font_family) {
             font_family
         } else {
             crate::fonts::family_key_for_font_id(&families, &font_id)
@@ -2702,6 +2912,21 @@ fn paint_preview_cover(ui: &mut egui::Ui, stage: egui::Rect, tex: &TextureHandle
     );
 }
 
+/// 草稿相对基准是否有可应用改动（忽略设置窗几何；几何随关窗落盘）。
+fn settings_draft_dirty(draft: &UiPreferences, baseline: &UiPreferences) -> bool {
+    let mut a = draft.clone();
+    let mut b = baseline.clone();
+    a.shell.settings_width = None;
+    a.shell.settings_height = None;
+    a.shell.settings_pos_x = None;
+    a.shell.settings_pos_y = None;
+    b.shell.settings_width = None;
+    b.shell.settings_height = None;
+    b.shell.settings_pos_x = None;
+    b.shell.settings_pos_y = None;
+    a != b
+}
+
 fn footer_primary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
     let size = Vec2::new(88.0, 32.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
@@ -2749,6 +2974,72 @@ fn footer_secondary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
         tone::text(),
     );
     response
+}
+
+/// 插件页「插件布局」：整行操作按钮（左图标 + 文案）。
+fn hud_layout_action_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+    let height = 40.0;
+    let width = ui.available_width();
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
+    let fill = if response.is_pointer_button_down_on() {
+        tone::accent_soft()
+    } else if response.hovered() {
+        Color32::from_rgba_unmultiplied(
+            tone::accent_soft().r(),
+            tone::accent_soft().g(),
+            tone::accent_soft().b(),
+            180,
+        )
+    } else {
+        tone::faint()
+    };
+    let stroke = if response.hovered() || response.is_pointer_button_down_on() {
+        Stroke::new(1.0, tone::accent())
+    } else {
+        Stroke::new(1.0, tone::line())
+    };
+    ui.painter().rect(
+        rect,
+        CornerRadius::same(10),
+        fill,
+        stroke,
+        egui::StrokeKind::Inside,
+    );
+    let icon_c = egui::pos2(rect.left() + 22.0, rect.center().y);
+    draw_layout_edit_icon(
+        ui.painter(),
+        icon_c,
+        if response.hovered() {
+            tone::accent()
+        } else {
+            tone::text()
+        },
+    );
+    ui.painter().text(
+        egui::pos2(rect.left() + 40.0, rect.center().y),
+        Align2::LEFT_CENTER,
+        label,
+        FontId::proportional(14.0),
+        tone::text(),
+    );
+    response
+}
+
+fn draw_layout_edit_icon(painter: &egui::Painter, center: egui::Pos2, color: Color32) {
+    let s = 5.0;
+    let g = 2.5;
+    let origin = center - Vec2::new(s + g * 0.5, s + g * 0.5);
+    for row in 0..2 {
+        for col in 0..2 {
+            let p = origin + Vec2::new(col as f32 * (s + g), row as f32 * (s + g));
+            painter.rect_stroke(
+                egui::Rect::from_min_size(p, Vec2::splat(s)),
+                1.0,
+                Stroke::new(1.35, color),
+                egui::StrokeKind::Outside,
+            );
+        }
+    }
 }
 
 fn pet_list_row(

@@ -1,10 +1,11 @@
-//! DeskHud 入口（egui / eframe）。
+﻿//! DeskHud 入口（egui / eframe）。
 
 // release 无控制台；debug 保留以便看 tracing 日志
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
 mod fonts;
+mod hud_overlay;
 mod pet_dock;
 mod pet_draw;
 mod pet_input;
@@ -56,17 +57,17 @@ fn main() -> eframe::Result {
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("")
-        .with_inner_size([prefs.shell.pet_width, prefs.shell.pet_height])
+        .with_inner_size([prefs.pet.width, prefs.pet.height])
         .with_decorations(false)
         .with_transparent(true)
         .with_has_shadow(false)
         .with_resizable(false)
         .with_taskbar(false)
         .with_icon(icon());
-    if prefs.shell.pet_topmost {
+    if prefs.shell.topmost {
         viewport = viewport.with_always_on_top();
     }
-    if let Some([x, y]) = prefs.shell.pet_pos() {
+    if let Some([x, y]) = prefs.pet.pos() {
         viewport = viewport.with_position([x, y]);
     }
 

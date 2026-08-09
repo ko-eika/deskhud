@@ -1,8 +1,8 @@
 <h1 align="center" style="margin: 30px 0 30px; font-weight: bold;">DeskHud</h1>
-<h4 align="center">一个可扩展的桌面宠物宿主</h4>
+<h4 align="center">一个可扩展的桌宠引擎</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.2.0-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.3.0-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -13,7 +13,7 @@
 
 简体中文 | [English](./README_EN.md)
 
-DeskHud 是可扩展的 **桌面宠物宿主**：用户可以切换 **宠物包**（外观 + 行为），并按需开关 **HUD 插件** 及其贡献条目。界面基于 **egui / eframe**，支持多语言与本地社区包加载（商店能力后置）。
+DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（外观 + 行为），并按需开关 **HUD 插件** 及其贡献条目。界面基于 **egui / eframe**，支持多语言与本地社区包加载（商店能力后置）。
 
 ## 功能概览
 
@@ -76,7 +76,7 @@ deskhud-egui        可执行 UI（宠窗 / 菜单 / 设置）
        ▼
 deskhud-runtime     本地发现包 → 加载（原生内置 / WASM）→ 注册
        │
-       ├── deskhud-host      契约 + 内置宠 / 演示插件
+       ├── deskhud-engine      契约 + 内置宠 / 演示插件
        ├── deskhud-package   manifest、包 IO、包内 i18n
        └── deskhud-ui        Locale、prefs、目录合并（零 egui）
 
@@ -105,14 +105,18 @@ cargo run -p deskhud-egui
 
 # 检查 / 测试
 cargo check --workspace
-cargo test -p deskhud-package -p deskhud-ui -p deskhud-host -p deskhud-runtime
+cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime
+
+# 导出 packs/ → target/packages/*.deskhud（manifest + assets + i18n）
+cargo pack-builtins
+cargo pack-builtin pet-deskhud-specs
 
 # 格式与静态检查
 cargo fmt
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-首次运行后，偏好与数据目录由宿主写入用户配置区（Windows 上通常在 `%APPDATA%/DeskHud` 一带）。本地包可放在仓库 [`packages/`](./packages/) 或用户 packages 目录，详见该目录说明。
+首次运行后，偏好与数据目录由引擎写入用户配置区（Windows 上通常在 `%APPDATA%/DeskHud` 一带）。本地包可放在仓库 [`packages/`](./packages/) 或用户 packages 目录，详见该目录说明。
 
 ## 发布
 
@@ -122,7 +126,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 # 1. 修改根 Cargo.toml 的 workspace.package.version，并同步 README 徽章
 # 2. 检查
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test -p deskhud-package -p deskhud-ui -p deskhud-host -p deskhud-runtime --all-targets
+cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime --all-targets
 
 # 3. 发行构建（在目标平台上）
 cargo build -p deskhud-egui --release
@@ -148,9 +152,10 @@ git push origin v0.2.0
 
 社区作者请阅读：
 
-- [`docs/extension-guide.md`](./docs/extension-guide.md) — 宠物包 / HUD 插件契约、事件、包格式
+- [`docs/extension-guide.md`](./docs/extension-guide.md) — 宠物包 / HUD 插件契约、事件、**导出 `.deskhud`**
 - [`docs/architecture.md`](./docs/architecture.md) — crate 边界与依赖方向
-- [`packages/README.md`](./packages/README.md) — 本地包放置方式
+- [`packages/README.md`](./packages/README.md) — 本地包放置与用 `pack-builtins` 验证
+- [`docs/release.md`](./docs/release.md) — 发版与 `cargo pack-builtins` 说明
 
 包内典型结构：
 

@@ -6,8 +6,9 @@ alwaysApply: true
 # 架构
 
 - `deskhud-egui`：唯一 UI（桌宠 / 右键菜单 / 设置：常规·宠物·插件·关于）。
-- `deskhud-runtime`：本地包发现与加载（内置映射 / WASM）。
-- `deskhud-host`：`PetKind` / `Plugin` / `HudContribution` / `HostRegistry`（含宠配置与图标契约）。
+- `deskhud-runtime`：本地包发现与加载；注册 `packs/*`；WASM 预留。
+- `deskhud-engine`：`PetKind` / `Plugin` / `HudContribution` / `EngineRegistry`（仅契约；空注册表）。
+- `packs/*`：出厂宠/HUD 包（`.deskhud` 布局 + 原生实现 crate；`pet-*` / `hud-*`）。
 - `deskhud-package`：`.deskhud` manifest、包 IO、包内 i18n 文件。
 - `deskhud-ui`：locale / shell / pet·hud prefs / 目录合并；零 egui。
 - `deskhud-sdk`：社区 Guest SDK（仅 examples / 社区包依赖）。
@@ -17,6 +18,6 @@ alwaysApply: true
 - 仅 egui；禁止第二套 UI 框架、禁止托盘图标。
 - UI 禁止 `git2`；业务走 Plugin / 宠物包。
 - 社区包默认 WASM；禁止社区原生 dll。
-- 宿主 crate 禁止依赖 `deskhud-sdk`。
+- 引擎 crate 禁止依赖 `deskhud-sdk`。
 - 第三方版本只写根 `[workspace.dependencies]`。
 - 新建 / 扩展模块优先独立目录。

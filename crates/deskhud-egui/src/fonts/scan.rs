@@ -99,7 +99,7 @@ pub(super) fn priority_system_cjk() -> Vec<(String, PathBuf)> {
         .collect()
 }
 
-/// 扫描系统字体并按家族聚合（键为 `fam.<code>`）。
+/// 扫描系统字体并按家族聚合（键为规范化家族码，无前缀）。
 pub fn system_font_families() -> Vec<FontFamilyEntry> {
     let mut by_fam: std::collections::BTreeMap<String, FontFamilyEntry> =
         std::collections::BTreeMap::new();
@@ -179,7 +179,7 @@ fn ingest_font_path(
     *file_count += 1;
 
     let (fam_code, display, style, aliases) = classify_stem(stem);
-    let family_key = format!("fam.{fam_code}");
+    let family_key = fam_code.clone();
     let entry = by_fam.entry(family_key.clone()).or_insert_with(|| {
         let mut search = aliases.clone();
         search.push(display.to_lowercase());

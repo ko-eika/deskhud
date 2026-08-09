@@ -1,0 +1,11 @@
+[package]
+name = "pet-deskhud-specs"
+description = "DeskHud builtin pet: Big Eyes (pet.deskhud.specs)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+deskhud-engine = { workspace = true }

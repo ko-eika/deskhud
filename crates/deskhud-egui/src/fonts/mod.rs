@@ -14,20 +14,21 @@ pub use scan::system_font_families;
 
 include!(concat!(env!("OUT_DIR"), "/builtin_fonts_gen.rs"));
 
-/// 兼容旧 prefs 的默认家族键。
-pub const BUILTIN_NOTO_SANS_SC: &str = "fam.notosanssc";
-/// 兼容旧 JetBrains 默认。
-pub const BUILTIN_JETBRAINS_MONO: &str = "fam.jetbrainsmono";
+/// 兼容旧 prefs / 默认家族键（无 `fam.` 前缀）。
+pub const BUILTIN_NOTO_SANS_SC: &str = "notosanssc";
+/// 默认 JetBrains Mono 家族键。
+pub const BUILTIN_JETBRAINS_MONO: &str = "jetbrainsmono";
 
 const LEGACY_NOTO: &str = "builtin.noto_sans_sc";
 const LEGACY_JB: &str = "builtin.jetbrains_mono";
+const DEFAULT_FACE_ID: &str = "JetBrainsMono-Regular";
 
 /// 字重面。
 #[derive(Debug, Clone)]
 pub struct FontFace {
     /// 样式名：`Regular` / `Bold` / `Bold Italic` …
     pub style: String,
-    /// 可加载 ID：`builtin.<stem>` / `system.<path>`。
+    /// 可加载 ID：内置为文件 stem；系统为字体文件路径（`/` 分隔）。
     pub font_id: String,
     /// 来自内置包（合并时同样式优先内置）。
     pub builtin: bool,
@@ -36,7 +37,7 @@ pub struct FontFace {
 /// 字体系列（可含多种样式）。
 #[derive(Debug, Clone)]
 pub struct FontFamilyEntry {
-    /// 稳定家族键：`fam.<code>`。
+    /// 稳定家族键（规范化小写码，无前缀）。
     pub family_key: String,
     /// 显示名（无来源后缀；合并后统一）。
     pub label: String,
@@ -77,8 +78,8 @@ pub fn list_font_families() -> Vec<FontFamilyEntry> {
             .and_then(|s| s.to_str())
             .unwrap_or(file);
         let (fam_code, label, style, aliases) = classify::classify_stem(stem);
-        let family_key = format!("fam.{fam_code}");
-        let font_id = format!("builtin.{stem}");
+        let family_key = fam_code;
+        let font_id = stem.to_string();
         upsert_face(
             &mut by_key,
             family_key,
@@ -157,17 +158,22 @@ pub fn resolve_font_id(families: &[FontFamilyEntry], family_key: &str, style: &s
             return face.font_id.clone();
         }
     }
-    if family_key.starts_with("builtin.") || family_key.starts_with("system.") {
-        return family_key.to_string();
+    // 旧版误把 face id 存进 family 时直接回退
+    let as_face = migrate_legacy_font_id(family_key);
+    if families
+        .iter()
+        .any(|f| f.faces.iter().any(|face| face.font_id == as_face))
+    {
+        return as_face;
     }
-    // 默认 JetBrains Mono Regular
-    "builtin.JetBrainsMono-Regular".into()
+    DEFAULT_FACE_ID.into()
 }
 
 fn migrate_family_key(key: &str) -> String {
+    let key = key.strip_prefix("fam.").unwrap_or(key);
     match key {
-        LEGACY_NOTO => BUILTIN_NOTO_SANS_SC.into(),
-        LEGACY_JB => BUILTIN_JETBRAINS_MONO.into(),
+        "builtin.noto_sans_sc" | "noto_sans_sc" => BUILTIN_NOTO_SANS_SC.into(),
+        "builtin.jetbrains_mono" | "jetbrains_mono" => BUILTIN_JETBRAINS_MONO.into(),
         other => other.to_string(),
     }
 }
@@ -180,17 +186,27 @@ pub fn family_key_for_font_id(families: &[FontFamilyEntry], font_id: &str) -> St
             return fam.family_key.clone();
         }
     }
-    if id.starts_with("system.") {
+    // 系统路径：尽量用路径本身在列表里已登记的家族
+    if looks_like_font_path(&id) {
         return id;
     }
     BUILTIN_JETBRAINS_MONO.into()
 }
 
-fn migrate_legacy_font_id(id: &str) -> String {
+/// 规范化历史 prefs 里的字体 id（去掉 builtin./system. 等前缀）。
+pub fn migrate_legacy_font_id(id: &str) -> String {
     match id {
-        LEGACY_NOTO => "builtin.NotoSansSC-Regular".into(),
-        LEGACY_JB => "builtin.JetBrainsMono-Regular".into(),
-        other => other.to_string(),
+        LEGACY_NOTO | "noto_sans_sc" => "NotoSansSC-Regular".into(),
+        LEGACY_JB | "jetbrains_mono" => DEFAULT_FACE_ID.into(),
+        other => {
+            if let Some(rest) = other.strip_prefix("builtin.") {
+                return rest.to_string();
+            }
+            if let Some(rest) = other.strip_prefix("system.") {
+                return rest.to_string();
+            }
+            other.to_string()
+        }
     }
 }
 
@@ -216,7 +232,7 @@ pub fn configure_typography(ctx: &egui::Context, ui_font_id: &str, ui_font_size:
 /// 按 prefs 中的字体 ID 配置 egui。
 pub fn configure_fonts(ctx: &egui::Context, ui_font_id: &str) {
     let id = migrate_legacy_font_id(if ui_font_id.trim().is_empty() {
-        "builtin.JetBrainsMono-Regular"
+        DEFAULT_FACE_ID
     } else {
         ui_font_id
     });
@@ -318,23 +334,20 @@ fn apply_text_size(ctx: &egui::Context, size: f32) {
 
 fn resolve_font_data(id: &str) -> Option<(String, Arc<FontData>)> {
     let id = migrate_legacy_font_id(id);
-    if let Some(stem) = id.strip_prefix("builtin.") {
-        let key = format!("builtin_data_{stem}");
-        // 字节已在 configure_fonts 注册；此处返回占位名 + 空读
-        // 实际插入用下面查找
-        for (file, bytes) in BUILTIN_FONT_FILES {
-            let fstem = Path::new(file)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or(file);
-            if fstem == stem || *file == stem {
-                return Some((key, Arc::new(FontData::from_static(bytes))));
-            }
+    // 1) 内置：按文件 stem 匹配
+    for (file, bytes) in BUILTIN_FONT_FILES {
+        let fstem = Path::new(file)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(file);
+        if fstem == id || *file == id {
+            let key = format!("builtin_data_{fstem}");
+            return Some((key, Arc::new(FontData::from_static(bytes))));
         }
-        return None;
     }
-    if let Some(path) = id.strip_prefix("system.") {
-        let path = PathBuf::from(path.replace('/', std::path::MAIN_SEPARATOR_STR));
+    // 2) 系统路径（或其它磁盘字体）
+    if looks_like_font_path(&id) {
+        let path = PathBuf::from(id.replace('/', std::path::MAIN_SEPARATOR_STR));
         let bytes = std::fs::read(&path).ok()?;
         let name = font_key_name(&path);
         return Some((name, Arc::new(FontData::from_owned(bytes))));
@@ -342,9 +355,19 @@ fn resolve_font_data(id: &str) -> Option<(String, Arc<FontData>)> {
     None
 }
 
+fn looks_like_font_path(id: &str) -> bool {
+    id.contains('/')
+        || id.contains('\\')
+        || id.ends_with(".ttf")
+        || id.ends_with(".otf")
+        || id.ends_with(".ttc")
+        || id.ends_with(".TTF")
+        || id.ends_with(".OTF")
+        || id.ends_with(".TTC")
+}
+
 pub(crate) fn system_font_id(path: &Path) -> String {
-    let s = path.to_string_lossy().replace('\\', "/");
-    format!("system.{s}")
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn font_key_name(path: &Path) -> String {

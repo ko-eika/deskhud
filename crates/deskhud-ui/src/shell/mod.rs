@@ -1,4 +1,4 @@
-//! 桌宠外壳偏好。
+//! 桌宠外壳偏好：界面主题 / 设置窗几何（`[ui]`）；字体见 `[font]`。
 
 use serde::{Deserialize, Serialize};
 
@@ -26,29 +26,25 @@ pub enum UiTheme {
     Dark,
 }
 
-/// 外壳窗口偏好。
-///
-/// 注意：`pet_width` / `pet_height` 是当前激活宠的尺寸缓存，
-/// 切换宠物时应从宠物元数据同步，不要写死。
+/// 界面与设置窗偏好（落盘 `[theme]` + `[settings]` + `[font]`；旧文件 `[ui]` / `[shell]` 可迁移）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellPrefs {
-    /// 当前宠物类型 ID。
-    pub active_pet_kind_id: String,
-    /// 当前宠窗宽（来自宠物包）。
-    pub pet_width: f32,
-    /// 当前宠窗高。
-    pub pet_height: f32,
-    /// 宠窗左上角屏幕 X（egui 逻辑像素）；缺省由系统摆放。
+    /// 具体字面 ID：内置为文件 stem（如 `JetBrainsMono-Regular`）；系统为字体路径（`/` 分隔）。
+    /// 与 `ui_font_family` 不同：同一家族可有 Regular/Bold 多个 id。
+    #[serde(default = "default_ui_font_id")]
+    pub ui_font_id: String,
+    /// 字体系列键（规范化小写码，无前缀），用于设置页下拉分组。
+    #[serde(default = "default_ui_font_family")]
+    pub ui_font_family: String,
+    /// 字体样式名（Regular / Bold …），与 family 一起解析出 `ui_font_id`。
+    #[serde(default = "default_ui_font_style")]
+    pub ui_font_style: String,
+    /// 界面字号（逻辑像素）。
+    #[serde(default = "default_ui_font_size")]
+    pub ui_font_size: f32,
+    /// 应用主题。
     #[serde(default)]
-    pub pet_pos_x: Option<f32>,
-    /// 宠窗左上角屏幕 Y。
-    #[serde(default)]
-    pub pet_pos_y: Option<f32>,
-    /// 置顶。
-    pub pet_topmost: bool,
-    /// 设置页宠物选择：网格 / 列表。
-    #[serde(default)]
-    pub pet_picker_mode: PetPickerMode,
+    pub ui_theme: UiTheme,
     /// 设置窗宽（逻辑像素）。
     #[serde(default)]
     pub settings_width: Option<f32>,
@@ -61,29 +57,44 @@ pub struct ShellPrefs {
     /// 设置窗左上角 Y。
     #[serde(default)]
     pub settings_pos_y: Option<f32>,
-    /// 界面字体 ID：`builtin.<stem>` / `system.<path>`。
-    #[serde(default = "default_ui_font_id")]
-    pub ui_font_id: String,
-    /// 字体系列键：`fam.<code>`（缺省时由 `ui_font_id` 反推）。
-    #[serde(default = "default_ui_font_family")]
-    pub ui_font_family: String,
-    /// 字体样式名：`Regular` / `Bold` / `Light` …
-    #[serde(default = "default_ui_font_style")]
-    pub ui_font_style: String,
-    /// 界面字号（逻辑像素）。
-    #[serde(default = "default_ui_font_size")]
-    pub ui_font_size: f32,
-    /// 应用主题：浅色 / 深色 / 跟随系统。
-    #[serde(default)]
-    pub ui_theme: UiTheme,
+    /// 全局置顶（宠 / HUD / 设置 / 菜单同一层级；落盘 `[settings].topmost`）。
+    #[serde(default = "default_topmost")]
+    pub topmost: bool,
 }
 
 fn default_ui_font_id() -> String {
-    "builtin.JetBrainsMono-Regular".into()
+    "JetBrainsMono-Regular".into()
 }
 
 fn default_ui_font_family() -> String {
-    "fam.jetbrainsmono".into()
+    "jetbrainsmono".into()
+}
+
+/// 去掉历史 `builtin.` / `system.` 前缀；旧短名映射到 stem。
+pub fn migrate_ui_font_id(id: &str) -> String {
+    match id {
+        "builtin.noto_sans_sc" | "noto_sans_sc" => "NotoSansSC-Regular".into(),
+        "builtin.jetbrains_mono" | "jetbrains_mono" => "JetBrainsMono-Regular".into(),
+        other => {
+            if let Some(rest) = other.strip_prefix("builtin.") {
+                return rest.to_string();
+            }
+            if let Some(rest) = other.strip_prefix("system.") {
+                return rest.to_string();
+            }
+            other.to_string()
+        }
+    }
+}
+
+/// 去掉历史 `fam.` 前缀；旧家族短名映射。
+pub fn migrate_ui_font_family(key: &str) -> String {
+    let key = key.strip_prefix("fam.").unwrap_or(key);
+    match key {
+        "builtin.noto_sans_sc" | "noto_sans_sc" => "notosanssc".into(),
+        "builtin.jetbrains_mono" | "jetbrains_mono" => "jetbrainsmono".into(),
+        other => other.to_string(),
+    }
 }
 
 fn default_ui_font_style() -> String {
@@ -94,26 +105,23 @@ fn default_ui_font_size() -> f32 {
     13.0
 }
 
+fn default_topmost() -> bool {
+    true
+}
+
 impl Default for ShellPrefs {
     fn default() -> Self {
         Self {
-            active_pet_kind_id: "pet.deskhud.specs".into(),
-            // 占位；启动后由宿主按 PetKindInfo 覆盖
-            pet_width: 140.0,
-            pet_height: 140.0,
-            pet_pos_x: None,
-            pet_pos_y: None,
-            pet_topmost: true,
-            pet_picker_mode: PetPickerMode::Grid,
-            settings_width: None,
-            settings_height: None,
-            settings_pos_x: None,
-            settings_pos_y: None,
             ui_font_id: default_ui_font_id(),
             ui_font_family: default_ui_font_family(),
             ui_font_style: default_ui_font_style(),
             ui_font_size: default_ui_font_size(),
             ui_theme: UiTheme::default(),
+            settings_width: None,
+            settings_height: None,
+            settings_pos_x: None,
+            settings_pos_y: None,
+            topmost: default_topmost(),
         }
     }
 }
@@ -127,23 +135,6 @@ impl ShellPrefs {
     pub const SETTINGS_DEFAULT_W: f32 = 960.0;
     /// 设置窗默认高（16:9）。
     pub const SETTINGS_DEFAULT_H: f32 = 540.0;
-
-    /// 用宠物元数据覆盖窗尺寸。
-    pub fn apply_pet_window_size(&mut self, width: f32, height: f32) {
-        self.pet_width = width.max(48.0);
-        self.pet_height = height.max(48.0);
-    }
-
-    /// 记录宠窗屏幕位置（逻辑像素）。
-    pub fn set_pet_pos(&mut self, x: f32, y: f32) {
-        self.pet_pos_x = Some(x);
-        self.pet_pos_y = Some(y);
-    }
-
-    /// 若有已存位置则返回。
-    pub fn pet_pos(&self) -> Option<[f32; 2]> {
-        Some([self.pet_pos_x?, self.pet_pos_y?])
-    }
 
     /// 设置窗默认 / 已存尺寸。
     pub fn settings_size(&self) -> [f32; 2] {

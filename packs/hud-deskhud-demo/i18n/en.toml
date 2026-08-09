@@ -1,0 +1,4 @@
+display_name = "Demo HUD"
+description = "Sample plugin: demo strips at the bottom of the pet window"
+"clock.label" = "Demo clock strip"
+"tip.label" = "Demo tip strip"

@@ -1,7 +1,7 @@
 //! 宠物帧绘制（主宠窗）。
 
 use eframe::egui::{self, Color32, CornerRadius, FontId, Galley, Pos2, Stroke, Vec2};
-use deskhud_host::PetPaint;
+use deskhud_engine::PetPaint;
 use std::sync::Arc;
 
 /// 在指定中心与基准半径绘制一帧宠物。

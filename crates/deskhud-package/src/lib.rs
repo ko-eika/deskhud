@@ -5,11 +5,15 @@
 
 #![deny(missing_docs)]
 
+pub mod compat;
 pub mod error;
 pub mod i18n;
 pub mod io;
 pub mod manifest;
 
+pub use compat::{
+    engine_family_of_product, pack_engine_matches, ENGINE_PRODUCT_VERSION,
+};
 pub use error::PackageError;
 pub use i18n::PackCatalog;
 pub use io::{
