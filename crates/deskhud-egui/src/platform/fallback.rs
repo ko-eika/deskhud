@@ -5,8 +5,14 @@ use eframe::egui;
 /// 无原生 chrome（透明/去标题栏由 ViewportBuilder 处理）。
 pub fn ensure_pet_chrome(_hwnd: isize) {}
 
-/// 无 Acrylic。
-pub fn ensure_acrylic_popup(_hwnd: isize, _pet_hwnd: Option<isize>) {}
+/// 无原生弹出 chrome。
+pub fn ensure_acrylic_popup(_hwnd: isize, _pet_hwnd: Option<isize>, _dark: bool) {}
+
+/// 无弹出子类化可释放。
+pub fn release_popup_chrome(_hwnd: Option<isize>) {}
+
+/// 无设置窗 chrome 可恢复。
+pub fn ensure_settings_chrome(_hwnd: isize) {}
 
 /// 无 Mica。
 #[allow(dead_code)]

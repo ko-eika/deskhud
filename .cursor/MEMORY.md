@@ -97,3 +97,13 @@
 | 2026-08-09 | 产品升 0.4.0 / engine 族 0.4 | SVG+preview_image/icon_image 为包可感知契约变更（0.x MINOR） |
 | 2026-08-09 | 图标字段定名 PluginInfo/HudContribution.icon（非 icon_image） | 与 manifest icon 对齐，更简约 |
 | 2026-08-09 | PetKindInfo.preview（非 preview_image） | 与 manifest preview 对齐 |
+| 2026-08-09 | 普通下拉多帧 vertical_scroll_offset | ScrollArea 首帧 max_offset=0 会夹掉跳转 |
+| 2026-08-09 | SVG 按 ppp 栅格 + 预乘 alpha；预览边 1536 | 放大卡片不再锯齿毛边 |
+| 2026-08-09 | 下拉未超限不用 ScrollArea；插件卡去掉「启用」旁标 | 空滚动条；开关自明 |
+| 2026-08-09 | 右键菜单跟 ui_theme + DWM 深色 | 与设置页主题一致 |
+| 2026-08-09 | 菜单顶白线：关 Acrylic + 独立 NC 子类化 + 每帧维持 chrome | 与宠窗同因（获焦画标题栏） |
+| 2026-08-09 | 菜单 chrome 排除设置 HWND + 尺寸校验；设置窗 ensure_settings_chrome | 防误剥设置标题栏 |
+| 2026-08-09 | 清理未用 MessageKey（ActionClose/ViewGrid…） | 菜单启用/禁用文案已改勾选行 |
+| 2026-08-09 | 运行态 HUD=每屏一合成窗同层绘制；编辑仍全屏单窗 | 消除并排 DWM 互投影；勿 N 窗只关阴影 |
+| 2026-08-09 | Glow 子窗无法真透明（GL config）；合成窗保持不透明底 | 主窗可透明；deferred 子窗报错且会露标题栏 |
+| 2026-08-09 | 产品 PATCH 升 0.4.1；engine 族仍 0.4；内置包 version 跟程序 | HUD 同层合成与壳层 UI 修 bug，不改包契约 |

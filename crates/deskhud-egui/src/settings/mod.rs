@@ -278,6 +278,11 @@ impl SettingsHost {
         self.lock().open
     }
 
+    /// 设置视口 HWND（供菜单 chrome 排除，避免误剥标题栏）。
+    pub fn settings_hwnd(&self) -> Option<isize> {
+        self.lock().settings_hwnd.filter(|&h| h != 0)
+    }
+
     /// 进入 HUD 布局编辑：先藏设置窗；真正 Close 延到下一帧（同帧 Close 易 AV）。
     pub fn force_close_for_layout_edit(&self, ctx: &egui::Context) {
         let mut s = self.lock();
@@ -396,6 +401,10 @@ impl SettingsHost {
                     s.settings_hwnd = Some(h);
                     platform::set_window_owner(h, None);
                 }
+            }
+            // 若曾被菜单 chrome 误绑剥掉标题栏，每帧恢复装饰
+            if let Some(h) = s.settings_hwnd {
+                platform::ensure_settings_chrome(h);
             }
             // 勿在草稿切换置顶时改设置窗 WindowLevel（会让设置页丢命中，需拖窗才恢复）
         }
@@ -789,6 +798,10 @@ impl SettingsHost {
         ui.add_space(14.0);
 
         let ctx = ui.ctx().clone();
+        let preview_edge = crate::image_decode::physical_raster_edge(
+            crate::image_decode::PREVIEW_RASTER_EDGE,
+            ctx.pixels_per_point(),
+        );
         {
             let mut s = self.lock();
             for pet in &pets {
@@ -846,7 +859,7 @@ impl SettingsHost {
                                 size_key, pet.window_width, pet.window_height
                             );
                             let author_label = format!("{}  {}", author_l, pet.author);
-                            let tex = textures.get(&pet_preview_key(pet.id));
+                            let tex = textures.get(&pet_preview_key(pet.id, preview_edge));
                             let resp = pet_preview_card(
                                 ui,
                                 card_w,
@@ -901,7 +914,7 @@ impl SettingsHost {
                         size_key, pet.window_width, pet.window_height
                     );
                     let author_label = format!("{}  {}", author_l, pet.author);
-                    let tex = textures.get(&pet_preview_key(pet.id));
+                    let tex = textures.get(&pet_preview_key(pet.id, preview_edge));
                     let resp = pet_list_row(
                         ui,
                         &name,
@@ -1014,7 +1027,6 @@ impl SettingsHost {
             enabled_suffix,
             homepage_l,
             disabled_hint,
-            enable_l,
             master_l,
             master_on_hint,
             master_off_hint,
@@ -1032,7 +1044,6 @@ impl SettingsHost {
                 s.prefs.t(MessageKey::HudItemsEnabled).to_string(),
                 s.prefs.t(MessageKey::MetaHomepage).to_string(),
                 s.prefs.t(MessageKey::HudPluginDisabledHint).to_string(),
-                s.prefs.t(MessageKey::HudPluginEnable).to_string(),
                 s.prefs.t(MessageKey::HudMasterEnable).to_string(),
                 s.prefs.t(MessageKey::HudMasterEnableHint).to_string(),
                 s.prefs.t(MessageKey::HudMasterDisabledHint).to_string(),
@@ -1110,24 +1121,28 @@ impl SettingsHost {
             }
 
             let ctx = ui.ctx().clone();
+            let icon_edge = crate::image_decode::physical_raster_edge(
+                crate::image_decode::ICON_RASTER_EDGE,
+                ctx.pixels_per_point(),
+            );
             {
                 let mut s = self.lock();
                 for plugin in &plugins {
                     let _ = ensure_bytes_texture(
                         &ctx,
                         &mut s.preview_textures,
-                        &plugin_icon_key(plugin.id),
+                        &plugin_icon_key(plugin.id, icon_edge),
                         plugin.icon,
-                        crate::image_decode::ICON_RASTER_EDGE,
+                        icon_edge,
                     );
                 }
                 for (pid, c) in &items {
                     let _ = ensure_bytes_texture(
                         &ctx,
                         &mut s.preview_textures,
-                        &hud_item_icon_key(pid, c.id),
+                        &hud_item_icon_key(pid, c.id, icon_edge),
                         c.icon,
-                        crate::image_decode::ICON_RASTER_EDGE,
+                        icon_edge,
                     );
                 }
             }
@@ -1168,7 +1183,7 @@ impl SettingsHost {
                         let open_id = ui.make_persistent_id(("hud_plugin_open", plugin.id));
                         let mut open =
                             ui.data_mut(|d| *d.get_temp_mut_or(open_id, open_default));
-                        let plugin_icon = textures.get(&plugin_icon_key(plugin.id));
+                        let plugin_icon = textures.get(&plugin_icon_key(plugin.id, icon_edge));
 
                         let plugin_name = pack_field(
                             &catalogs,
@@ -1185,7 +1200,7 @@ impl SettingsHost {
                             plugin.description,
                         );
                         ui.horizontal(|ui| {
-                            let toggle_reserve = 96.0;
+                            let toggle_reserve = 52.0;
                             let left_w = (ui.available_width() - toggle_reserve).max(120.0);
                             let title = format!("{} ｜ {}", plugin_name, plugin_desc);
                             let meta = format!(
@@ -1234,16 +1249,6 @@ impl SettingsHost {
                                         .hud
                                         .set_plugin_enabled(plugin.id, plugin_on);
                                 }
-                                ui.add_space(6.0);
-                                ui.label(
-                                    RichText::new(&enable_l)
-                                        .size(12.5)
-                                        .color(if plugin_on {
-                                            tone::text()
-                                        } else {
-                                            tone::muted()
-                                        }),
-                                );
                             });
                         });
 
@@ -1287,7 +1292,7 @@ impl SettingsHost {
                                         c.label,
                                     );
                                     let item_icon =
-                                        textures.get(&hud_item_icon_key(plugin.id, c.id));
+                                        textures.get(&hud_item_icon_key(plugin.id, c.id, icon_edge));
                                     ui.horizontal(|ui| {
                                         ui.with_layout(
                                             Layout::left_to_right(egui::Align::Center),
@@ -1459,13 +1464,25 @@ impl SettingsHost {
                     UiTheme::Dark => theme_dark.as_str(),
                     UiTheme::System => theme_system.as_str(),
                 };
-                settings_combo(ui, "settings_theme", SETTINGS_COMBO_W, theme_text, |ui| {
-                    theme_combo_option(ui, &mut theme, UiTheme::System, &theme_system);
-                    ui.add_space(2.0);
-                    theme_combo_option(ui, &mut theme, UiTheme::Light, &theme_light);
-                    ui.add_space(2.0);
-                    theme_combo_option(ui, &mut theme, UiTheme::Dark, &theme_dark);
-                });
+                settings_combo(
+                    ui,
+                    "settings_theme",
+                    SETTINGS_COMBO_W,
+                    theme_text,
+                    match theme {
+                        UiTheme::System => 0,
+                        UiTheme::Light => 1,
+                        UiTheme::Dark => 2,
+                    },
+                    3,
+                    |ui| {
+                        theme_combo_option(ui, &mut theme, UiTheme::System, &theme_system);
+                        ui.add_space(2.0);
+                        theme_combo_option(ui, &mut theme, UiTheme::Light, &theme_light);
+                        ui.add_space(2.0);
+                        theme_combo_option(ui, &mut theme, UiTheme::Dark, &theme_dark);
+                    },
+                );
             });
         });
 
@@ -1477,11 +1494,22 @@ impl SettingsHost {
                     Locale::ZhCn => zh.as_str(),
                     Locale::En => en.as_str(),
                 };
-                settings_combo(ui, "settings_locale", SETTINGS_COMBO_W, locale_text, |ui| {
-                    locale_combo_option(ui, &mut locale, Locale::ZhCn, &zh);
-                    ui.add_space(2.0);
-                    locale_combo_option(ui, &mut locale, Locale::En, &en);
-                });
+                settings_combo(
+                    ui,
+                    "settings_locale",
+                    SETTINGS_COMBO_W,
+                    locale_text,
+                    match locale {
+                        Locale::ZhCn => 0,
+                        Locale::En => 1,
+                    },
+                    2,
+                    |ui| {
+                        locale_combo_option(ui, &mut locale, Locale::ZhCn, &zh);
+                        ui.add_space(2.0);
+                        locale_combo_option(ui, &mut locale, Locale::En, &en);
+                    },
+                );
             });
         });
 
@@ -1535,11 +1563,17 @@ impl SettingsHost {
                     .map(|f| f.style_names())
                     .unwrap_or_else(|| vec!["Regular".into()]);
                 setting_row_divided(ui, &font_style_l, true, |ui| {
+                    let style_idx = style_names
+                        .iter()
+                        .position(|st| st == &font_style)
+                        .unwrap_or(0);
                     settings_combo(
                         ui,
                         "settings_ui_font_style",
                         SETTINGS_COMBO_W,
                         &style_disp,
+                        style_idx,
+                        style_names.len(),
                         |ui| {
                             for (i, st) in style_names.iter().enumerate() {
                                 if i > 0 {
@@ -1682,37 +1716,204 @@ fn string_combo_option(ui: &mut egui::Ui, selected: &mut String, value: &str, la
     }
 }
 
-/// 统一普通下拉：定宽截断 + 同款 chevron + 弹层限高滚动。
+/// 统一普通下拉：定宽截断 + 同款 chevron；条目少时贴合内容高度，超限才固定限高并滚动。
 fn settings_combo(
     ui: &mut egui::Ui,
     id_salt: &'static str,
     width: f32,
     selected_text: impl Into<egui::WidgetText>,
+    selected_index: usize,
+    item_count: usize,
     add_contents: impl FnOnce(&mut egui::Ui),
 ) {
     style_locale_combo(ui);
-    let salt = id_salt;
-    let response = egui::ComboBox::from_id_salt(id_salt)
-        .width(width)
-        .height(SETTINGS_COMBO_POPUP_H)
-        .truncate()
-        .icon(move |ui, rect, _visuals, open| {
-            settings_combo_chevron(ui, salt, rect, open);
-        })
-        .popup_style(settings_combo_popup_style())
-        .selected_text(selected_text.into())
-        .show_ui(ui, |ui| {
-            // ComboBox 内部默认 Extend，会把弹层撑得比按钮宽
-            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-            let w = ui.available_width();
-            ui.set_min_width(w);
-            ui.set_max_width(w);
-            ui.spacing_mut().item_spacing.y = 0.0;
-            ui.add_space(8.0);
-            add_contents(ui);
-            ui.add_space(8.0);
-        });
-    let _ = response;
+    let button_id = ui.make_persistent_id(id_salt);
+    let area_id = button_id.with("area");
+    let open_id = button_id.with("open");
+    let prev_sel_id = button_id.with("prev_sel");
+    let scroll_pending_id = button_id.with("scroll_pending");
+    let mut is_open = ui.data_mut(|d| *d.get_temp_mut_or_insert_with(open_id, || false));
+
+    // 选中项相对上一帧变了 → 关闭（选项在弹层内点选后，下一帧生效）
+    let prev_sel = ui.data(|d| d.get_temp::<usize>(prev_sel_id));
+    if is_open {
+        if let Some(prev) = prev_sel {
+            if prev != selected_index {
+                is_open = false;
+            }
+        }
+    }
+    ui.data_mut(|d| d.insert_temp(prev_sel_id, selected_index));
+
+    let height = ui.spacing().interact_size.y.max(40.0);
+    let (rect, bar_resp) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
+    let bar_w = bar_resp.rect.width();
+    const LIST_PAD_Y: f32 = 8.0;
+    let content_h = combo_list_content_height(item_count, LIST_PAD_Y);
+    let popup_h = content_h.min(SETTINGS_COMBO_POPUP_H);
+    let needs_scroll = content_h > SETTINGS_COMBO_POPUP_H + 0.5;
+
+    let visuals = if is_open {
+        ui.visuals().widgets.open.clone()
+    } else {
+        ui.style().interact(&bar_resp).clone()
+    };
+    ui.painter().rect(
+        rect,
+        visuals.corner_radius,
+        visuals.weak_bg_fill,
+        visuals.bg_stroke,
+        egui::StrokeKind::Inside,
+    );
+
+    let pad = ui.spacing().button_padding;
+    let icon_size = Vec2::splat(ui.spacing().icon_width);
+    let inner = rect.shrink2(pad);
+    let icon_rect = Align2::RIGHT_CENTER.align_size_within_rect(icon_size, inner);
+    let text_rect = egui::Rect::from_min_max(
+        inner.min,
+        egui::pos2(
+            icon_rect.left() - ui.spacing().icon_spacing,
+            inner.max.y,
+        ),
+    );
+
+    let selected_text = selected_text.into();
+    let shown = truncate_to_width(ui, selected_text.text(), text_rect.width(), 13.5);
+    ui.painter().text(
+        egui::pos2(text_rect.left(), text_rect.center().y),
+        Align2::LEFT_CENTER,
+        shown,
+        FontId::proportional(13.5),
+        tone::text(),
+    );
+    settings_combo_chevron(ui, id_salt, icon_rect, is_open);
+
+    let mut just_opened = false;
+    if !is_open && bar_resp.clicked() {
+        is_open = true;
+        just_opened = true;
+        if needs_scroll {
+            // 多帧重试：首帧 content 高度未就绪时 offset 会被夹成 0
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    scroll_pending_id,
+                    (
+                        combo_scroll_offset_idx(selected_index, SETTINGS_COMBO_POPUP_H, LIST_PAD_Y),
+                        4u8,
+                    ),
+                );
+            });
+        }
+    } else if is_open && bar_resp.clicked() {
+        is_open = false;
+    }
+
+    if !is_open {
+        ui.data_mut(|d| d.remove::<(f32, u8)>(scroll_pending_id));
+    }
+
+    if is_open {
+        let popup_pos = egui::pos2(bar_resp.rect.left(), bar_resp.rect.bottom() + 2.0);
+        let jump = if needs_scroll {
+            ui.data_mut(|d| match d.get_temp::<(f32, u8)>(scroll_pending_id) {
+                Some((off, left)) if left > 0 => {
+                    let next = left - 1;
+                    if next == 0 {
+                        d.remove::<(f32, u8)>(scroll_pending_id);
+                    } else {
+                        d.insert_temp(scroll_pending_id, (off, next));
+                    }
+                    Some(off)
+                }
+                _ => None,
+            })
+        } else {
+            None
+        };
+        let area_inner = Area::new(area_id)
+            .order(Order::Foreground)
+            .fixed_pos(popup_pos)
+            .default_size(Vec2::new(bar_w, popup_h))
+            .sense(Sense::click())
+            .show(ui.ctx(), |ui| {
+                settings_combo_popup_style().apply(ui.style_mut());
+                Frame::NONE
+                    .fill(tone::card())
+                    .stroke(Stroke::new(1.0, tone::line()))
+                    .corner_radius(CornerRadius::same(8))
+                    .shadow(egui::Shadow {
+                        offset: [0, 4],
+                        blur: 14,
+                        spread: 0,
+                        color: Color32::from_black_alpha(28),
+                    })
+                    .show(ui, |ui| {
+                        ui.set_min_width(bar_w);
+                        ui.set_max_width(bar_w);
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                        if needs_scroll {
+                            let mut scroll = egui::ScrollArea::vertical()
+                                .id_salt((id_salt, "scroll"))
+                                .max_height(SETTINGS_COMBO_POPUP_H)
+                                .animated(false)
+                                .auto_shrink([false, true])
+                                .scroll_bar_visibility(
+                                    egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
+                                );
+                            if let Some(off) = jump {
+                                scroll = scroll.vertical_scroll_offset(off);
+                            }
+                            scroll.show(ui, |ui| {
+                                ui.set_width(bar_w);
+                                ui.set_min_width(bar_w);
+                                ui.set_max_width(bar_w);
+                                ui.spacing_mut().item_spacing.y = 0.0;
+                                ui.add_space(LIST_PAD_Y);
+                                add_contents(ui);
+                                ui.add_space(LIST_PAD_Y);
+                            });
+                        } else {
+                            // 未超限：不用 ScrollArea，避免出现空滚动条
+                            ui.set_width(bar_w);
+                            ui.spacing_mut().item_spacing.y = 0.0;
+                            ui.add_space(LIST_PAD_Y);
+                            add_contents(ui);
+                            ui.add_space(LIST_PAD_Y);
+                        }
+                    });
+            });
+
+        let click_away = !just_opened
+            && ui.input(|i| i.pointer.any_click())
+            && bar_resp.clicked_elsewhere()
+            && area_inner.response.clicked_elsewhere();
+        if click_away {
+            is_open = false;
+        }
+    }
+
+    ui.data_mut(|d| d.insert_temp(open_id, is_open));
+}
+
+/// 下拉列表内容高度（含上下内边距；未封顶）。
+fn combo_list_content_height(item_count: usize, pad_y: f32) -> f32 {
+    const ROW_H: f32 = 36.0;
+    const ROW_GAP: f32 = 2.0;
+    if item_count == 0 {
+        return pad_y * 2.0;
+    }
+    pad_y * 2.0
+        + item_count as f32 * ROW_H
+        + item_count.saturating_sub(1) as f32 * ROW_GAP
+}
+
+/// 将第 `idx` 项滚到弹层可视区中部附近。
+fn combo_scroll_offset_idx(idx: usize, list_h: f32, pad_y: f32) -> f32 {
+    const ROW_H: f32 = 36.0;
+    const ROW_GAP: f32 = 2.0;
+    let y = pad_y + idx as f32 * (ROW_H + ROW_GAP);
+    (y - (list_h - ROW_H) * 0.5).max(0.0)
 }
 
 /// 可搜索下拉（前缀补齐）：点开全选；输入替换选区；列表不过滤，跳到最佳前缀匹配并补齐且选中后缀。
@@ -1734,6 +1935,7 @@ fn searchable_combo(
     let typed_id = button_id.with("typed_len");
     let suppress_id = button_id.with("suppress_match");
     let ime_id = button_id.with("ime_composing");
+    let scroll_pending_id = button_id.with("scroll_pending");
 
     let mut is_open = ui.data_mut(|d| *d.get_temp_mut_or_insert_with(open_id, || false));
     let mut text = ui.data_mut(|d| {
@@ -1748,8 +1950,7 @@ fn searchable_combo(
         ui.data_mut(|d| *d.get_temp_mut_or_insert_with(suppress_id, || false));
     let mut ime_composing =
         ui.data_mut(|d| *d.get_temp_mut_or_insert_with(ime_id, || false));
-    // 本帧一次性跳转；勿用 scroll_to_me（长列表首帧高度未稳时会反复居中狂滚）
-    let mut scroll_jump: Option<f32> = None;
+    // 多帧 offset 跳转；勿用 scroll_to_me（长列表首帧高度未稳时会反复居中狂滚）
 
     // 中文等 IME：预编辑期间禁止补齐/改选区，否则会打断候选窗
     let ime_event_this_frame = update_ime_composing(ui, &mut ime_composing);
@@ -1758,9 +1959,11 @@ fn searchable_combo(
     let height = ui.spacing().interact_size.y.max(40.0);
     let (rect, bar_resp) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
     let bar_w = bar_resp.rect.width();
-    let list_h = SETTINGS_COMBO_POPUP_H;
     const ROW_GAP: f32 = 2.0;
     const LIST_PAD_Y: f32 = 6.0;
+    let content_h = combo_list_content_height(opts.len(), LIST_PAD_Y);
+    let popup_h = content_h.min(SETTINGS_COMBO_POPUP_H);
+    let needs_scroll = content_h > SETTINGS_COMBO_POPUP_H + 0.5;
 
     let visuals = if is_open {
         ui.visuals().widgets.open.clone()
@@ -1796,7 +1999,17 @@ fn searchable_combo(
         suppress_match = false;
         is_open = true;
         just_opened = true;
-        scroll_jump = Some(combo_scroll_offset(opts, &highlight, list_h));
+        if needs_scroll {
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    scroll_pending_id,
+                    (
+                        combo_scroll_offset(opts, &highlight, SETTINGS_COMBO_POPUP_H),
+                        4u8,
+                    ),
+                );
+            });
+        }
     } else if is_open
         && bar_resp.clicked()
         && ui.rect_contains_pointer(icon_rect.expand(6.0))
@@ -1859,8 +2072,20 @@ fn searchable_combo(
                             typed_len,
                             text.chars().count(),
                         );
-                        if hi_changed {
-                            scroll_jump = Some(combo_scroll_offset(opts, &highlight, list_h));
+                        if hi_changed && needs_scroll {
+                            ui.data_mut(|d| {
+                                d.insert_temp(
+                                    scroll_pending_id,
+                                    (
+                                        combo_scroll_offset(
+                                            opts,
+                                            &highlight,
+                                            SETTINGS_COMBO_POPUP_H,
+                                        ),
+                                        4u8,
+                                    ),
+                                );
+                            });
                         }
                     } else {
                         text = typed;
@@ -1901,12 +2126,27 @@ fn searchable_combo(
         let before = selected_key.clone();
         let popup_pos = egui::pos2(bar_resp.rect.left(), bar_resp.rect.bottom() + 2.0);
         let hi = highlight.clone();
-        let jump = scroll_jump.take();
+        let jump = if needs_scroll {
+            ui.data_mut(|d| match d.get_temp::<(f32, u8)>(scroll_pending_id) {
+                Some((off, left)) if left > 0 => {
+                    let next = left - 1;
+                    if next == 0 {
+                        d.remove::<(f32, u8)>(scroll_pending_id);
+                    } else {
+                        d.insert_temp(scroll_pending_id, (off, next));
+                    }
+                    Some(off)
+                }
+                _ => None,
+            })
+        } else {
+            None
+        };
 
         let area_inner = Area::new(area_id)
             .order(Order::Foreground)
             .fixed_pos(popup_pos)
-            .default_size(Vec2::new(bar_w, list_h))
+            .default_size(Vec2::new(bar_w, popup_h))
             .sense(Sense::click())
             .show(ui.ctx(), |ui| {
                 settings_combo_popup_style().apply(ui.style_mut());
@@ -1921,17 +2161,37 @@ fn searchable_combo(
                         color: Color32::from_black_alpha(28),
                     })
                     .show(ui, |ui| {
-                        ui.set_min_size(Vec2::new(bar_w, list_h));
-                        ui.set_max_size(Vec2::new(bar_w, list_h));
-                        let mut scroll = egui::ScrollArea::vertical()
-                            .id_salt((id_salt, "scroll"))
-                            .max_height(list_h)
-                            .animated(false)
-                            .auto_shrink([false, false]);
-                        if let Some(off) = jump {
-                            scroll = scroll.vertical_scroll_offset(off);
-                        }
-                        scroll.show(ui, |ui| {
+                        ui.set_min_width(bar_w);
+                        ui.set_max_width(bar_w);
+                        if needs_scroll {
+                            let mut scroll = egui::ScrollArea::vertical()
+                                .id_salt((id_salt, "scroll"))
+                                .max_height(SETTINGS_COMBO_POPUP_H)
+                                .animated(false)
+                                .auto_shrink([false, true])
+                                .scroll_bar_visibility(
+                                    egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
+                                );
+                            if let Some(off) = jump {
+                                scroll = scroll.vertical_scroll_offset(off);
+                            }
+                            scroll.show(ui, |ui| {
+                                ui.set_width(bar_w);
+                                ui.spacing_mut().item_spacing.y = 0.0;
+                                ui.add_space(LIST_PAD_Y);
+                                for (i, (key, label)) in opts.iter().enumerate() {
+                                    if i > 0 {
+                                        ui.add_space(ROW_GAP);
+                                    }
+                                    let active = *key == hi;
+                                    let resp = combo_option_row(ui, active, label);
+                                    if resp.clicked() {
+                                        *selected_key = key.clone();
+                                    }
+                                }
+                                ui.add_space(LIST_PAD_Y);
+                            });
+                        } else {
                             ui.set_width(bar_w);
                             ui.spacing_mut().item_spacing.y = 0.0;
                             ui.add_space(LIST_PAD_Y);
@@ -1946,7 +2206,7 @@ fn searchable_combo(
                                 }
                             }
                             ui.add_space(LIST_PAD_Y);
-                        });
+                        }
                     });
             });
 
@@ -1978,6 +2238,7 @@ fn searchable_combo(
             d.insert_temp(typed_id, 0usize);
             d.insert_temp(suppress_id, false);
             d.insert_temp(ime_id, false);
+            d.remove::<(f32, u8)>(scroll_pending_id);
         });
     }
     ui.data_mut(|d| d.insert_temp(open_id, is_open));
@@ -2160,13 +2421,11 @@ fn ensure_preview_texture(
     cache: &mut HashMap<String, TextureHandle>,
     pet: &PetKindInfo,
 ) -> Option<TextureHandle> {
-    ensure_bytes_texture(
-        ctx,
-        cache,
-        &pet_preview_key(pet.id),
-        pet.preview,
+    let edge = crate::image_decode::physical_raster_edge(
         crate::image_decode::PREVIEW_RASTER_EDGE,
-    )
+        ctx.pixels_per_point(),
+    );
+    ensure_bytes_texture(ctx, cache, &pet_preview_key(pet.id, edge), pet.preview, edge)
 }
 
 fn ensure_bytes_texture(
@@ -2186,25 +2445,16 @@ fn ensure_bytes_texture(
     Some(tex)
 }
 
-fn pet_preview_key(pet_id: &str) -> String {
-    format!(
-        "pet_preview_{pet_id}@{}",
-        crate::image_decode::PREVIEW_RASTER_EDGE
-    )
+fn pet_preview_key(pet_id: &str, edge: u32) -> String {
+    format!("pet_preview_{pet_id}@{edge}")
 }
 
-fn plugin_icon_key(plugin_id: &str) -> String {
-    format!(
-        "icon:plugin:{plugin_id}@{}",
-        crate::image_decode::ICON_RASTER_EDGE
-    )
+fn plugin_icon_key(plugin_id: &str, edge: u32) -> String {
+    format!("icon:plugin:{plugin_id}@{edge}")
 }
 
-fn hud_item_icon_key(plugin_id: &str, contrib_id: &str) -> String {
-    format!(
-        "icon:hud:{plugin_id}.{contrib_id}@{}",
-        crate::image_decode::ICON_RASTER_EDGE
-    )
+fn hud_item_icon_key(plugin_id: &str, contrib_id: &str, edge: u32) -> String {
+    format!("icon:hud:{plugin_id}.{contrib_id}@{edge}")
 }
 
 fn page_header(ui: &mut egui::Ui, title: &str, intro: &str) {

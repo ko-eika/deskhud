@@ -6,8 +6,9 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicUsize, Orderin
     use windows_sys::Win32::Graphics::Dwm::{
         DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
         DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_COLOR_NONE, DWMWA_SYSTEMBACKDROP_TYPE,
-        DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWMWCP_ROUND, DWMWCP_ROUNDSMALL,
-        DWMSBT_MAINWINDOW, DWMSBT_NONE, DWMSBT_TRANSIENTWINDOW, DWM_BB_BLURREGION, DWM_BB_ENABLE,
+        DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
+        DWMWCP_ROUND, DWMWCP_ROUNDSMALL,
+        DWMSBT_MAINWINDOW, DWMSBT_NONE, DWM_BB_BLURREGION, DWM_BB_ENABLE,
         DWM_BLURBEHIND,
     };
     use windows_sys::Win32::Graphics::Gdi::{
@@ -34,12 +35,19 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicUsize, Orderin
 
     static SUBCLASS_HWND: AtomicIsize = AtomicIsize::new(0);
     static PREV_WNDPROC: AtomicUsize = AtomicUsize::new(0);
+    /// 右键菜单等弹出窗：与宠窗分开的子类化槽，避免互抢 WndProc。
+    static POPUP_SUBCLASS_HWND: AtomicIsize = AtomicIsize::new(0);
+    static POPUP_PREV_WNDPROC: AtomicUsize = AtomicUsize::new(0);
     static DWM_APPLIED: AtomicBool = AtomicBool::new(false);
     static WHEEL_HOOK: AtomicIsize = AtomicIsize::new(0);
     static WHEEL_ACCUM: AtomicI32 = AtomicI32::new(0);
 
     fn pet_wnd_proc_addr() -> usize {
         pet_wnd_proc as *const () as usize
+    }
+
+    fn popup_wnd_proc_addr() -> usize {
+        popup_wnd_proc as *const () as usize
     }
 
     /// 拦截非客户区绘制：点击获焦时系统会画标题条，这里直接吃掉。
@@ -68,6 +76,29 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicUsize, Orderin
         unsafe { CallWindowProcW(Some(prev_fn), hwnd, msg, wparam, lparam) }
     }
 
+    /// 弹出菜单：同样吃掉 NC 白条（与宠窗同因）。
+    unsafe extern "system" fn popup_wnd_proc(
+        hwnd: HWND,
+        msg: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        match msg {
+            WM_NCCALCSIZE if wparam != 0 => return 0,
+            WM_NCACTIVATE => return 1,
+            WM_NCPAINT => return 0,
+            _ => {}
+        }
+
+        let prev = POPUP_PREV_WNDPROC.load(Ordering::SeqCst);
+        if prev == 0 || prev == popup_wnd_proc_addr() {
+            return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
+        }
+        type WndProcFn = unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT;
+        let prev_fn: WndProcFn = unsafe { std::mem::transmute(prev) };
+        unsafe { CallWindowProcW(Some(prev_fn), hwnd, msg, wparam, lparam) }
+    }
+
     fn restore_subclass_if_needed(old_hwnd: isize) {
         if old_hwnd == 0 {
             return;
@@ -79,6 +110,22 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicUsize, Orderin
         unsafe {
             let current = GetWindowLongPtrW(old_hwnd as HWND, GWLP_WNDPROC) as usize;
             if current == pet_wnd_proc_addr() {
+                let _ = SetWindowLongPtrW(old_hwnd as HWND, GWLP_WNDPROC, prev as isize);
+            }
+        }
+    }
+
+    fn restore_popup_subclass_if_needed(old_hwnd: isize) {
+        if old_hwnd == 0 {
+            return;
+        }
+        let prev = POPUP_PREV_WNDPROC.swap(0, Ordering::SeqCst);
+        if prev == 0 || prev == popup_wnd_proc_addr() {
+            return;
+        }
+        unsafe {
+            let current = GetWindowLongPtrW(old_hwnd as HWND, GWLP_WNDPROC) as usize;
+            if current == popup_wnd_proc_addr() {
                 let _ = SetWindowLongPtrW(old_hwnd as HWND, GWLP_WNDPROC, prev as isize);
             }
         }
@@ -109,6 +156,35 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicUsize, Orderin
             }
             PREV_WNDPROC.store(prev, Ordering::SeqCst);
             SUBCLASS_HWND.store(key, Ordering::SeqCst);
+        }
+    }
+
+    fn install_popup_subclass(hwnd: HWND) {
+        let key = hwnd as isize;
+        if key == 0 {
+            return;
+        }
+        let old = POPUP_SUBCLASS_HWND.load(Ordering::SeqCst);
+        unsafe {
+            let current = GetWindowLongPtrW(hwnd, GWLP_WNDPROC) as usize;
+            if old == key && current == popup_wnd_proc_addr() {
+                return;
+            }
+            if old != 0 && old != key {
+                restore_popup_subclass_if_needed(old);
+                POPUP_SUBCLASS_HWND.store(0, Ordering::SeqCst);
+            }
+            if current == popup_wnd_proc_addr() {
+                POPUP_SUBCLASS_HWND.store(key, Ordering::SeqCst);
+                return;
+            }
+            let prev =
+                SetWindowLongPtrW(hwnd, GWLP_WNDPROC, popup_wnd_proc_addr() as isize) as usize;
+            if prev == 0 || prev == popup_wnd_proc_addr() {
+                return;
+            }
+            POPUP_PREV_WNDPROC.store(prev, Ordering::SeqCst);
+            POPUP_SUBCLASS_HWND.store(key, Ordering::SeqCst);
         }
     }
 
@@ -226,18 +302,95 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicUsize, Orderin
         apply_pet_dwm(hwnd);
     }
 
-    /// 弹出菜单：Acrylic + 系统小圆角。`pet_hwnd` 用于拒绝误绑到宠窗。
-    pub fn ensure_acrylic_popup(hwnd: isize, pet_hwnd: Option<isize>) {
-        if pet_hwnd == Some(hwnd) {
+    /// 弹出菜单 chrome：去标题栏 + 关 Acrylic + NC 拦截（与宠窗顶白线同因）。
+    ///
+    /// 可重复调用；勿用 Acrylic——暗色下易留一条浅顶边，菜单已由 egui 铺不透明底。
+    pub fn ensure_acrylic_popup(hwnd: isize, pet_hwnd: Option<isize>, dark: bool) {
+        if hwnd == 0 || pet_hwnd == Some(hwnd) {
             return;
         }
         let hwnd = hwnd as HWND;
+        // 仍带系统标题栏的窗口（设置页）禁止剥 chrome
+        unsafe {
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+            if (style & WS_CAPTION as isize) != 0 {
+                return;
+            }
+        }
         apply_styles(hwnd);
-        apply_backdrop(
-            hwnd,
-            DWMSBT_TRANSIENTWINDOW,
-            DWMWCP_ROUNDSMALL as u32,
-        );
+        install_popup_subclass(hwnd);
+        // DWMSBT_NONE：避免 Acrylic/Mica 在暗色主题画出浅色顶边
+        apply_backdrop(hwnd, DWMSBT_NONE, DWMWCP_ROUNDSMALL as u32);
+        let use_dark: BOOL = if dark { TRUE } else { 0 };
+        unsafe {
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
+                &use_dark as *const _ as *const _,
+                std::mem::size_of_val(&use_dark) as u32,
+            );
+        }
+    }
+
+    /// 菜单关闭时还原弹出窗子类化（可选；下次打开会重装）。
+    pub fn release_popup_chrome(hwnd: Option<isize>) {
+        let Some(h) = hwnd else {
+            return;
+        };
+        if POPUP_SUBCLASS_HWND.load(Ordering::SeqCst) == h {
+            restore_popup_subclass_if_needed(h);
+            POPUP_SUBCLASS_HWND.store(0, Ordering::SeqCst);
+        }
+    }
+
+    /// 设置窗：恢复系统标题栏/可调边框（若曾被菜单 chrome 误剥）。
+    pub fn ensure_settings_chrome(hwnd: isize) {
+        if hwnd == 0 {
+            return;
+        }
+        // 误装在设置窗上的弹出子类化必须先卸掉
+        if POPUP_SUBCLASS_HWND.load(Ordering::SeqCst) == hwnd {
+            restore_popup_subclass_if_needed(hwnd);
+            POPUP_SUBCLASS_HWND.store(0, Ordering::SeqCst);
+        }
+        let hwnd = hwnd as HWND;
+        unsafe {
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+            let has_caption = (style & WS_CAPTION as isize) != 0;
+            let is_popup = (style & WS_POPUP as isize) != 0;
+            let desired = (style & !(WS_POPUP as isize))
+                | WS_CAPTION as isize
+                | WS_SYSMENU as isize
+                | WS_THICKFRAME as isize
+                | WS_MINIMIZEBOX as isize
+                | WS_MAXIMIZEBOX as isize
+                | WS_VISIBLE as isize;
+
+            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            let mut ex_desired = ex & !(WS_EX_TOOLWINDOW as isize);
+            ex_desired |= WS_EX_APPWINDOW as isize;
+
+            let mut changed = false;
+            if !has_caption || is_popup || desired != style {
+                let _ = SetWindowLongPtrW(hwnd, GWL_STYLE, desired);
+                changed = true;
+            }
+            if ex_desired != ex {
+                let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_desired);
+                changed = true;
+            }
+            if changed {
+                let _ = SetWindowPos(
+                    hwnd,
+                    std::ptr::null_mut(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                );
+            }
+        }
     }
 
     /// 设置类窗口：Mica + 系统圆角。`pet_hwnd` 用于拒绝误绑到宠窗。

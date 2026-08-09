@@ -1155,16 +1155,18 @@ impl eframe::App for PetApp {
             self.settings.show(&ctx, self.hwnd);
         }
         if self.pet_menu.is_open() {
-            self.pet_menu.show(&ctx, self.hwnd);
+            self.pet_menu
+                .show(&ctx, self.hwnd, self.settings.settings_hwnd());
         }
 
         let hud_items = self.host.all_hud_contributions();
         // 设置打开时 HUD 仍用已应用 prefs：草稿开关即时拆建槽窗极易 AV
-        let (done_l, cancel_l, reset_l, reset_size_l, hint_l) = (
+        let (done_l, cancel_l, reset_l, reset_size_l, reset_size_hint_l, hint_l) = (
             self.prefs.t(deskhud_ui::MessageKey::HudLayoutDone).to_string(),
             self.prefs.t(deskhud_ui::MessageKey::HudLayoutCancel).to_string(),
             self.prefs.t(deskhud_ui::MessageKey::ActionReset).to_string(),
             self.prefs.t(deskhud_ui::MessageKey::HudLayoutResetSize).to_string(),
+            self.prefs.t(deskhud_ui::MessageKey::HudLayoutResetSizeHint).to_string(),
             self.prefs.t(deskhud_ui::MessageKey::HudLayoutHint).to_string(),
         );
         let topmost = self.window_topmost();
@@ -1178,6 +1180,7 @@ impl eframe::App for PetApp {
             &cancel_l,
             &reset_l,
             &reset_size_l,
+            &reset_size_hint_l,
             &hint_l,
             topmost,
         );

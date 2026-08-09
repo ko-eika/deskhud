@@ -5,8 +5,6 @@
 pub enum MessageKey {
     /// 应用名。
     AppName,
-    /// 关闭。
-    ActionClose,
     /// 取消。
     ActionCancel,
     /// 应用。
@@ -41,10 +39,6 @@ pub enum MessageKey {
     SettingsPetWindowSize,
     /// 当前选中标记。
     SettingsPetSelected,
-    /// 宠物选择：网格。
-    SettingsPetViewGrid,
-    /// 宠物选择：列表。
-    SettingsPetViewList,
     /// 当前宠物的行为配置区标题。
     SettingsPetOptions,
     /// 插件页说明（含第三方风险提示）。
@@ -75,18 +69,10 @@ pub enum MessageKey {
     SettingsUiFontStyle,
     /// 字体大小。
     SettingsUiFontSize,
-    /// 样式：常规。
-    OptFontRegular,
-    /// 样式：粗体。
-    OptFontBold,
-    /// 样式：细体。
-    OptFontLight,
     /// 字体预览句。
     SettingsUiFontPreview,
     /// 插件总开关关闭时的提示。
     HudPluginDisabledHint,
-    /// 插件卡：总开关旁标签。
-    HudPluginEnable,
     /// 插件页：全局启用全部 HUD。
     HudMasterEnable,
     /// 插件页：全局已开启时的说明。
@@ -105,12 +91,10 @@ pub enum MessageKey {
     HudLayoutHint,
     /// 布局编辑：重置条目大小为 1×。
     HudLayoutResetSize,
+    /// 布局编辑：重置大小悬浮说明。
+    HudLayoutResetSizeHint,
     /// 右键：插件布局。
     MenuHudLayout,
-    /// 右键：启用全部插件 HUD。
-    MenuHudEnable,
-    /// 右键：禁用全部插件 HUD。
-    MenuHudDisable,
     /// 全局置顶。
     SettingsTopmost,
     /// 全局置顶说明。

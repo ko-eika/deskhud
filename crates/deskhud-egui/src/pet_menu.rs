@@ -26,6 +26,54 @@ const MENU_ROWS: usize = 5;
 /// 分隔线条数。
 const MENU_SEPS: usize = 2;
 
+mod menu_tone {
+    use eframe::egui::{Color32, Context, Theme};
+
+    pub fn sync_dark(ctx: &Context) -> bool {
+        matches!(ctx.theme(), Theme::Dark)
+    }
+
+    pub fn fill(dark: bool) -> Color32 {
+        if dark {
+            Color32::from_rgb(43, 45, 49)
+        } else {
+            Color32::from_rgb(248, 248, 252)
+        }
+    }
+
+    pub fn text(dark: bool) -> Color32 {
+        if dark {
+            Color32::from_rgb(232, 234, 237)
+        } else {
+            Color32::from_rgb(28, 28, 32)
+        }
+    }
+
+    pub fn hover(dark: bool) -> Color32 {
+        if dark {
+            Color32::from_rgb(52, 54, 60)
+        } else {
+            Color32::from_rgb(232, 236, 244)
+        }
+    }
+
+    pub fn line(dark: bool) -> Color32 {
+        if dark {
+            Color32::from_rgb(60, 64, 72)
+        } else {
+            Color32::from_rgb(220, 222, 230)
+        }
+    }
+
+    pub fn check(dark: bool) -> Color32 {
+        if dark {
+            Color32::from_rgb(110, 168, 255)
+        } else {
+            Color32::from_rgb(46, 120, 210)
+        }
+    }
+}
+
 fn menu_height() -> f32 {
     // 与 Frame 上下边距一致；行间 item_spacing 在 draw 里清零，避免底项被裁
     MENU_PAD_Y * 2.0
@@ -90,7 +138,8 @@ pub struct PetMenuState {
     pub opened_at: Instant,
     pub menu_hwnd: Option<isize>,
     pub pet_hwnd: Option<isize>,
-    pub popup_chrome_done: bool,
+    /// 设置窗 HWND：chrome 绑定时必须排除。
+    pub settings_hwnd: Option<isize>,
     pub anchor: egui::Pos2,
     pub cursor: egui::Pos2,
     pub ppp: f32,
@@ -119,7 +168,7 @@ impl PetMenuHost {
                 opened_at: Instant::now(),
                 menu_hwnd: None,
                 pet_hwnd: None,
-                popup_chrome_done: false,
+                settings_hwnd: None,
                 anchor: egui::pos2(0.0, 0.0),
                 cursor: egui::pos2(0.0, 0.0),
                 ppp: 1.0,
@@ -171,7 +220,6 @@ impl PetMenuHost {
         s.focus_once = true;
         s.opened_at = Instant::now();
         s.menu_hwnd = None;
-        s.popup_chrome_done = false;
         s.cursor = cursor_points;
         s.ppp = ppp;
         s.menu_w = provisional_w;
@@ -187,10 +235,22 @@ impl PetMenuHost {
         s.quit = false;
     }
 
-    pub fn show(&self, ctx: &egui::Context, pet_hwnd: Option<isize>) {
+    pub fn show(
+        &self,
+        ctx: &egui::Context,
+        pet_hwnd: Option<isize>,
+        settings_hwnd: Option<isize>,
+    ) {
         if !self.lock().open {
             return;
         }
+        self.lock().settings_hwnd = settings_hwnd;
+        // 设置页打开且在草稿预览主题时，勿用已应用 prefs 覆盖全局主题
+        if settings_hwnd.is_none() {
+            let theme = self.lock().locale_prefs.shell.ui_theme;
+            crate::theme::apply(ctx, theme);
+        }
+
         self.lock().pet_hwnd = pet_hwnd;
         self.maybe_dismiss_outside(ctx, pet_hwnd);
         if !self.lock().open {
@@ -283,21 +343,38 @@ impl PetMenuHost {
 
     fn draw(&self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        // 设置页草稿主题预览优先；菜单仅在设置关闭时推主题
+        if self.lock().settings_hwnd.is_none() {
+            let theme = self.lock().locale_prefs.shell.ui_theme;
+            crate::theme::apply(&ctx, theme);
+        }
         {
             let mut s = self.lock();
             let pet = s.pet_hwnd;
+            let settings = s.settings_hwnd;
+            // 若误把设置窗当成菜单，立刻丢掉并还原装饰
+            if let Some(h) = s.menu_hwnd {
+                if settings == Some(h) || pet == Some(h) {
+                    platform::release_popup_chrome(Some(h));
+                    if settings == Some(h) {
+                        platform::ensure_settings_chrome(h);
+                    }
+                    s.menu_hwnd = None;
+                }
+            }
             if s.menu_hwnd.is_none() {
                 if let Some(h) = platform::foreground_hwnd() {
-                    if Some(h) != pet {
+                    let forbidden = pet == Some(h) || settings == Some(h);
+                    let size_ok = menu_hwnd_size_ok(h, s.menu_w, s.ppp);
+                    if !forbidden && size_ok {
                         s.menu_hwnd = Some(h);
                     }
                 }
             }
             if let Some(h) = s.menu_hwnd {
-                if !s.popup_chrome_done {
-                    platform::ensure_acrylic_popup(h, pet);
-                    s.popup_chrome_done = true;
-                }
+                // 每帧维持（同宠窗）：获焦时系统会画回 NC 白条
+                let dark = menu_tone::sync_dark(&ctx);
+                platform::ensure_acrylic_popup(h, pet, dark);
             }
         }
 
@@ -313,7 +390,8 @@ impl PetMenuHost {
             return;
         }
 
-        let fill = Color32::from_rgb(248, 248, 252);
+        let dark = menu_tone::sync_dark(&ctx);
+        let fill = menu_tone::fill(dark);
         ui.painter()
             .rect_filled(ui.max_rect(), CornerRadius::ZERO, fill);
 
@@ -338,34 +416,37 @@ impl PetMenuHost {
                 let master_on = s.master_enabled;
                 let topmost_on = s.pet_topmost;
 
-                if action_row(ui, &ellipsize(&ctx, &settings, max_text_w)).clicked() {
+                if action_row(ui, &ellipsize(&ctx, &settings, max_text_w), dark).clicked() {
                     s.open_settings = true;
                     close = true;
                 }
 
-                if check_row(ui, &ellipsize(&ctx, &topmost_l, max_text_w), topmost_on).clicked()
+                if check_row(ui, &ellipsize(&ctx, &topmost_l, max_text_w), topmost_on, dark)
+                    .clicked()
                 {
                     s.toggle_topmost = Some(!topmost_on);
                     close = true;
                 }
 
-                menu_separator(ui);
+                menu_separator(ui, dark);
 
-                if check_row(ui, &ellipsize(&ctx, &plugins, max_text_w), master_on).clicked() {
+                if check_row(ui, &ellipsize(&ctx, &plugins, max_text_w), master_on, dark)
+                    .clicked()
+                {
                     s.toggle_master = Some(!master_on);
                     close = true;
                 }
 
                 ui.add_enabled_ui(master_on, |ui| {
-                    if action_row(ui, &ellipsize(&ctx, &layout, max_text_w)).clicked() {
+                    if action_row(ui, &ellipsize(&ctx, &layout, max_text_w), dark).clicked() {
                         s.begin_hud_layout = true;
                         close = true;
                     }
                 });
 
-                menu_separator(ui);
+                menu_separator(ui, dark);
 
-                if action_row(ui, &ellipsize(&ctx, &quit, max_text_w)).clicked() {
+                if action_row(ui, &ellipsize(&ctx, &quit, max_text_w), dark).clicked() {
                     s.quit = true;
                     close = true;
                 }
@@ -378,17 +459,31 @@ impl PetMenuHost {
 
     fn close_viewport(&self, ctx: &egui::Context) {
         let mut s = self.lock();
+        let menu_hwnd = s.menu_hwnd;
         s.open = false;
         s.menu_hwnd = None;
-        s.popup_chrome_done = false;
         s.width_ready = false;
         drop(s);
+        platform::release_popup_chrome(menu_hwnd);
         ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::CancelClose);
         ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Visible(false));
     }
 }
 
-fn menu_separator(ui: &mut egui::Ui) {
+fn menu_hwnd_size_ok(hwnd: isize, menu_w_points: f32, ppp: f32) -> bool {
+    let Some((l, t, r, b)) = platform::window_screen_rect(hwnd) else {
+        return false;
+    };
+    let ppp = ppp.max(0.01);
+    let expect_w = (menu_w_points * ppp).round();
+    let expect_h = (menu_height() * ppp).round();
+    let w = (r - l) as f32;
+    let h = (b - t) as f32;
+    // 允许边框/DPI 误差；设置窗远大于此
+    (w - expect_w).abs() <= 48.0 && (h - expect_h).abs() <= 48.0
+}
+
+fn menu_separator(ui: &mut egui::Ui, dark: bool) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), SEP_H), Sense::hover());
     let y = rect.center().y;
     ui.painter().line_segment(
@@ -396,46 +491,40 @@ fn menu_separator(ui: &mut egui::Ui) {
             egui::pos2(rect.left() + 4.0, y),
             egui::pos2(rect.right() - 4.0, y),
         ],
-        Stroke::new(1.0, Color32::from_rgb(220, 222, 230)),
+        Stroke::new(1.0, menu_tone::line(dark)),
     );
 }
 
-fn action_row(ui: &mut egui::Ui, label: &str) -> egui::Response {
+fn action_row(ui: &mut egui::Ui, label: &str, dark: bool) -> egui::Response {
     let (rect, response) =
         ui.allocate_exact_size(Vec2::new(ui.available_width(), ROW_H), Sense::click());
     if response.hovered() {
-        ui.painter().rect_filled(
-            rect,
-            CornerRadius::same(6),
-            Color32::from_rgb(232, 236, 244),
-        );
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(6), menu_tone::hover(dark));
     }
     ui.painter().text(
         egui::pos2(rect.left() + TEXT_INSET, rect.center().y),
         Align2::LEFT_CENTER,
         label,
         FontId::proportional(LABEL_FONT),
-        Color32::from_rgb(28, 28, 32),
+        menu_tone::text(dark),
     );
     response
 }
 
-fn check_row(ui: &mut egui::Ui, label: &str, checked: bool) -> egui::Response {
+fn check_row(ui: &mut egui::Ui, label: &str, checked: bool, dark: bool) -> egui::Response {
     let (rect, response) =
         ui.allocate_exact_size(Vec2::new(ui.available_width(), ROW_H), Sense::click());
     if response.hovered() {
-        ui.painter().rect_filled(
-            rect,
-            CornerRadius::same(6),
-            Color32::from_rgb(232, 236, 244),
-        );
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(6), menu_tone::hover(dark));
     }
     ui.painter().text(
         egui::pos2(rect.left() + TEXT_INSET, rect.center().y),
         Align2::LEFT_CENTER,
         label,
         FontId::proportional(LABEL_FONT),
-        Color32::from_rgb(28, 28, 32),
+        menu_tone::text(dark),
     );
     if checked {
         ui.painter().text(
@@ -443,7 +532,7 @@ fn check_row(ui: &mut egui::Ui, label: &str, checked: bool) -> egui::Response {
             Align2::RIGHT_CENTER,
             "✓",
             FontId::proportional(14.0),
-            Color32::from_rgb(46, 120, 210),
+            menu_tone::check(dark),
         );
     }
     response

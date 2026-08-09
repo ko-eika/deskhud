@@ -1,5 +1,5 @@
-//! HUD：平时每条一个小窗；布局编辑时关闭全部小窗，打开单个截图式编辑视口。
-//! 子窗勿 `with_transparent(true)`；半透明靠截图底 + 半透明遮罩绘制模拟。
+//! HUD：运行态每显示器一个合成窗（同层绘制全部条目）；布局编辑时关闭合成窗，打开截图式编辑视口。
+//! Glow 子窗勿 `with_transparent(true)`（GL config 不支持）；合成窗用不透明底，编辑器用截图底模拟半透明。
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -13,7 +13,15 @@ use deskhud_ui::{HudPrefs, HudSlotLayout, UiPreferences};
 
 use crate::platform::{self, DisplayInfo};
 
-fn slot_viewport_id(plugin_id: &str, contrib_id: &str) -> egui::ViewportId {
+/// 合成窗外扩边距（逻辑点），避免 chip 贴边被裁。
+const COMPOSE_MARGIN: f32 = 4.0;
+
+fn compose_viewport_id(display_id: &str) -> egui::ViewportId {
+    egui::ViewportId::from_hash_of(("deskhud_hud_compose", display_id))
+}
+
+/// 旧版「每条一窗」视口 id；压制时一并 Close，避免升级残留 HWND。
+fn legacy_slot_viewport_id(plugin_id: &str, contrib_id: &str) -> egui::ViewportId {
     egui::ViewportId::from_hash_of(("deskhud_hud_slot", plugin_id, contrib_id))
 }
 
@@ -74,9 +82,10 @@ pub struct HudOverlayHost {
     drag_origin_layout: HudSlotLayout,
     /// 当前选中的条目（「重置大小」只作用于它）。
     selected_key: Option<String>,
-    live_slots: HashSet<(String, String)>,
-    slot_hwnd: HashMap<String, isize>,
-    slot_click_through: HashMap<String, bool>,
+    /// 当前存活的合成窗（键 = display id）。
+    live_composites: HashSet<String>,
+    compose_hwnd: HashMap<String, isize>,
+    compose_click_through: HashMap<String, bool>,
     pending: Option<LayoutPending>,
     editor_open: bool,
     /// 编辑用截图（RGBA）；无截图时用纯色底。
@@ -84,10 +93,12 @@ pub struct HudOverlayHost {
     screenshot_tex: Option<TextureHandle>,
     /// 截图平均亮度（0..=1），供网格/提示对比色。
     bg_luma: f32,
+    /// 「重置大小」SVG 图标：(栅格边长, 纹理)。
+    reset_icon: Option<(u32, TextureHandle)>,
     editor_display: Option<DisplayInfo>,
-    /// 进入编辑后先藏槽窗，再延后截屏（避免拍到旧 HUD）。
+    /// 进入编辑后先藏合成窗，再延后截屏（避免拍到旧 HUD）。
     skip_screenshot_frames: u8,
-    /// 槽窗已应用的全局置顶（变化时才下发 WindowLevel，避免每帧 SetWindowPos）。
+    /// 合成窗已应用的全局置顶（变化时才下发 WindowLevel，避免每帧 SetWindowPos）。
     applied_topmost: Option<bool>,
     /// 上一帧全局左键，用于可靠检测按下边沿。
     lmb_prev: bool,
@@ -141,7 +152,7 @@ impl HudOverlayHost {
             .find(|d| d.primary)
             .or(displays.first())
             .cloned();
-        // 截图延后到关槽窗之后（show 里），避免把 HUD 小窗拍进去
+        // 截图延后到关合成窗之后（show 里），避免把 HUD 拍进去
         self.screenshot = None;
         self.screenshot_tex = None;
         self.bg_luma = 0.25;
@@ -207,7 +218,7 @@ impl HudOverlayHost {
         self.pending.is_some()
     }
 
-    /// 置顶变更后清掉槽窗缓存层级，下一帧重新下发。
+    /// 置顶变更后清掉合成窗缓存层级，下一帧重新下发。
     pub fn invalidate_applied_topmost(&mut self) {
         self.applied_topmost = None;
     }
@@ -252,6 +263,7 @@ impl HudOverlayHost {
         cancel_label: &str,
         reset_label: &str,
         reset_size_label: &str,
+        reset_size_hint: &str,
         hint_label: &str,
         // 全局置顶：宠 / HUD / 菜单 / 设置同一层级，禁止混用。
         topmost: bool,
@@ -289,8 +301,8 @@ impl HudOverlayHost {
         };
 
         if editing {
-            // 每帧强制藏掉所有 HUD 槽窗（含已知条目，Close 不可靠）
-            suppress_all_slots(host, ctx, hud_items);
+            // 每帧强制藏掉所有 HUD 合成窗（含已知条目，Close 不可靠）
+            suppress_all_composites(host, ctx, hud_items);
 
             // 必须先截到桌面，再开编辑窗；否则截到的是不透明编辑窗本身
             let editor_ready = match host.lock() {
@@ -365,6 +377,7 @@ impl HudOverlayHost {
                     cancel_label,
                     reset_label,
                     reset_size_label,
+                    reset_size_hint,
                     hint_label,
                 );
             }
@@ -389,43 +402,63 @@ pub fn force_close_editor(ctx: &egui::Context, host: &Arc<Mutex<HudOverlayHost>>
     }
 }
 
-/// 从外部（进入编辑瞬间）强制藏掉 HUD 槽窗。
+/// 从外部（进入编辑瞬间）强制藏掉 HUD 合成窗。
 pub fn suppress_hud_slots_now(
     ctx: &egui::Context,
     host: &Arc<Mutex<HudOverlayHost>>,
     hud_items: &[(&str, HudContribution)],
 ) {
-    suppress_all_slots(host, ctx, hud_items);
+    suppress_all_composites(host, ctx, hud_items);
 }
 
-fn suppress_all_slots(
+fn suppress_all_composites(
     host: &Arc<Mutex<HudOverlayHost>>,
     ctx: &egui::Context,
     hud_items: &[(&str, HudContribution)],
 ) {
-    let mut pairs: HashSet<(String, String)> = HashSet::new();
+    let mut display_ids: HashSet<String> = HashSet::new();
     if let Ok(mut guard) = host.lock() {
-        pairs.extend(guard.live_slots.drain());
-        // 原生立刻隐藏已缓存 HWND
-        let hwnds: Vec<isize> = guard.slot_hwnd.values().copied().collect();
+        display_ids.extend(guard.live_composites.drain());
+        let hwnds: Vec<isize> = guard.compose_hwnd.values().copied().collect();
         for h in hwnds {
             platform::set_window_visible(h, false);
         }
-        guard.slot_hwnd.clear();
-        guard.slot_click_through.clear();
+        guard.compose_hwnd.clear();
+        guard.compose_click_through.clear();
     }
-    for (pid, c) in hud_items {
-        pairs.insert(((*pid).to_string(), c.id.to_string()));
+
+    for d in platform::list_displays() {
+        display_ids.insert(d.id);
     }
-    for (p, c) in pairs {
-        let vp = slot_viewport_id(&p, &c);
+
+    for id in &display_ids {
+        let vp = compose_viewport_id(id);
         ctx.send_viewport_cmd_to(vp, ViewportCommand::Visible(false));
         ctx.send_viewport_cmd_to(vp, ViewportCommand::Close);
-        let title = format!("DeskHud HUD {p}.{c}");
+        let title = format!("DeskHud HUD Compose {id}");
         if let Some(h) = platform::find_window_by_title(&title) {
             platform::set_window_visible(h, false);
         }
     }
+
+    // 清理旧 per-contrib 视口（升级前残留）
+    for (pid, c) in hud_items {
+        let vp = legacy_slot_viewport_id(pid, c.id);
+        ctx.send_viewport_cmd_to(vp, ViewportCommand::Visible(false));
+        ctx.send_viewport_cmd_to(vp, ViewportCommand::Close);
+        let title = format!("DeskHud HUD {pid}.{}", c.id);
+        if let Some(h) = platform::find_window_by_title(&title) {
+            platform::set_window_visible(h, false);
+        }
+    }
+}
+
+/// 单屏合成窗内的一条 chip 绘制信息。
+struct ComposeChip {
+    label: String,
+    scale: f32,
+    /// 相对合成窗左上角的矩形（逻辑点）。
+    rel: Rect,
 }
 
 fn show_slots(
@@ -438,33 +471,44 @@ fn show_slots(
     let displays = platform::list_displays();
     let ppp = ctx.pixels_per_point().max(0.01);
 
-    let mut wanted: Vec<(String, String, HudContribution, usize)> = Vec::new();
+    // display_id → chips（绝对屏幕逻辑坐标）
+    let mut by_display: HashMap<String, Vec<(Pos2, Vec2, ComposeChip)>> = HashMap::new();
     let mut index = 0usize;
     for (pid, c) in hud_items {
         if !active_prefs.is_active(pid, c.id, c.default_enabled) {
             continue;
         }
-        wanted.push(((*pid).to_string(), c.id.to_string(), c.clone(), index));
+        let layout = active_prefs.slot_layout(pid, c.id, index);
         index += 1;
+        let Some(display) = resolve_display(&displays, &layout.display) else {
+            continue;
+        };
+        let label = slot_label(c.id, c.label);
+        let (pos, size) = slot_outer_points(display, &layout, ppp, c.id, &label);
+        by_display.entry(display.id.clone()).or_default().push((
+            pos,
+            size,
+            ComposeChip {
+                label,
+                scale: layout.scale,
+                rel: Rect::NOTHING, // 稍后按包围盒填
+            },
+        ));
     }
 
-    let wanted_keys: HashSet<(String, String)> = wanted
-        .iter()
-        .map(|(p, c, _, _)| (p.clone(), c.clone()))
-        .collect();
+    let wanted_displays: HashSet<String> = by_display.keys().cloned().collect();
     if let Ok(mut guard) = host.lock() {
         let stale: Vec<_> = guard
-            .live_slots
-            .difference(&wanted_keys)
+            .live_composites
+            .difference(&wanted_displays)
             .cloned()
             .collect();
-        for (p, c) in stale {
-            ctx.send_viewport_cmd_to(slot_viewport_id(&p, &c), ViewportCommand::Close);
-            let key = HudPrefs::layout_key(&p, &c);
-            guard.slot_hwnd.remove(&key);
-            guard.slot_click_through.remove(&key);
+        for id in stale {
+            ctx.send_viewport_cmd_to(compose_viewport_id(&id), ViewportCommand::Close);
+            guard.compose_hwnd.remove(&id);
+            guard.compose_click_through.remove(&id);
         }
-        guard.live_slots = wanted_keys.clone();
+        guard.live_composites = wanted_displays.clone();
     }
 
     let level = if topmost {
@@ -484,22 +528,49 @@ fn show_slots(
         })
         .unwrap_or(false);
     if topmost_changed {
-        // 只在置顶变化时对已有槽窗改层级；勿在 deferred 回调里每帧 WindowLevel（易 AV）
-        for (p, c) in &wanted_keys {
-            ctx.send_viewport_cmd_to(slot_viewport_id(p, c), ViewportCommand::WindowLevel(level));
+        // 只在置顶变化时对合成窗改层级；勿在 deferred 回调里每帧 WindowLevel（易 AV）
+        for id in &wanted_displays {
+            ctx.send_viewport_cmd_to(
+                compose_viewport_id(id),
+                ViewportCommand::WindowLevel(level),
+            );
         }
     }
 
-    for (pid, cid, contrib, idx) in wanted {
-        let key = HudPrefs::layout_key(&pid, &cid);
-        let layout = active_prefs.slot_layout(&pid, &cid, idx);
-        let Some(display) = resolve_display(&displays, &layout.display) else {
+    for (display_id, mut chips_abs) in by_display {
+        if chips_abs.is_empty() {
             continue;
-        };
-        let label = slot_label(&cid, contrib.label);
-        let (pos, size) = slot_outer_points(display, &layout, ppp, &cid, &label);
+        }
 
-        let title = format!("DeskHud HUD {pid}.{cid}");
+        let mut min_x = f32::INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+        for (pos, size, _) in &chips_abs {
+            min_x = min_x.min(pos.x);
+            min_y = min_y.min(pos.y);
+            max_x = max_x.max(pos.x + size.x);
+            max_y = max_y.max(pos.y + size.y);
+        }
+        min_x -= COMPOSE_MARGIN;
+        min_y -= COMPOSE_MARGIN;
+        max_x += COMPOSE_MARGIN;
+        max_y += COMPOSE_MARGIN;
+        let outer_pos = Pos2::new(min_x, min_y);
+        let outer_size = Vec2::new((max_x - min_x).max(1.0), (max_y - min_y).max(1.0));
+
+        let chips: Vec<ComposeChip> = chips_abs
+            .drain(..)
+            .map(|(pos, size, mut chip)| {
+                chip.rel = Rect::from_min_size(
+                    Pos2::new(pos.x - outer_pos.x, pos.y - outer_pos.y),
+                    size,
+                );
+                chip
+            })
+            .collect();
+
+        let title = format!("DeskHud HUD Compose {display_id}");
         let mut builder = egui::ViewportBuilder::default()
             .with_title(title.clone())
             .with_decorations(false)
@@ -507,58 +578,62 @@ fn show_slots(
             .with_has_shadow(false)
             .with_taskbar(false)
             .with_resizable(false)
-            .with_position(pos)
-            .with_inner_size(size)
+            .with_position(outer_pos)
+            .with_inner_size(outer_size)
             .with_window_level(level);
         if topmost {
             builder = builder.with_always_on_top();
         }
 
         let host_c = Arc::clone(host);
-        let label_c = label.clone();
         let title_c = title.clone();
-        let display_c = display.clone();
-        let vp_id = slot_viewport_id(&pid, &cid);
-        let cid_c = cid.clone();
-        let live_key = (pid.clone(), cid.clone());
+        let display_key = display_id.clone();
+        let vp_id = compose_viewport_id(&display_id);
+        let chips_c = chips;
+        let outer_pos_c = outer_pos;
+        let outer_size_c = outer_size;
 
         ctx.show_viewport_deferred(vp_id, builder, move |ctx, _class| {
             let dead = host_c
                 .lock()
-                .map(|g| g.editing || !g.live_slots.contains(&live_key))
+                .map(|g| g.editing || !g.live_composites.contains(&display_key))
                 .unwrap_or(true);
             if dead {
-                // 已被 ROOT Close / 编辑态：勿再发 WindowLevel/几何命令（关窗途中易 AV）
+                // 已被 ROOT Close / 编辑态：勿再发几何命令（关窗途中易 AV）
                 return;
             }
 
-            // 编辑/压制曾发 Visible(false)；活槽必须显式拉回，否则会一直藏着
+            // 编辑/压制曾发 Visible(false)；合成窗须显式拉回
             ctx.send_viewport_cmd(ViewportCommand::Visible(true));
-            let (pos_now, size_now) =
-                slot_outer_points(&display_c, &layout, ppp, &cid_c, &label_c);
-            ctx.send_viewport_cmd(ViewportCommand::OuterPosition(pos_now));
-            ctx.send_viewport_cmd(ViewportCommand::InnerSize(size_now));
+            ctx.send_viewport_cmd(ViewportCommand::OuterPosition(outer_pos_c));
+            ctx.send_viewport_cmd(ViewportCommand::InnerSize(outer_size_c));
 
             egui::CentralPanel::default()
+                // Glow 子窗无法真透明；铺不透明底。chip 同层无 DWM 互投影。
                 .frame(Frame::NONE.fill(Color32::from_rgb(28, 32, 40)))
                 .show(ctx, |ui| {
                     if let Ok(mut guard) = host_c.lock() {
-                        if !guard.slot_hwnd.contains_key(&key) {
+                        if !guard.compose_hwnd.contains_key(&display_key) {
                             if let Some(h) = platform::find_window_by_title(&title_c) {
                                 platform::set_window_visible(h, true);
-                                guard.slot_hwnd.insert(key.clone(), h);
+                                guard.compose_hwnd.insert(display_key.clone(), h);
                             }
                         }
-                        if guard.slot_click_through.get(&key).copied() != Some(true) {
-                            if let Some(&h) = guard.slot_hwnd.get(&key) {
+                        // demo chip 无可点控件：始终穿透
+                        if guard.compose_click_through.get(&display_key).copied() != Some(true) {
+                            if let Some(&h) = guard.compose_hwnd.get(&display_key) {
                                 platform::set_click_through(h, true);
                             }
-                            guard.slot_click_through.insert(key.clone(), true);
+                            guard.compose_click_through.insert(display_key.clone(), true);
                         }
                     }
 
-                    let rect = ui.max_rect();
-                    paint_chip(ui, rect, &label_c, layout.scale, false);
+                    let origin = ui.max_rect().min;
+                    for chip in &chips_c {
+                        let rect =
+                            Rect::from_min_size(origin + chip.rel.min.to_vec2(), chip.rel.size());
+                        paint_chip(ui, rect, &chip.label, chip.scale, false);
+                    }
                 });
         });
     }
@@ -574,6 +649,7 @@ fn show_editor(
     cancel_label: &str,
     reset_label: &str,
     reset_size_label: &str,
+    reset_size_hint: &str,
     hint_label: &str,
 ) {
     let (display, tex_id, bg_luma) = {
@@ -621,6 +697,7 @@ fn show_editor(
     let cancel_l = cancel_label.to_string();
     let reset_l = reset_label.to_string();
     let reset_size_l = reset_size_label.to_string();
+    let reset_size_hint_l = reset_size_hint.to_string();
     let hint_l = hint_label.to_string();
     let display_c = display.clone();
     let prefs_c = active_prefs.clone();
@@ -943,9 +1020,7 @@ fn show_editor(
                     );
                     btn = Rect::from_min_size(origin, Vec2::splat(RS));
 
-                    let resp = ui
-                        .interact(btn, ui.id().with("hud_ed_reset_size"), Sense::click())
-                        .on_hover_text(&reset_size_l);
+                    let resp = ui.interact(btn, ui.id().with("hud_ed_reset_size"), Sense::click());
                     let hovered = resp.hovered();
                     ui.painter().rect_filled(
                         btn,
@@ -956,11 +1031,31 @@ fn show_editor(
                             Color32::from_rgb(48, 54, 64)
                         },
                     );
-                    draw_reset_size_icon(
-                        ui.painter(),
-                        btn.center(),
-                        Color32::from_rgb(220, 224, 230),
-                    );
+                    let icon_tint = Color32::from_rgb(220, 224, 230);
+                    if let Some(tex) = ensure_reset_icon_tex(ui.ctx(), &host_c) {
+                        // 稍紧一点，让内外框细节更清晰
+                        let pad = 5.0;
+                        let icon_rect = btn.shrink(pad);
+                        ui.painter().image(
+                            tex.id(),
+                            icon_rect,
+                            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                            icon_tint,
+                        );
+                    } else {
+                        draw_reset_size_icon_fallback(ui.painter(), btn.center(), icon_tint);
+                    }
+                    if hovered {
+                        // 用整屏留白边界，避开任务栏外侧不安全区
+                        let tip_bounds = work.intersect(screen).shrink(10.0);
+                        paint_reset_size_tooltip(
+                            ui.painter(),
+                            btn,
+                            tip_bounds,
+                            &reset_size_l,
+                            &reset_size_hint_l,
+                        );
+                    }
                     if resp.clicked() {
                         if let Ok(mut g) = host_c.lock() {
                             g.reset_selected_scale_to_one();
@@ -1231,32 +1326,228 @@ fn snap_rect_inward_to_grid(r: Rect, grid: f32, origin: Pos2) -> Rect {
     )
 }
 
-/// 「重置大小」图标：常见的逆时针环形箭头（重置）。
-fn draw_reset_size_icon(painter: &egui::Painter, center: Pos2, color: Color32) {
-    let r = 6.5;
-    let stroke = Stroke::new(1.75, color);
-    // 约 280° 开口环，箭头在开口处
-    let start = -std::f32::consts::FRAC_PI_2 + 0.45;
-    let end = start + std::f32::consts::TAU * 0.78;
-    let steps = 20;
-    let mut prev = Pos2::new(center.x + r * start.cos(), center.y + r * start.sin());
-    for i in 1..=steps {
-        let t = i as f32 / steps as f32;
-        let a = start + (end - start) * t;
-        let p = Pos2::new(center.x + r * a.cos(), center.y + r * a.sin());
-        painter.line_segment([prev, p], stroke);
-        prev = p;
+/// 布局编辑「重置大小」：SVG 栅格化纹理（随 DPI 缓存）。
+fn ensure_reset_icon_tex(
+    ctx: &egui::Context,
+    host: &Arc<Mutex<HudOverlayHost>>,
+) -> Option<TextureHandle> {
+    const BYTES: &[u8] = include_bytes!("../assets/icon_reset.svg");
+    let edge = crate::image_decode::physical_raster_edge(64, ctx.pixels_per_point());
+    {
+        let g = host.lock().ok()?;
+        if let Some((e, tex)) = &g.reset_icon {
+            if *e == edge {
+                return Some(tex.clone());
+            }
+        }
     }
-    // 箭头沿切线方向
-    let tip = prev;
-    let dir = Vec2::new(-end.sin(), end.cos());
-    let base = tip - dir * 5.0;
-    let n = Vec2::new(-dir.y, dir.x) * 3.0;
-    painter.add(egui::Shape::convex_polygon(
-        vec![tip, base + n, base - n],
+    let color = crate::image_decode::decode_to_color_image(BYTES, edge)?;
+    let tex = ctx.load_texture(
+        format!("hud_layout_reset_size_v2@{edge}"),
         color,
+        TextureOptions::LINEAR,
+    );
+    if let Ok(mut g) = host.lock() {
+        g.reset_icon = Some((edge, tex.clone()));
+    }
+    Some(tex)
+}
+
+/// SVG 解码失败时的几何回退：外框 + 内框 + 四角向内（大小重置）。
+fn draw_reset_size_icon_fallback(painter: &egui::Painter, center: Pos2, color: Color32) {
+    let muted = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 102);
+    let outer = Rect::from_center_size(center, Vec2::splat(14.0));
+    let inner = Rect::from_center_size(center, Vec2::splat(7.0));
+    painter.rect(
+        outer,
+        CornerRadius::same(2),
+        Color32::TRANSPARENT,
+        Stroke::new(1.2, muted),
+        egui::StrokeKind::Inside,
+    );
+    painter.rect(
+        inner,
+        CornerRadius::same(1),
+        Color32::TRANSPARENT,
+        Stroke::new(1.5, color),
+        egui::StrokeKind::Inside,
+    );
+    let stroke = Stroke::new(1.4, color);
+    let inset = 1.2;
+    // 四角：短折线 + 斜向内
+    let corners = [
+        (outer.left_top(), Vec2::new(1.0, 1.0)),
+        (outer.right_top(), Vec2::new(-1.0, 1.0)),
+        (outer.left_bottom(), Vec2::new(1.0, -1.0)),
+        (outer.right_bottom(), Vec2::new(-1.0, -1.0)),
+    ];
+    for (c, dir) in corners {
+        let along = Pos2::new(c.x + dir.x * 3.5, c.y);
+        let down = Pos2::new(c.x, c.y + dir.y * 3.5);
+        painter.line_segment([c, along], stroke);
+        painter.line_segment([c, down], stroke);
+        let tip = Pos2::new(c.x + dir.x * (3.5 + inset), c.y + dir.y * (3.5 + inset));
+        painter.line_segment([c, tip], stroke);
+    }
+}
+
+/// 精美悬浮卡：标题 + 说明；按按钮相对边界优先上下左右放置，并带指向箭头。
+fn paint_reset_size_tooltip(
+    painter: &egui::Painter,
+    btn: Rect,
+    bounds: Rect,
+    title: &str,
+    hint: &str,
+) {
+    if !bounds.is_positive() {
+        return;
+    }
+    const PAD_X: f32 = 12.0;
+    const PAD_Y: f32 = 9.0;
+    const GAP: f32 = 8.0;
+    const ARROW: f32 = 6.0;
+    const RADIUS: u8 = 8;
+
+    let title_font = FontId::proportional(13.0);
+    let hint_font = FontId::proportional(11.5);
+    let title_c = Color32::from_rgb(236, 240, 246);
+    let hint_c = Color32::from_rgb(160, 168, 180);
+    let title_galley = painter.layout_no_wrap(title.to_string(), title_font, title_c);
+    let hint_galley = painter.layout_no_wrap(hint.to_string(), hint_font, hint_c);
+    let content_w = title_galley.size().x.max(hint_galley.size().x);
+    let tip_w = (content_w + PAD_X * 2.0).clamp(120.0, 280.0);
+    let tip_h = PAD_Y + title_galley.size().y + 4.0 + hint_galley.size().y + PAD_Y;
+
+    #[derive(Clone, Copy)]
+    enum Side {
+        Above,
+        Below,
+        Right,
+        Left,
+    }
+
+    let candidates: [(Side, Pos2); 4] = [
+        (
+            Side::Above,
+            Pos2::new(btn.center().x - tip_w * 0.5, btn.min.y - GAP - tip_h),
+        ),
+        (
+            Side::Below,
+            Pos2::new(btn.center().x - tip_w * 0.5, btn.max.y + GAP),
+        ),
+        (
+            Side::Right,
+            Pos2::new(btn.max.x + GAP, btn.center().y - tip_h * 0.5),
+        ),
+        (
+            Side::Left,
+            Pos2::new(btn.min.x - GAP - tip_w, btn.center().y - tip_h * 0.5),
+        ),
+    ];
+
+    let mut chosen = None;
+    for &(side, origin) in &candidates {
+        let rect = Rect::from_min_size(origin, Vec2::new(tip_w, tip_h));
+        if bounds.contains_rect(rect) {
+            chosen = Some((side, rect));
+            break;
+        }
+    }
+    let (side, tip) = chosen.unwrap_or_else(|| {
+        let origin = Pos2::new(btn.center().x - tip_w * 0.5, btn.min.y - GAP - tip_h);
+        let mut rect = Rect::from_min_size(origin, Vec2::new(tip_w, tip_h));
+        let max_x = (bounds.max.x - tip_w).max(bounds.min.x);
+        let max_y = (bounds.max.y - tip_h).max(bounds.min.y);
+        rect = Rect::from_min_size(
+            Pos2::new(
+                rect.min.x.clamp(bounds.min.x, max_x),
+                rect.min.y.clamp(bounds.min.y, max_y),
+            ),
+            Vec2::new(tip_w, tip_h),
+        );
+        let side = if rect.max.y <= btn.min.y + 1.0 {
+            Side::Above
+        } else if rect.min.y >= btn.max.y - 1.0 {
+            Side::Below
+        } else if rect.min.x >= btn.max.x - 1.0 {
+            Side::Right
+        } else {
+            Side::Left
+        };
+        (side, rect)
+    });
+
+    let fill = Color32::from_rgb(36, 40, 48);
+    let border = Color32::from_rgb(72, 80, 94);
+    let shadow = Color32::from_black_alpha(70);
+
+    painter.rect_filled(
+        tip.translate(Vec2::new(0.0, 1.5)),
+        CornerRadius::same(RADIUS),
+        shadow,
+    );
+    painter.rect(
+        tip,
+        CornerRadius::same(RADIUS),
+        fill,
+        Stroke::new(1.0, border),
+        egui::StrokeKind::Inside,
+    );
+
+    let r = RADIUS as f32;
+    let arrow_pts = match side {
+        Side::Above => {
+            let x = btn.center().x.clamp(tip.min.x + r, tip.max.x - r);
+            let y = tip.max.y;
+            [
+                Pos2::new(x - ARROW, y),
+                Pos2::new(x + ARROW, y),
+                Pos2::new(x, y + ARROW),
+            ]
+        }
+        Side::Below => {
+            let x = btn.center().x.clamp(tip.min.x + r, tip.max.x - r);
+            let y = tip.min.y;
+            [
+                Pos2::new(x - ARROW, y),
+                Pos2::new(x + ARROW, y),
+                Pos2::new(x, y - ARROW),
+            ]
+        }
+        Side::Right => {
+            let y = btn.center().y.clamp(tip.min.y + r, tip.max.y - r);
+            let x = tip.min.x;
+            [
+                Pos2::new(x, y - ARROW),
+                Pos2::new(x, y + ARROW),
+                Pos2::new(x - ARROW, y),
+            ]
+        }
+        Side::Left => {
+            let y = btn.center().y.clamp(tip.min.y + r, tip.max.y - r);
+            let x = tip.max.x;
+            [
+                Pos2::new(x, y - ARROW),
+                Pos2::new(x, y + ARROW),
+                Pos2::new(x + ARROW, y),
+            ]
+        }
+    };
+    painter.add(egui::Shape::convex_polygon(
+        arrow_pts.to_vec(),
+        fill,
         Stroke::NONE,
     ));
+
+    let title_h = title_galley.size().y;
+    let text_x = tip.min.x + PAD_X;
+    let text_y = tip.min.y + PAD_Y;
+    painter.galley(Pos2::new(text_x, text_y), title_galley, title_c);
+    painter.galley(
+        Pos2::new(text_x, text_y + title_h + 4.0),
+        hint_galley,
+        hint_c,
+    );
 }
 
 fn paint_unsafe_dim(painter: &egui::Painter, screen: Rect, safe: Rect) {

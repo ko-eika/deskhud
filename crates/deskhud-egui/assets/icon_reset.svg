@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!--
+    大小重置：外框=当前放大态，内框=默认 1×，四角箭头向内收拢。
+    一眼可读成「缩回默认尺寸」，而非普通刷新。
+  -->
+  <!-- 外框（当前尺寸） -->
+  <rect
+    x="2.5" y="2.5" width="19" height="19" rx="2.5"
+    stroke="#FFFFFF" stroke-width="1.5" opacity="0.4"
+  />
+  <!-- 内框（默认 1×） -->
+  <rect
+    x="7.25" y="7.25" width="9.5" height="9.5" rx="1.75"
+    stroke="#FFFFFF" stroke-width="1.85"
+  />
+  <!-- 左上 → 内 -->
+  <path
+    stroke="#FFFFFF" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+    d="M5.5 8.5V5.5H8.5M5.5 5.5l3.2 3.2"
+  />
+  <!-- 右上 → 内 -->
+  <path
+    stroke="#FFFFFF" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+    d="M15.5 5.5H18.5V8.5M18.5 5.5l-3.2 3.2"
+  />
+  <!-- 左下 → 内 -->
+  <path
+    stroke="#FFFFFF" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+    d="M5.5 15.5V18.5H8.5M5.5 18.5l3.2-3.2"
+  />
+  <!-- 右下 → 内 -->
+  <path
+    stroke="#FFFFFF" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+    d="M15.5 18.5H18.5V15.5M18.5 18.5l-3.2-3.2"
+  />
+</svg>

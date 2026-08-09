@@ -71,7 +71,7 @@ docs/                 架构、扩展指南、版本政策、路线图、发版
 - [x] `CatalogStore` 多源 i18n 合并 + 设置页接线（宠/插件/配置项/字体来源后缀）
 - [x] 桌宠引擎化（`deskhud-engine`）+ 包 `version`/`engine` 适配门闸
 - [x] 内置宠/插件独立 crate + `cargo pack-builtins`
-- [x] HUD 全屏布局（多屏归一化矩形 + 设置页调整布局）
+- [x] HUD 全屏布局（多屏归一化矩形 + 设置页调整布局）；运行态每屏一合成窗同层绘制
 - [ ] 宠物行为事件完善（更多 `PetEvent`）与更中性绘制帧
 - [ ] HUD 插件真实帧数据（prefs 插件级/条目级开关已具备）
 - [ ] WASM runtime + SDK + 示例包
