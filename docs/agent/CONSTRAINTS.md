@@ -11,6 +11,7 @@
 - Rust `edition = "2024"`；公共 API 写明「为什么」；生产路径避免 `unwrap`；依赖 `{ workspace = true }`。
 - 第三方版本只在根 `[workspace.dependencies]`；变更后 `cargo fmt`，尽量 `clippy --workspace --all-targets -- -D warnings`。
 - 产品版本见根 `Cargo.toml`；内置包 `manifest.toml` 的 `version` **跟程序**；`engine` 跟兼容族（[`docs/versioning.md`](../versioning.md)）。
+- 改架构、窗口行为或包契约前，先读近期提交说明（`git log --oneline`）及相关文件历史（`git log -- <path>`）；提交记录仅供追溯，和本文或现行代码冲突时以后两者为准。
 
 ## 分层边界（不可跨越）
 
@@ -35,6 +36,7 @@
 - 贴边/拖拽/几何在壳；包只读 `DockState`/`DragState`/`PetEvent`/`PetPaintCtx`，不碰 HWND。
 - 键鼠经 `PetEvent`/`MouseState`；非 Win 可降级；平台码在 `platform/`。
 - i18n：`shell.*` / `pet.<id>.*` / `plugin.<id>.*`；ID：`pet|hud.<组织>.<标识>`。
+- 原生桌面覆盖层迁移以 `deskhud-engine::overlay` 的平台无关契约为边界；包、插件和引擎契约不得出现 HWND 或任一 OS 专有类型。正式能力以平台后端报告为准，见 [`docs/overlay-migration.md`](../overlay-migration.md)。
 
 ## 已知上游限制
 

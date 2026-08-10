@@ -7,6 +7,7 @@
 #![deny(missing_docs)]
 
 pub mod pet;
+pub mod overlay;
 pub mod plugin;
 pub mod registry;
 
@@ -19,6 +20,10 @@ pub const ENGINE_COMPAT_FAMILY: &str = "0.4";
 pub use pet::{
     DockState, DragState, MouseState, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind,
     PetKindInfo, PetModifiers, PetMouseButton, PetPaint, PetPaintCtx,
+};
+pub use overlay::{
+    OverlayBackendCapabilities, OverlayDisplayTarget, OverlayHitKind, OverlayHitRegion,
+    OverlayPoint, OverlayRect, OverlayScene,
 };
 pub use plugin::{HudContribution, Plugin, PluginInfo};
 pub use registry::EngineRegistry;

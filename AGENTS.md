@@ -1,7 +1,7 @@
 # DeskHud — Agent 工作手册
 
 > **所有智能体的唯一入口。** 启动时应先读本文；在改代码、改窗口行为、改 crate 依赖或改包契约前，必须先完整打开 [`docs/agent/CONSTRAINTS.md`](./docs/agent/CONSTRAINTS.md)。下列仅为防踩坑摘要，不能替代全文。
-> 架构 [`docs/architecture.md`](./docs/architecture.md) · 扩展 [`docs/extension-guide.md`](./docs/extension-guide.md) · 版本 [`docs/versioning.md`](./docs/versioning.md) · 发版 [`docs/release.md`](./docs/release.md)。
+> 架构 [`docs/architecture.md`](./docs/architecture.md) · 覆盖层迁移 [`docs/overlay-migration.md`](./docs/overlay-migration.md) · 扩展 [`docs/extension-guide.md`](./docs/extension-guide.md) · 版本 [`docs/versioning.md`](./docs/versioning.md) · 发版 [`docs/release.md`](./docs/release.md)。
 
 ## 开局护栏（摘要，动手前仍须读全文）
 
@@ -13,6 +13,7 @@
 - 运行态 HUD 必须**每屏一个合成窗、同层绘制**；启用条件是总开关 ∧ 插件 ∧ 条目，且合成窗不要每帧设置 `WindowLevel`。
 - 贴边、拖拽和 HWND 几何由壳处理；包只消费 `DockState`、`DragState`、`PetEvent`、`PetPaintCtx`，不直接操作 HWND。
 - 第三方版本只在根 `[workspace.dependencies]`；包兼容性与版本改动先读 `docs/versioning.md`。
+- 改架构、窗口行为或包契约前，先读近期提交说明及相关文件历史；提交记录只提供上下文，冲突时以 CONSTRAINTS 与现行代码为准。
 
 完整、可演进的规则以 [`docs/agent/CONSTRAINTS.md`](./docs/agent/CONSTRAINTS.md) 为唯一真相源；Cursor 路径不是 Codex 的真相源。
 
@@ -77,7 +78,7 @@ AGENTS.md                 ← 入口（产品 / 架构 / 命令）
 docs/agent/CONSTRAINTS.md ← 现行实现约束（必读）
 docs/agent/MEMORY.md      ← 决策时间线
 docs/agent/README.md      ← 本目录索引
-docs/                     架构、扩展指南、版本、发版、路线图
+docs/                     架构、覆盖层迁移、扩展指南、版本、发版、路线图
 .codex/                   Codex 项目配置预留（非规则真相源）
 crates/ … packs/ … packages/ … examples/
 .cursor/rules/            Cursor 薄指针（勿当第二真相源）
