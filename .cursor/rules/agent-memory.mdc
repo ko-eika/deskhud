@@ -1,12 +1,14 @@
 ---
-description: Agent 记忆入口
+description: 跨工具 Agent 入口（AGENTS + CONSTRAINTS）
 alwaysApply: true
 ---
 
-# Agent 记忆
+# Agent 入口
 
-- 入口：`AGENTS.md`
-- 笔记：`.cursor/MEMORY.md`
-- 规则：`.cursor/rules/*.mdc`
+1. 仓库根 **`AGENTS.md`** — 产品 / 架构概览 / 命令。
+2. **`docs/agent/CONSTRAINTS.md`** — **现行实现约束（动手前必读）**。
+3. 决策时间线：`docs/agent/MEMORY.md`（只追加，不以它覆盖 CONSTRAINTS）。
+4. 索引：`docs/agent/README.md`。
 
-变更架构或范围时：更新 `AGENTS.md`，并在 `MEMORY.md` 追加决策行。
+`.cursor/rules/*.mdc` 是 Cursor 摘要；**与 CONSTRAINTS / AGENTS 冲突时以那两份为准**。  
+改硬约束 → 更新 `CONSTRAINTS.md` + `MEMORY.md` 追加一行。

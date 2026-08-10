@@ -174,7 +174,8 @@ my-cool-pet.deskhud/
 | 文档 | 说明 |
 |------|------|
 | [`README_EN.md`](./README_EN.md) | English README |
-| [`AGENTS.md`](./AGENTS.md) | 协作者 / Agent 工作手册 |
+| [`AGENTS.md`](./AGENTS.md) | 协作者 / Agent 工作手册（唯一入口） |
+| [`docs/agent/`](./docs/agent/README.md) | Agent 索引；含 CONSTRAINTS / MEMORY |
 | [`docs/architecture.md`](./docs/architecture.md) | 架构 |
 | [`docs/extension-guide.md`](./docs/extension-guide.md) | 扩展指南 |
 | [`docs/roadmap.md`](./docs/roadmap.md) | 路线图 |

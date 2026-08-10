@@ -1,6 +1,33 @@
 # DeskHud — Agent 工作手册
 
-> Agent / 协作者入口。细则见 `.cursor/rules/`；笔记见 `.cursor/MEMORY.md`；架构见 [`docs/architecture.md`](./docs/architecture.md)；**扩展指南**见 [`docs/extension-guide.md`](./docs/extension-guide.md)；**版本政策**见 [`docs/versioning.md`](./docs/versioning.md)；**发版**见 [`docs/release.md`](./docs/release.md)。
+> **所有智能体的唯一入口。** 启动时应先读本文；在改代码、改窗口行为、改 crate 依赖或改包契约前，必须先完整打开 [`docs/agent/CONSTRAINTS.md`](./docs/agent/CONSTRAINTS.md)。下列仅为防踩坑摘要，不能替代全文。
+> 架构 [`docs/architecture.md`](./docs/architecture.md) · 扩展 [`docs/extension-guide.md`](./docs/extension-guide.md) · 版本 [`docs/versioning.md`](./docs/versioning.md) · 发版 [`docs/release.md`](./docs/release.md)。
+
+## 开局护栏（摘要，动手前仍须读全文）
+
+- 唯一 UI 是 `deskhud-egui`；禁止第二套 UI、托盘和 UI 依赖 `git2`。
+- `deskhud-engine` 只放契约，不能依赖 `deskhud-sdk`；社区扩展只能是 WASM + SDK，不能分发原生 DLL。
+- 只有**主宠窗**可使用 Glow `with_transparent(true)`；设置、菜单和 HUD 合成子窗必须 deferred 且铺满不透明底，禁止透明子窗。
+- `show_viewport_deferred` 只能从 `App::ui` 调用；窗口 RGN 塑形、`ExtendFrame(-1)`、`WS_EX_NOACTIVATE` 都不能用。
+- 宠物置顶只跟 prefs；开设置时宠可以点击穿透，禁止用 `AlwaysOnTop` / owner / 临时取消置顶形成循环。
+- 运行态 HUD 必须**每屏一个合成窗、同层绘制**；启用条件是总开关 ∧ 插件 ∧ 条目，且合成窗不要每帧设置 `WindowLevel`。
+- 贴边、拖拽和 HWND 几何由壳处理；包只消费 `DockState`、`DragState`、`PetEvent`、`PetPaintCtx`，不直接操作 HWND。
+- 第三方版本只在根 `[workspace.dependencies]`；包兼容性与版本改动先读 `docs/versioning.md`。
+
+完整、可演进的规则以 [`docs/agent/CONSTRAINTS.md`](./docs/agent/CONSTRAINTS.md) 为唯一真相源；Cursor 路径不是 Codex 的真相源。
+
+## 读哪里（多智能体）
+
+| 优先级 | 路径 | 用途 |
+|--------|------|------|
+| **1** | **`AGENTS.md`（本文件）** | 产品、架构概览、范围、命令 |
+| **1** | [`docs/agent/CONSTRAINTS.md`](./docs/agent/CONSTRAINTS.md) | **现行实现约束（动手前必读）** |
+| 2 | [`docs/agent/MEMORY.md`](./docs/agent/MEMORY.md) | 决策时间线；非现行全文 |
+| 3 | [`docs/agent/README.md`](./docs/agent/README.md) | Agent 文档索引与变更约定 |
+| — | `.cursor/rules/*.mdc` | 仅 Cursor 薄指针；冲突以 CONSTRAINTS / 本文件为准 |
+| — | `.cursor/MEMORY.md` | 跳转到 `docs/agent/MEMORY.md` |
+
+改产品/架构叙述 → 更新本文件。改硬约束 → 更新 **`docs/agent/CONSTRAINTS.md`**，并在 `MEMORY.md` 追加一行。
 
 ## 一句话
 
@@ -41,21 +68,19 @@ deskhud-runtime     本地发现包 → 加载（packs 原生 / WASM）→ 注�
 deskhud-sdk         社区作者用 Guest SDK（编译为 wasm32）
 ```
 
+分层硬约束见 [`docs/agent/CONSTRAINTS.md`](./docs/agent/CONSTRAINTS.md)。
+
 ## 目录
 
 ```
-crates/
-  deskhud-ui/         壳 prefs + i18n 合并引擎（零 egui）
-  deskhud-package/    包格式与清单
-  deskhud-engine/     引擎契约（PetKind / Plugin / EngineRegistry）
-  deskhud-runtime/    包加载与 WASM 适配；注册 packs
-  deskhud-sdk/        社区 Guest SDK
-  deskhud-egui/       可执行 UI
-  deskhud-xtask/      开发任务（导出 packs 等）
-packs/                出厂宠/HUD 包（pet-* / hud-*；.deskhud 布局 + 原生 crate）
-packages/             本地已安装 / 开发用包（扫描根）
-examples/             社区开发示例（宠物包 / HUD 插件）
-docs/                 架构、扩展指南、版本政策、路线图、发版
+AGENTS.md                 ← 入口（产品 / 架构 / 命令）
+docs/agent/CONSTRAINTS.md ← 现行实现约束（必读）
+docs/agent/MEMORY.md      ← 决策时间线
+docs/agent/README.md      ← 本目录索引
+docs/                     架构、扩展指南、版本、发版、路线图
+.codex/                   Codex 项目配置预留（非规则真相源）
+crates/ … packs/ … packages/ … examples/
+.cursor/rules/            Cursor 薄指针（勿当第二真相源）
 ```
 
 ## 当前范围（初始化后演进）

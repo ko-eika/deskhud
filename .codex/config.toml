@@ -1,0 +1,6 @@
+# DeskHud 的项目级 Codex 配置预留。
+#
+# 仅在确有项目级 Codex 行为需要时添加配置（例如审批、sandbox、MCP）。
+# 项目规则的唯一入口仍是仓库根 AGENTS.md；完整现行约束见
+# docs/agent/CONSTRAINTS.md。不要用 project_doc_fallback_filenames 试图同时
+# 自动加载 CONSTRAINTS：根目录存在 AGENTS.md 时，fallback 不会参与发现。

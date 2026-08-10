@@ -327,7 +327,7 @@ size = 13.0
 2. **禁止**引擎 crate 依赖 `deskhud-sdk`；sdk 仅 examples / 社区包使用。
 3. 第三方 crate 版本只写在仓库根 `[workspace.dependencies]`。
 4. UI 是唯一壳：`deskhud-egui`；无托盘、无第二套 UI 框架。
-5. 一能力一目录；新建模块优先独立目录（见 `.cursor/rules/`）。
+5. 一能力一目录；新建模块优先独立目录（见仓库根 `AGENTS.md`）。
 
 ---
 

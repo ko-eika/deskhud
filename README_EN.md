@@ -173,7 +173,8 @@ my-cool-pet.deskhud/
 | Doc | Description |
 |-----|-------------|
 | [`README.md`](./README.md) | Chinese README |
-| [`AGENTS.md`](./AGENTS.md) | Collaborator / agent handbook |
+| [`AGENTS.md`](./AGENTS.md) | Collaborator / agent handbook (single entry) |
+| [`docs/agent/`](./docs/agent/README.md) | Agent index; CONSTRAINTS + MEMORY |
 | [`docs/architecture.md`](./docs/architecture.md) | Architecture |
 | [`docs/extension-guide.md`](./docs/extension-guide.md) | Extension guide |
 | [`docs/roadmap.md`](./docs/roadmap.md) | Roadmap |
