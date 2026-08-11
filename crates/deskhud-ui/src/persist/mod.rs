@@ -5,11 +5,11 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
+use crate::UiPreferences;
 use crate::hud::{HudConfigValue, HudPrefs, HudSlotLayout};
 use crate::i18n::Locale;
 use crate::pet::PetPrefs;
 use crate::shell::{PetPickerMode, ShellPrefs, UiTheme};
-use crate::UiPreferences;
 
 /// 持久化错误。
 #[derive(Debug, Error)]
@@ -81,10 +81,7 @@ pub fn save(prefs: &UiPreferences) -> Result<(), PersistError> {
 }
 
 /// 写入磁盘，并按引擎注册顺序排列宠/插件配置键。
-pub fn save_ordered(
-    prefs: &UiPreferences,
-    order: &PrefsWriteOrder,
-) -> Result<(), PersistError> {
+pub fn save_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> Result<(), PersistError> {
     let dir = user_data_dir().ok_or_else(|| {
         PersistError::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -247,7 +244,10 @@ fn prefs_from_value(root: toml::Value) -> UiPreferences {
         if let Some(v) = shell.get("ui_font_style").and_then(|v| v.as_str()) {
             prefs.shell.ui_font_style = v.to_string();
         }
-        if let Some(v) = shell.get("ui_font_size").and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64))) {
+        if let Some(v) = shell
+            .get("ui_font_size")
+            .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
+        {
             prefs.shell.ui_font_size = v as f32;
         }
         if let Some(v) = shell.get("ui_theme").and_then(|v| v.as_str()) {
@@ -551,8 +551,7 @@ fn toml_to_hud_value(v: &toml::Value) -> Option<HudConfigValue> {
 }
 
 fn toml_f64(v: &toml::Value) -> Option<f64> {
-    v.as_float()
-        .or_else(|| v.as_integer().map(|i| i as f64))
+    v.as_float().or_else(|| v.as_integer().map(|i| i as f64))
 }
 
 fn locale_tag(locale: Locale) -> &'static str {
@@ -641,9 +640,7 @@ fn pet_option_sort_key(key: &str, order: &PrefsWriteOrder) -> (u32, u32, String)
     }
     let pet_id = match_prefix(key, &order.pet_ids).unwrap_or_else(|| default_package_id(key));
     let pet_rank = index_or_tail(&order.pet_ids, &pet_id);
-    let opt = key
-        .strip_prefix(&format!("{pet_id}."))
-        .unwrap_or(key);
+    let opt = key.strip_prefix(&format!("{pet_id}.")).unwrap_or(key);
     let opt_rank = order
         .pet_option_keys
         .iter()
@@ -657,12 +654,9 @@ fn hud_key_sort_key(key: &str, order: &PrefsWriteOrder) -> (u32, u32, u32, u32, 
     if key.contains(".global.") {
         return (0, 0, 0, attr_priority_from_key(key) as u32, key.to_string());
     }
-    let plugin_id =
-        match_prefix(key, &order.plugin_ids).unwrap_or_else(|| default_package_id(key));
+    let plugin_id = match_prefix(key, &order.plugin_ids).unwrap_or_else(|| default_package_id(key));
     let plugin_rank = index_or_tail(&order.plugin_ids, &plugin_id);
-    let rest = key
-        .strip_prefix(&format!("{plugin_id}."))
-        .unwrap_or("");
+    let rest = key.strip_prefix(&format!("{plugin_id}.")).unwrap_or("");
     if rest.is_empty() || rest == "enable" || rest == "id" {
         // 插件级 id/enable
         return (
@@ -768,17 +762,13 @@ mod tests {
         prefs.shell.topmost = false;
         prefs.pet.set_bool("pet.deskhud.specs.config1", true);
         prefs.hud.set_enabled("hud.deskhud.demo", "clock", false);
-        prefs.hud.set_slot_layout(
-            "hud.deskhud.demo",
-            "tip",
-            {
-                let mut s = HudSlotLayout::default();
-                s.x = 0.5;
-                s.y = 0.8;
-                s.scale = 1.25;
-                s
-            },
-        );
+        prefs.hud.set_slot_layout("hud.deskhud.demo", "tip", {
+            let mut s = HudSlotLayout::default();
+            s.x = 0.5;
+            s.y = 0.8;
+            s.scale = 1.25;
+            s
+        });
 
         let text = format_prefs(&prefs);
         assert!(text.contains("[theme]\n"));
@@ -943,10 +933,7 @@ locale = "en"
         prefs.hud.set_enabled("hud.deskhud.demo", "clock", false);
 
         let order = PrefsWriteOrder {
-            pet_ids: vec![
-                "pet.deskhud.specs".into(),
-                "pet.deskhud.blob".into(),
-            ],
+            pet_ids: vec!["pet.deskhud.specs".into(), "pet.deskhud.blob".into()],
             pet_option_keys: vec![
                 (
                     "pet.deskhud.specs".into(),

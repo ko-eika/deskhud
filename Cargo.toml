@@ -25,7 +25,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.4.2"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -46,7 +46,12 @@ pet-deskhud-blob = { path = "packs/pet-deskhud-blob" }
 hud-deskhud-demo = { path = "packs/hud-deskhud-demo" }
 
 egui = "0.36"
-eframe = { version = "0.36", default-features = false, features = ["glow", "default_fonts"] }
+egui-winit = { version = "0.36", default-features = false }
+egui_glow = { version = "0.36", features = ["winit"] }
+winit = { version = "0.30", default-features = false, features = ["rwh_06"] }
+glutin = "0.32"
+glutin-winit = "0.5"
+glow = "0.17"
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -66,6 +71,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_LibraryLoader",
     "Win32_UI_Controls",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_HiDpi",
     "Win32_UI_WindowsAndMessaging",
 ] }
 windows = { version = "0.62", features = [
@@ -75,6 +81,7 @@ windows = { version = "0.62", features = [
     "Win32_Graphics_Direct2D",
     "Win32_Graphics_Direct2D_Common",
     "Win32_Graphics_DirectComposition",
+    "Win32_Graphics_DirectWrite",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
     "Win32_UI_WindowsAndMessaging",

@@ -65,8 +65,8 @@ pub fn bootstrap_registry_result() -> Result<Bootstrap, RuntimeError> {
             warn!(%id, %reason, "skip future register (incompatible)");
             continue;
         }
-        let mapped = builtin_pet_ids.iter().any(|b| b == id)
-            || builtin_plugin_ids.iter().any(|b| b == id);
+        let mapped =
+            builtin_pet_ids.iter().any(|b| b == id) || builtin_plugin_ids.iter().any(|b| b == id);
         if mapped {
             info!(%id, "discovered pack maps to builtin (native)");
         } else if pack.manifest.entry.is_some() {

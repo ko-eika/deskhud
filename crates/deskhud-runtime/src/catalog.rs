@@ -1,7 +1,7 @@
 //! 从已发现包装配 [`CatalogStore`]。
 
 use deskhud_package::{PackCatalog, PackKind};
-use deskhud_ui::{locale_file_candidates, locale_tag, CatalogStore, Locale};
+use deskhud_ui::{CatalogStore, Locale, locale_file_candidates, locale_tag};
 
 use crate::{DiscoveredPack, PackageLoader};
 

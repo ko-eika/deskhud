@@ -5,21 +5,13 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use deskhud_engine::{HudContribution, PetConfigOption, PetKindInfo, PluginInfo};
-use deskhud_ui::{
-    CatalogStore, Locale, MessageKey, PetPickerMode, ShellPrefs, UiPreferences, UiTheme,
-};
-use eframe::egui::text::{CCursor, CCursorRange};
-use eframe::egui::text_edit::TextEditState;
-use eframe::egui::{
+use deskhud_ui::{CatalogStore, Locale, MessageKey, PetPickerMode, UiPreferences, UiTheme};
+use egui::text::{CCursor, CCursorRange};
+use egui::text_edit::TextEditState;
+use egui::{
     self, Align2, Area, Color32, CornerRadius, CursorIcon, FontId, Frame, Layout, Margin, Order,
     RichText, Sense, Stroke, TextureHandle, TextureOptions, Vec2,
 };
-
-use crate::platform;
-
-fn viewport_id() -> egui::ViewportId {
-    egui::ViewportId::from_hash_of("deskhud_settings")
-}
 
 const SIDE_W: f32 = 168.0;
 const CARD_GAP: f32 = 12.0;
@@ -59,7 +51,7 @@ mod plugin_layout {
 mod tone {
     use std::cell::Cell;
 
-    use eframe::egui::{Color32, Context, Theme};
+    use egui::{Color32, Context, Theme};
 
     thread_local! {
         static DARK: Cell<bool> = const { Cell::new(false) };
@@ -166,13 +158,12 @@ pub enum SettingsTab {
 }
 
 const APP_HOMEPAGE: &str = "https://github.com/ko-eika/deskhud";
-/// 与根 `Cargo.toml` 中 `egui` / `eframe` 版本对齐；升级依赖时请同步。
+/// 与根 `Cargo.toml` 中 `egui` 版本对齐；升级依赖时请同步。
 const APP_EGUI_VERSION: &str = "0.36";
 
 #[derive(Clone)]
 pub struct SettingsHost {
     inner: Arc<Mutex<SettingsState>>,
-    hud_overlay: Arc<Mutex<crate::hud_overlay::HudOverlayHost>>,
 }
 
 pub struct SettingsState {
@@ -191,9 +182,7 @@ pub struct SettingsState {
     pub catalogs: CatalogStore,
     pub locale_dirty: bool,
     /// 打开后需要 Focus 一次。
-    focus_once: bool,
     /// 打开后需要下发一次尺寸 / 位置。
-    place_once: bool,
     /// 用户点了「应用」：主壳应把草稿写入运行态。
     pub apply_requested: bool,
     /// 关闭时几何已写入 `prefs`，待主壳落盘（取消时只同步几何）。
@@ -214,26 +203,20 @@ pub struct SettingsState {
     /// 请求开始 HUD 布局编辑。
     pub hud_layout_begin: bool,
     /// 请求完成并写回草稿布局。
-    pub hud_layout_finish: bool,
     /// 请求取消布局编辑。
     pub hud_layout_cancel: bool,
     /// 当前是否在布局编辑（UI 显示用）。
     pub hud_layout_editing: bool,
-    /// 布局编辑切入后，下一帧再 Close 设置视口。
-    pub hud_layout_close_viewport: bool,
-    /// 设置窗 HWND（owner 叠放用）。
-    settings_hwnd: Option<isize>,
-    /// 设置窗已下发的置顶，避免拖动时每帧 WindowLevel。
-    last_sent_topmost: Option<bool>,
-    /// 打开设置时冻结的置顶（草稿切换不改窗层级，否则设置页会丢输入）。
-    session_topmost: bool,
 }
 
 impl SettingsHost {
-    pub fn new(
-        prefs: UiPreferences,
-        hud_overlay: Arc<Mutex<crate::hud_overlay::HudOverlayHost>>,
-    ) -> Self {
+    /// Draw the existing settings surface inside a directly hosted egui root
+    /// window. Window creation/visibility is owned by the native host.
+    pub(crate) fn draw_native(&self, ui: &mut egui::Ui) {
+        self.draw(ui);
+    }
+
+    pub fn new(prefs: UiPreferences) -> Self {
         Self {
             inner: Arc::new(Mutex::new(SettingsState {
                 open: false,
@@ -246,8 +229,6 @@ impl SettingsHost {
                 hud_items: Vec::new(),
                 catalogs: CatalogStore::new(),
                 locale_dirty: false,
-                focus_once: false,
-                place_once: false,
                 apply_requested: false,
                 pending_flush: false,
                 discard_draft: false,
@@ -258,67 +239,14 @@ impl SettingsHost {
                 card_settle_repaint_armed: false,
                 preview_textures: HashMap::new(),
                 hud_layout_begin: false,
-                hud_layout_finish: false,
                 hud_layout_cancel: false,
                 hud_layout_editing: false,
-                hud_layout_close_viewport: false,
-                settings_hwnd: None,
-                last_sent_topmost: None,
-                session_topmost: true,
             })),
-            hud_overlay,
         }
     }
 
     pub fn lock(&self) -> std::sync::MutexGuard<'_, SettingsState> {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
-    }
-
-    pub fn is_open(&self) -> bool {
-        self.lock().open
-    }
-
-    /// 设置视口 HWND（供菜单 chrome 排除，避免误剥标题栏）。
-    pub fn settings_hwnd(&self) -> Option<isize> {
-        self.lock().settings_hwnd.filter(|&h| h != 0)
-    }
-
-    /// 进入 HUD 布局编辑：先藏设置窗；真正 Close 延到下一帧（同帧 Close 易 AV）。
-    pub fn force_close_for_layout_edit(&self, ctx: &egui::Context) {
-        let mut s = self.lock();
-        s.open = false;
-        s.focus_once = false;
-        s.place_once = false;
-        s.discard_draft = false;
-        s.pending_flush = false;
-        s.hud_layout_editing = true;
-        s.hud_layout_close_viewport = true;
-        let hwnd = s.settings_hwnd.take();
-        drop(s);
-        if let Some(h) = hwnd {
-            platform::set_window_owner(h, None);
-            platform::set_window_visible(h, false);
-        }
-        // 本帧只隐藏，不 Close；下一帧 `finish_layout_edit_close` 再关
-        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Visible(false));
-        ctx.request_repaint_after(std::time::Duration::from_millis(16));
-    }
-
-    /// 布局编辑已切入后，安全关掉设置视口（在 ROOT `logic` 里调用）。
-    pub fn finish_layout_edit_close(&self, ctx: &egui::Context) {
-        let do_close = {
-            let mut s = self.lock();
-            if !s.hud_layout_close_viewport {
-                return;
-            }
-            s.hud_layout_close_viewport = false;
-            true
-        };
-        if do_close {
-            ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Visible(false));
-            ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::CancelClose);
-            ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Close);
-        }
     }
 
     pub fn open(
@@ -341,12 +269,7 @@ impl SettingsHost {
         s.hud_items = hud_items;
         s.catalogs = catalogs;
         s.tab = tab;
-        s.focus_once = true;
-        s.place_once = true;
         // 会话内窗口层级跟打开瞬间的已应用值；草稿置顶只影响「应用」后
-        s.session_topmost = prefs.shell.topmost;
-        s.last_sent_topmost = Some(prefs.shell.topmost);
-        s.settings_hwnd = None;
         s.apply_requested = false;
         s.pending_flush = false;
         s.discard_draft = false;
@@ -356,92 +279,6 @@ impl SettingsHost {
         s.card_observe_since = None;
         s.card_settle_repaint_armed = false;
         s.preview_textures.clear();
-    }
-
-    pub fn show(&self, ctx: &egui::Context, _pet_hwnd: Option<isize>) {
-        let title = {
-            let s = self.lock();
-            if !s.open {
-                return;
-            }
-            s.prefs.t(MessageKey::SettingsTitle).to_string()
-        };
-
-        let topmost = self.lock().session_topmost;
-        let level = if topmost {
-            egui::WindowLevel::AlwaysOnTop
-        } else {
-            egui::WindowLevel::Normal
-        };
-        let shared = self.clone();
-        let mut builder = egui::ViewportBuilder::default()
-            .with_title(title.clone())
-            .with_decorations(true)
-            .with_transparent(false)
-            .with_resizable(true)
-            .with_min_inner_size([ShellPrefs::SETTINGS_MIN_W, ShellPrefs::SETTINGS_MIN_H])
-            .with_taskbar(true)
-            .with_visible(true)
-            .with_icon(crate::icon())
-            .with_window_level(level);
-        if topmost {
-            builder = builder.with_always_on_top();
-        }
-        ctx.show_viewport_deferred(viewport_id(), builder, move |ui, _| shared.draw(ui));
-
-        // 延迟视口首次 builder 标题不会随 locale 草稿更新；每帧同步
-        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Title(title.clone()));
-
-        {
-            let mut s = self.lock();
-            // HWND 只解析一次，拖动时勿每帧 FindWindow
-            let hwnd_ok = s.settings_hwnd.is_some_and(|h| h != 0);
-            if !hwnd_ok {
-                if let Some(h) = platform::find_window_by_title(&title) {
-                    s.settings_hwnd = Some(h);
-                    platform::set_window_owner(h, None);
-                }
-            }
-            // 若曾被菜单 chrome 误绑剥掉标题栏，每帧恢复装饰
-            if let Some(h) = s.settings_hwnd {
-                platform::ensure_settings_chrome(h);
-            }
-            // 勿在草稿切换置顶时改设置窗 WindowLevel（会让设置页丢命中，需拖窗才恢复）
-        }
-
-        let (place_once, focus_once, size, pos) = {
-            let s = self.lock();
-            (
-                s.place_once,
-                s.focus_once,
-                s.prefs.shell.settings_size(),
-                s.prefs.shell.settings_pos(),
-            )
-        };
-        if place_once {
-            self.lock().place_once = false;
-            ctx.send_viewport_cmd_to(
-                viewport_id(),
-                egui::ViewportCommand::MinInnerSize(egui::vec2(
-                    ShellPrefs::SETTINGS_MIN_W,
-                    ShellPrefs::SETTINGS_MIN_H,
-                )),
-            );
-            ctx.send_viewport_cmd_to(
-                viewport_id(),
-                egui::ViewportCommand::InnerSize(egui::vec2(size[0], size[1])),
-            );
-            if let Some([x, y]) = pos {
-                ctx.send_viewport_cmd_to(
-                    viewport_id(),
-                    egui::ViewportCommand::OuterPosition(egui::pos2(x, y)),
-                );
-            }
-        }
-        if focus_once {
-            self.lock().focus_once = false;
-            ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Focus);
-        }
     }
 
     fn draw(&self, ui: &mut egui::Ui) {
@@ -467,9 +304,6 @@ impl SettingsHost {
             if editing {
                 self.lock().hud_layout_cancel = true;
                 self.lock().hud_layout_editing = false;
-                if let Ok(mut h) = self.hud_overlay.lock() {
-                    h.request_cancel();
-                }
                 ctx.request_repaint_of(egui::ViewportId::ROOT);
             } else {
                 close = true;
@@ -533,28 +367,15 @@ impl SettingsHost {
             } else {
                 discard_on_close
             };
-            self.close_viewport(&ctx, discard);
+            self.close_viewport(discard);
         }
     }
 
-    fn close_viewport(&self, ctx: &egui::Context, discard: bool) {
+    fn close_viewport(&self, discard: bool) {
         let mut s = self.lock();
         s.open = false;
-        s.focus_once = false;
-        s.place_once = false;
         s.discard_draft = discard;
         s.pending_flush = true;
-        s.last_sent_topmost = None;
-        let hwnd = s.settings_hwnd.take();
-        drop(s);
-        if let Some(h) = hwnd {
-            // 解除与宠窗的 owner，避免设置隐藏后仍粘在置顶层
-            platform::set_window_owner(h, None);
-        }
-        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::CancelClose);
-        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Visible(false));
-        // 不再同帧 Close（易 AV）；停止 show_viewport_deferred 后 egui 会回收视口
-        ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
 
     fn capture_geometry(&self, ui: &egui::Ui) {
@@ -745,7 +566,7 @@ impl SettingsHost {
         section_card(ui, |ui| {
             about_info_row(ui, "Rust", concat!(env!("CARGO_PKG_RUST_VERSION"), "+"));
             ui.add_space(8.0);
-            about_info_row(ui, "egui / eframe", APP_EGUI_VERSION);
+            about_info_row(ui, "egui / egui_glow", APP_EGUI_VERSION);
         });
     }
 

@@ -23,22 +23,22 @@
 ## UI / 窗口 / HUD
 
 - 设置侧栏顺序：**常规 / 宠物 / 插件 / 关于**，默认常规；宠尺寸来自 `PetKindInfo`；设置预览用静态 `preview`/`icon`，不实时 `paint`。
-- **主宠窗** Glow + `with_transparent(true)`；设置 / 菜单 / **HUD 合成窗**用 deferred、铺满**不透明**底；**禁止**子窗 `with_transparent(true)`（Windows Glow：`GL config does not support`）。
-- `show_viewport_deferred` 必须在 `App::ui` 调用（勿放 `logic`）。
-- 勿窗口 RGN 塑形；Win 透明：`DwmEnableBlurBehindWindow` + `DWMSBT_NONE`，勿 `ExtendFrame(-1)`。拖窗用手移 `SetWindowPos`。
-- 子类化：换 HWND 前还原旧 WndProc；禁 `PREV_WNDPROC` 自引用；NC 白线用 `WM_NCCALCSIZE`/`NCACTIVATE`/`NCPAINT`。
-- **铁律**：宠置顶只跟 prefs；开设置时宠可点击穿透，勿用 AlwaysOnTop/owner 循环。
+- egui 只绘制菜单和设置，由 `winit + egui_glow` 直接托管**不透明**控制窗；宠物 / HUD 透明合成由平台覆盖层实现。禁止恢复 eframe、deferred viewport 或第二套产品 UI。
+- 菜单和设置复用控制窗：菜单无边框、不可缩放、显示时必须在宠物之上且失焦关闭；设置有边框、可缩放、保存几何且**始终是普通非置顶窗口**。
+- 透明命中不能靠全屏 UI 窗、窗口 RGN 或 `ExtendFrame(-1)` 模拟；Windows 覆盖层使用 DirectComposition，拖动和命中留在平台壳。
+- **铁律**：宠物置顶只跟 prefs；设置窗不跟随置顶，菜单显示期间可以临时处于宠物之上；勿用 owner 或临时取消宠物置顶形成循环。
 - 运行态 HUD：**每屏一个合成窗、同层绘制**；启用 = 总开关 ∧ 插件 ∧ 条目；`HudSlotLayout` 仅 `x/y/scale`。
 - HUD / 多窗置顶：勿每帧对合成窗 `WindowLevel`；同帧 Close+置顶易 AV。
 
 ## 行为与跨平台
 
-- 贴边/拖拽/几何在壳；包只读 `DockState`/`DragState`/`PetEvent`/`PetPaintCtx`，不碰 HWND。
+- 贴边/拖拽/几何在壳：按下后跨过移动阈值才进入拖动，普通单击不得闪现 `DragStarted`；拖动中允许越出工作区，松手才吸附/修正、保存位置并派发 `DockChanged`。包只读 `DockState`/`DragState`/`PetEvent`/`PetPaintCtx`，不碰 HWND。
 - 键鼠经 `PetEvent`/`MouseState`；非 Win 可降级；平台码在 `platform/`。
+- 对话气泡使用**宿主管理的独立透明工具窗**（逻辑子窗，不是受父客户区裁剪的 `WS_CHILD`）；包只通过后续 `PetFrame` 中性契约描述位置、皮肤、透明度、尾巴与文字，禁止接触 HWND。壳负责屏幕避让、层级、穿透和生命周期，不以频繁扩缩宠物窗代替。
 - i18n：`shell.*` / `pet.<id>.*` / `plugin.<id>.*`；ID：`pet|hud.<组织>.<标识>`。
 - 原生桌面覆盖层迁移以 `deskhud-engine::overlay` 的平台无关契约为边界；包、插件和引擎契约不得出现 HWND 或任一 OS 专有类型。正式能力以平台后端报告为准，见 [`docs/overlay-migration.md`](../overlay-migration.md)。
 
-## 已知上游限制
+## 透明合成边界
 
-- Windows + eframe Glow：主视口可透明；`show_viewport_deferred` 子视口通常无法真透明（见 egui#3632）。
-- 真透底多屏叠层：优先单主窗铺虚拟桌面，或原生 layered；不要依赖第二个 Glow 透明子窗。
+- 不透明 egui 控制窗不承担透明宠物/HUD；真透明与局部命中由各平台覆盖层后端实现。
+- 多屏按能力协商；Windows 运行态 HUD 仍须每屏一个逻辑合成层，不退回第二个 Glow 透明窗或全屏输入窗。

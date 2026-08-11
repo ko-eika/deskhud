@@ -15,6 +15,10 @@ pub enum PetKey {
     Backspace,
     /// Delete。
     Delete,
+    /// Insert（含 NumLock 关闭时的小键盘 0）。
+    Insert,
+    /// Clear（常见于 NumLock 关闭时的小键盘 5）。
+    Clear,
     /// 方向上。
     ArrowUp,
     /// 方向下。
@@ -41,6 +45,24 @@ pub enum PetKey {
     Super,
     /// CapsLock。
     CapsLock,
+    /// NumLock。
+    NumLock,
+    /// 小键盘 Enter。
+    NumpadEnter,
+    /// 小键盘数字 0..=9。
+    NumpadDigit(u8),
+    /// 小键盘加号。
+    NumpadAdd,
+    /// 小键盘减号。
+    NumpadSubtract,
+    /// 小键盘乘号。
+    NumpadMultiply,
+    /// 小键盘除号。
+    NumpadDivide,
+    /// 小键盘小数点。
+    NumpadDecimal,
+    /// 小键盘分隔符（取决于键盘布局）。
+    NumpadSeparator,
     /// F1..=F12。
     Function(u8),
     /// 字母 A..=Z（统一大写）。

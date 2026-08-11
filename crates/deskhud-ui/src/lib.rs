@@ -14,12 +14,12 @@ pub mod shell;
 
 pub use hud::{HudConfigValue, HudPrefs, HudSlotLayout};
 pub use i18n::{
-    locale_file_candidates, locale_tag, seed_builtin_packs, CatalogStore, Locale, MessageKey,
+    CatalogStore, Locale, MessageKey, locale_file_candidates, locale_tag, seed_builtin_packs,
 };
 pub use persist::{
-    format_prefs, format_prefs_ordered, load, load_or_default, prefs_path, save, save_ordered,
-    PersistError, PrefsWriteOrder,
+    PersistError, PrefsWriteOrder, format_prefs, format_prefs_ordered, load, load_or_default,
+    prefs_path, save, save_ordered,
 };
 pub use pet::PetPrefs;
-pub use prefs::{migrate_pet_id, UiPreferences};
+pub use prefs::{UiPreferences, migrate_pet_id};
 pub use shell::{PetPickerMode, ShellPrefs, UiTheme};

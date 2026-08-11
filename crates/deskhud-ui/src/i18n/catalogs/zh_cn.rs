@@ -17,11 +17,15 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::SettingsAboutVersion => "版本",
         MessageKey::SettingsAboutLicense => "许可证",
         MessageKey::SettingsAboutStack => "基于 Rust 与 egui 构建的桌宠引擎。",
-        MessageKey::SettingsPetIntro => "「选择」并「应用」后生效，第三方宠物可能监听键鼠等输入，存在隐私与安全风险，请仅安装可信来源的包。",
+        MessageKey::SettingsPetIntro => {
+            "「选择」并「应用」后生效，第三方宠物可能监听键鼠等输入，存在隐私与安全风险，请仅安装可信来源的包。"
+        }
         MessageKey::SettingsPetWindowSize => "窗口",
         MessageKey::SettingsPetSelected => "使用中",
         MessageKey::SettingsPetOptions => "当前宠物行为",
-        MessageKey::HudSettingsIntro => "「开启」并「应用」后生效，第三方插件可能读取系统信息或展示内容，存在隐私与安全风险，请仅启用可信来源的插件。",
+        MessageKey::HudSettingsIntro => {
+            "「开启」并「应用」后生效，第三方插件可能读取系统信息或展示内容，存在隐私与安全风险，请仅启用可信来源的插件。"
+        }
         MessageKey::HudSettingsEmpty => "当前没有可配置的插件贡献。",
         MessageKey::MetaAuthor => "作者",
         MessageKey::HudItemsEnabled => "条开启",
@@ -49,7 +53,7 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::HudLayoutResetSizeHint => "恢复为默认 1× 尺寸",
         MessageKey::MenuHudLayout => "插件布局",
         MessageKey::SettingsTopmost => "置顶",
-        MessageKey::SettingsTopmostHint => "宠、HUD、设置与菜单共用同一置顶层级。",
+        MessageKey::SettingsTopmostHint => "仅让宠物和 HUD 保持置顶；设置窗口仍是普通窗口。",
         MessageKey::OptLocaleZh => "简体中文",
         MessageKey::OptLocaleEn => "English",
     }

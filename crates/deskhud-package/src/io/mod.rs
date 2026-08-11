@@ -27,9 +27,8 @@ pub fn read_manifest_dir(dir: &Path) -> Result<PackManifest, PackageError> {
 /// 将清单写入目录（创建父目录）。
 pub fn write_manifest_dir(dir: &Path, manifest: &PackManifest) -> Result<(), PackageError> {
     fs::create_dir_all(dir)?;
-    let text = toml::to_string_pretty(manifest).map_err(|e| {
-        PackageError::InvalidManifest(format!("serialize manifest: {e}"))
-    })?;
+    let text = toml::to_string_pretty(manifest)
+        .map_err(|e| PackageError::InvalidManifest(format!("serialize manifest: {e}")))?;
     fs::write(dir.join("manifest.toml"), text)?;
     Ok(())
 }
@@ -61,8 +60,7 @@ pub fn pack_directory(src_dir: &Path, dest_zip: &Path) -> Result<(), PackageErro
     let mut zip = ZipWriter::new(file);
     let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
     add_dir_to_zip(&mut zip, src_dir, src_dir, opts)?;
-    zip.finish()
-        .map_err(|e| PackageError::Zip(e.to_string()))?;
+    zip.finish().map_err(|e| PackageError::Zip(e.to_string()))?;
     Ok(())
 }
 
@@ -100,8 +98,7 @@ fn add_dir_to_zip(
 /// 解压 `.deskhud` / zip 到目标目录（先清空再写入）。
 pub fn unpack_archive(archive: &Path, dest_dir: &Path) -> Result<PackManifest, PackageError> {
     let file = File::open(archive)?;
-    let mut zip =
-        ZipArchive::new(file).map_err(|e| PackageError::Zip(e.to_string()))?;
+    let mut zip = ZipArchive::new(file).map_err(|e| PackageError::Zip(e.to_string()))?;
     if dest_dir.exists() {
         fs::remove_dir_all(dest_dir)?;
     }
@@ -199,11 +196,7 @@ mod tests {
         };
         write_manifest_dir(&dir, &manifest).unwrap();
         fs::create_dir_all(dir.join("i18n")).unwrap();
-        fs::write(
-            dir.join("i18n/zh-CN.toml"),
-            "display_name = \"往返\"\n",
-        )
-        .unwrap();
+        fs::write(dir.join("i18n/zh-CN.toml"), "display_name = \"往返\"\n").unwrap();
 
         let zip_path = temp_dir("out").with_extension("deskhud");
         pack_directory(&dir, &zip_path).unwrap();

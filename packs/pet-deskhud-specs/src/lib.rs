@@ -1,7 +1,8 @@
 //! 内置：大眼小球；全局键鼠对话气泡 + 贴边/拖动演示。
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use deskhud_engine::{
     DockState, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind, PetKindInfo, PetModifiers,
@@ -20,6 +21,90 @@ pub struct BuiltinSpecsPet {
     mouse_tips: AtomicBool,
     hover_highlight: AtomicBool,
     dock_tint: AtomicBool,
+    blink: Mutex<BlinkState>,
+}
+
+/// Short, asymmetric eye-close cycle with locally generated timing jitter.
+#[derive(Debug)]
+struct BlinkState {
+    next_blink_secs: f32,
+    elapsed_secs: Option<f32>,
+    random: u32,
+}
+
+impl BlinkState {
+    const TOTAL_SECS: f32 = 0.18;
+    const CLOSE_SECS: f32 = 0.05;
+    const HOLD_SECS: f32 = 0.025;
+
+    fn new() -> Self {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.subsec_nanos() ^ elapsed.as_secs() as u32)
+            .unwrap_or(0x4d59_5df4);
+        let mut state = Self {
+            next_blink_secs: 0.0,
+            elapsed_secs: None,
+            random: seed,
+        };
+        state.next_blink_secs = 2.2 + state.next_random_unit() * 3.2;
+        state
+    }
+
+    fn tick(&mut self, dt_secs: f32) {
+        let dt_secs = dt_secs.clamp(0.0, 0.25);
+        if let Some(elapsed_secs) = &mut self.elapsed_secs {
+            *elapsed_secs += dt_secs;
+            if *elapsed_secs >= Self::TOTAL_SECS {
+                self.elapsed_secs = None;
+                self.next_blink_secs = self.next_delay_secs();
+            }
+            return;
+        }
+
+        self.next_blink_secs -= dt_secs;
+        if self.next_blink_secs <= 0.0 {
+            self.elapsed_secs = Some(0.0);
+        }
+    }
+
+    fn eye_open(&self) -> f32 {
+        let Some(elapsed_secs) = self.elapsed_secs else {
+            return 1.0;
+        };
+        if elapsed_secs < Self::CLOSE_SECS {
+            return 1.0 - smooth_step(elapsed_secs / Self::CLOSE_SECS);
+        }
+        if elapsed_secs < Self::CLOSE_SECS + Self::HOLD_SECS {
+            return 0.0;
+        }
+        let reopen_secs = Self::TOTAL_SECS - Self::CLOSE_SECS - Self::HOLD_SECS;
+        smooth_step((elapsed_secs - Self::CLOSE_SECS - Self::HOLD_SECS) / reopen_secs)
+    }
+
+    fn next_delay_secs(&mut self) -> f32 {
+        let random = self.next_random_unit();
+        // Most blinks are 2.2–5.4 s apart; a small chance produces a quick double blink.
+        if random < 0.16 {
+            0.22 + self.next_random_unit() * 0.22
+        } else {
+            2.2 + self.next_random_unit() * 3.2
+        }
+    }
+
+    fn next_random_unit(&mut self) -> f32 {
+        let mut value = self.random;
+        value ^= value << 13;
+        value ^= value >> 17;
+        value ^= value << 5;
+        self.random = value;
+        value as f32 / u32::MAX as f32
+    }
+}
+
+fn smooth_step(value: f32) -> f32 {
+    let value = value.clamp(0.0, 1.0);
+    value * value * (3.0 - 2.0 * value)
 }
 
 impl Default for BuiltinSpecsPet {
@@ -34,6 +119,7 @@ impl Default for BuiltinSpecsPet {
             mouse_tips: AtomicBool::new(true),
             hover_highlight: AtomicBool::new(true),
             dock_tint: AtomicBool::new(true),
+            blink: Mutex::new(BlinkState::new()),
         }
     }
 }
@@ -93,6 +179,8 @@ fn key_label(key: PetKey) -> String {
         PetKey::Enter => "Enter".into(),
         PetKey::Backspace => "Backspace".into(),
         PetKey::Delete => "Delete".into(),
+        PetKey::Insert => "Insert".into(),
+        PetKey::Clear => "Clear".into(),
         PetKey::ArrowUp => "↑".into(),
         PetKey::ArrowDown => "↓".into(),
         PetKey::ArrowLeft => "←".into(),
@@ -106,6 +194,15 @@ fn key_label(key: PetKey) -> String {
         PetKey::Alt => "Alt".into(),
         PetKey::Super => "Win".into(),
         PetKey::CapsLock => "Caps".into(),
+        PetKey::NumLock => "NumLock".into(),
+        PetKey::NumpadEnter => "Num Enter".into(),
+        PetKey::NumpadDigit(n) => format!("Num {n}"),
+        PetKey::NumpadAdd => "Num +".into(),
+        PetKey::NumpadSubtract => "Num -".into(),
+        PetKey::NumpadMultiply => "Num ×".into(),
+        PetKey::NumpadDivide => "Num ÷".into(),
+        PetKey::NumpadDecimal => "Num .".into(),
+        PetKey::NumpadSeparator => "Num ,".into(),
         PetKey::Function(n) => format!("F{n}"),
         PetKey::Letter(c) | PetKey::Digit(c) | PetKey::Punct(c) => c.to_string(),
     }
@@ -145,7 +242,7 @@ impl PetKind for BuiltinSpecsPet {
             version: deskhud_engine::ENGINE_PRODUCT_VERSION,
             engine: deskhud_engine::ENGINE_COMPAT_FAMILY,
             display_name: "大眼球",
-            description: "全局跟鼠标看；键鼠短提示；悬停高亮",
+            description: "自然眨眼；全局跟鼠标看；键鼠短提示；悬停高亮",
             author: "DeskHud",
             homepage: Some("https://github.com/ko-eika/deskhud"),
             window_width: 160.0,
@@ -178,6 +275,9 @@ impl PetKind for BuiltinSpecsPet {
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
                 Some(v.saturating_sub(dec))
             });
+        if let Ok(mut blink) = self.blink.lock() {
+            blink.tick(dt_secs);
+        }
     }
 
     fn on_event(&self, event: PetEvent) {
@@ -258,6 +358,11 @@ impl PetKind for BuiltinSpecsPet {
             None
         };
         let global_lmb = ctx.mouse.global_primary_down;
+        let eye_open = self
+            .blink
+            .lock()
+            .map(|blink| blink.eye_open())
+            .unwrap_or(1.0);
 
         let bounce_base = if dragging {
             1.08 + (ctx.time_secs * 5.0).sin() as f32 * 0.04
@@ -334,7 +439,9 @@ impl PetKind for BuiltinSpecsPet {
             bounce: bounce_base,
             pupil_offset: pupil,
             draw_eyes: true,
+            eye_open,
             bubble_text,
+            bubble_style: Default::default(),
         }
     }
 }

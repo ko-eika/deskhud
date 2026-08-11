@@ -1,10 +1,10 @@
 id = "pet.deskhud.specs"
 kind = "pet"
-version = "0.4.2"
-engine = "0.4"
+version = "0.5.0"
+engine = "0.5"
 api_version = 1
 display_name = "Big Eyes"
-description = "Follows the cursor; key/mouse tip bubbles; hover highlight"
+description = "Natural blinking; follows the cursor; key/mouse tip bubbles; hover highlight"
 author = "DeskHud"
 homepage = "https://github.com/ko-eika/deskhud"
 window_width = 160

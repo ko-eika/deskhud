@@ -1,51 +1,26 @@
-//! DeskHud 入口（egui / eframe）。
-
-// release 无控制台；debug 保留以便看 tracing 日志
+//! DeskHud application entry point.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod app;
 mod fonts;
 #[cfg(windows)]
 mod gpu_overlay_probe;
 #[cfg(windows)]
 mod gpu_probe;
-mod hud_overlay;
 mod image_decode;
+mod native_host;
+mod overlay_control;
 #[cfg(windows)]
 mod overlay_probe;
-mod pet_dock;
-mod pet_draw;
-mod pet_input;
 mod pet_menu;
 mod pet_scene;
 mod platform;
 mod settings;
 mod theme;
 
-use std::sync::{Arc, OnceLock};
-
 use deskhud_ui::persist;
-use eframe::egui;
+use overlay_control::OverlayControlBus;
 
-/// 程序图标（主窗 / 设置窗共用）。
-pub(crate) fn icon() -> Arc<egui::IconData> {
-    static ICON: OnceLock<Arc<egui::IconData>> = OnceLock::new();
-    ICON.get_or_init(|| {
-        let img = image::load_from_memory(include_bytes!("../assets/icon.png"))
-            .expect("icon.png")
-            .into_rgba8();
-        let (width, height) = img.dimensions();
-        Arc::new(egui::IconData {
-            rgba: img.into_raw(),
-            width,
-            height,
-        })
-    })
-    .clone()
-}
-
-fn main() -> eframe::Result {
-    // 探针路径会提前返回；日志必须在环境变量分支之前初始化，诊断开关才有输出。
+fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -66,43 +41,21 @@ fn main() -> eframe::Result {
         return gpu_overlay_probe::run();
     }
 
-    let prefs = match persist::load() {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::warn!(error = %e, "prefs load failed; using defaults");
-            deskhud_ui::UiPreferences::default()
-        }
-    };
+    let prefs = persist::load().unwrap_or_else(|error| {
+        tracing::warn!(%error, "prefs load failed; using defaults");
+        deskhud_ui::UiPreferences::default()
+    });
     if let Some(path) = persist::prefs_path() {
         tracing::info!(?path, "prefs path");
     }
 
-    let mut viewport = egui::ViewportBuilder::default()
-        .with_title("")
-        .with_inner_size([prefs.pet.width, prefs.pet.height])
-        .with_decorations(false)
-        .with_transparent(true)
-        .with_has_shadow(false)
-        .with_resizable(false)
-        .with_taskbar(false)
-        .with_icon(icon());
-    if prefs.shell.topmost {
-        viewport = viewport.with_always_on_top();
-    }
-    if let Some([x, y]) = prefs.pet.pos() {
-        viewport = viewport.with_position([x, y]);
+    let controls = OverlayControlBus::default();
+    #[cfg(windows)]
+    {
+        gpu_overlay_probe::spawn(controls.clone(), prefs.shell.topmost, prefs.pet.pos())?;
+        native_host::run(prefs, controls)
     }
 
-    let options = eframe::NativeOptions {
-        renderer: eframe::Renderer::Glow,
-        multisampling: 0,
-        viewport,
-        ..Default::default()
-    };
-
-    eframe::run_native(
-        "DeskHud",
-        options,
-        Box::new(move |cc| Ok(Box::new(app::PetApp::new(cc, prefs)))),
-    )
+    #[cfg(not(windows))]
+    native_host::run(prefs, controls)
 }

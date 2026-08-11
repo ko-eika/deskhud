@@ -57,7 +57,7 @@ pub struct ShellPrefs {
     /// 设置窗左上角 Y。
     #[serde(default)]
     pub settings_pos_y: Option<f32>,
-    /// 全局置顶（宠 / HUD / 设置 / 菜单同一层级；落盘 `[settings].topmost`）。
+    /// 桌面覆盖层置顶（宠 / HUD；菜单打开时临时在宠物之上；设置窗不置顶）。
     #[serde(default = "default_topmost")]
     pub topmost: bool,
 }

@@ -7,11 +7,12 @@
 
 - 唯一 UI 是 `deskhud-egui`；禁止第二套 UI、托盘和 UI 依赖 `git2`。
 - `deskhud-engine` 只放契约，不能依赖 `deskhud-sdk`；社区扩展只能是 WASM + SDK，不能分发原生 DLL。
-- 只有**主宠窗**可使用 Glow `with_transparent(true)`；设置、菜单和 HUD 合成子窗必须 deferred 且铺满不透明底，禁止透明子窗。
-- `show_viewport_deferred` 只能从 `App::ui` 调用；窗口 RGN 塑形、`ExtendFrame(-1)`、`WS_EX_NOACTIVATE` 都不能用。
-- 宠物置顶只跟 prefs；开设置时宠可以点击穿透，禁止用 `AlwaysOnTop` / owner / 临时取消置顶形成循环。
+- egui 仅负责菜单和设置，由 `winit + egui_glow` 直接托管不透明控制窗；宠物/HUD 透明合成属于平台覆盖层，禁止恢复 eframe/deferred 双路径。
+- 透明命中不能靠全屏 UI 窗或窗口 RGN 模拟；平台覆盖层只消费中性场景/命中契约，OS 类型不得进入包和引擎契约。
+- 宠物置顶只跟 prefs，设置窗始终不置顶；菜单打开时可临时位于宠物之上，禁止用 owner / 临时取消宠物置顶形成层级循环。
 - 运行态 HUD 必须**每屏一个合成窗、同层绘制**；启用条件是总开关 ∧ 插件 ∧ 条目，且合成窗不要每帧设置 `WindowLevel`。
-- 贴边、拖拽和 HWND 几何由壳处理；包只消费 `DockState`、`DragState`、`PetEvent`、`PetPaintCtx`，不直接操作 HWND。
+- 贴边、拖拽和 HWND 几何由壳处理（拖动可越界，松手再吸附/修正）；包只消费 `DockState`、`DragState`、`PetEvent`、`PetPaintCtx`，不直接操作 HWND。
+- 对话气泡由宿主独立透明工具窗承载并负责屏幕避让；包只描述中性样式/位置，不创建 `WS_CHILD`、HWND 或平台窗口。
 - 第三方版本只在根 `[workspace.dependencies]`；包兼容性与版本改动先读 `docs/versioning.md`。
 - 改架构、窗口行为或包契约前，先读近期提交说明及相关文件历史；提交记录只提供上下文，冲突时以 CONSTRAINTS 与现行代码为准。
 
@@ -45,7 +46,7 @@
 
 | 领域 | 选择 | 说明 |
 |------|------|------|
-| UI | egui / eframe（Glow） | 唯一 UI；无托盘、无第二套框架 |
+| UI | egui + winit / egui_glow | 唯一 UI；平台覆盖层负责透明合成，无 eframe、无托盘、无第二套框架 |
 | 内置扩展 | 原生 Rust `PetKind` / `Plugin` | 性能好、调试方便 |
 | 社区扩展 | **WASM**（wasmtime）+ `deskhud-sdk` | 可带行为逻辑且可沙箱，适合下载分发 |
 | 包格式 | `.deskhud`（目录或 zip）+ `manifest.toml` | 宠物包 / HUD 插件同构，靠 `kind` 区分 |

@@ -49,7 +49,10 @@ idle = "闲逛"
 "#,
         )
         .unwrap();
-        assert_eq!(c.messages.get("display_name").map(String::as_str), Some("酷猫"));
+        assert_eq!(
+            c.messages.get("display_name").map(String::as_str),
+            Some("酷猫")
+        );
         assert_eq!(c.messages.get("idle").map(String::as_str), Some("闲逛"));
     }
 }

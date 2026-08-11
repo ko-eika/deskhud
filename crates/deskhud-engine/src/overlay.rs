@@ -60,6 +60,49 @@ pub struct OverlayCircle {
     pub color: OverlayColor,
 }
 
+/// An axis-aligned solid ellipse in an overlay scene.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OverlayEllipse {
+    /// Stable identifier for diagnostics and event mapping.
+    pub id: String,
+    /// Center in logical coordinates.
+    pub center: OverlayPoint,
+    /// Horizontal radius; callers provide a non-negative value.
+    pub radius_x: f32,
+    /// Vertical radius; callers provide a non-negative value.
+    pub radius_y: f32,
+    /// Fill color.
+    pub color: OverlayColor,
+}
+
+/// 场景中的纯色圆角矩形绘制原语。
+#[derive(Debug, Clone, PartialEq)]
+pub struct OverlayRoundedRect {
+    /// 用于诊断的稳定标识。
+    pub id: String,
+    /// 矩形范围。
+    pub rect: OverlayRect,
+    /// 圆角半径。
+    pub corner_radius: f32,
+    /// 填充颜色。
+    pub color: OverlayColor,
+}
+
+/// 场景中的单行居中文本绘制原语。
+#[derive(Debug, Clone, PartialEq)]
+pub struct OverlayText {
+    /// 用于诊断的稳定标识。
+    pub id: String,
+    /// 文本布局范围。
+    pub rect: OverlayRect,
+    /// UTF-8 文本内容。
+    pub text: String,
+    /// 字号（逻辑像素）。
+    pub font_size: f32,
+    /// 文本颜色。
+    pub color: OverlayColor,
+}
+
 /// 覆盖层后端必须支持的最小绘制原语。
 ///
 /// 这是场景描述而非图形 API；平台后端可用 GDI、Direct2D、Core Animation 或其它
@@ -68,6 +111,12 @@ pub struct OverlayCircle {
 pub enum OverlayVisual {
     /// 纯色圆形。
     Circle(OverlayCircle),
+    /// Solid axis-aligned ellipse.
+    Ellipse(OverlayEllipse),
+    /// 纯色圆角矩形。
+    RoundedRect(OverlayRoundedRect),
+    /// 单行居中文本。
+    Text(OverlayText),
 }
 
 /// 命中区域的交互语义。

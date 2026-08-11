@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use super::classify::classify_stem;
-use super::{system_font_id, FontFace, FontFamilyEntry};
+use super::{FontFace, FontFamilyEntry, system_font_id};
 
 const MAX_SYSTEM_FONTS: usize = 480;
 

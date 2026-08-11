@@ -7,7 +7,7 @@ mod keys;
 mod locale;
 
 pub use builtin_packs::seed_builtin_packs;
-pub use catalog_store::{locale_file_candidates, locale_tag, CatalogStore};
+pub use catalog_store::{CatalogStore, locale_file_candidates, locale_tag};
 pub use keys::MessageKey;
 pub use locale::Locale;
 

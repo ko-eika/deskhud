@@ -78,11 +78,7 @@ fn version_looks_ok(version: &str) -> bool {
 }
 
 /// `kind.org.pack`：至少 `min_segments` 段，首段为 `kind`，段内仅 `[a-zA-Z0-9_-]`。
-fn validate_namespaced_id(
-    id: &str,
-    kind: &str,
-    min_segments: usize,
-) -> Result<(), PackageError> {
+fn validate_namespaced_id(id: &str, kind: &str, min_segments: usize) -> Result<(), PackageError> {
     let parts: Vec<&str> = id.split('.').collect();
     if parts.len() < min_segments || parts[0] != kind {
         return Err(PackageError::InvalidManifest(format!(

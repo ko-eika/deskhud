@@ -48,6 +48,8 @@ impl PetKind for MyPet {
 | `drag` | [`DragState`](../crates/deskhud-engine/src/pet/drag_state.rs) 是否在拖窗 |
 | `mouse` | [`MouseState`](../crates/deskhud-engine/src/pet/mouse_state.rs) 局部悬停/按下 + **全局**按键 |
 
+| `theme` | 宿主已解析的 `PetTheme::Light` / `PetTheme::Dark`；不暴露 egui 或平台主题对象 |
+
 #### 全局 vs 局部（重要）
 
 | 能力 | 范围 | 典型用途 |
@@ -81,9 +83,13 @@ impl PetKind for MyPet {
 
 键鼠类型：`PetMouseButton`、`PetKey`、`PetModifiers`（均为中性枚举，无虚拟键码）。
 
-**键盘说明**：完整全局热键钩子不在本契约内。壳对修饰键（Ctrl/Shift/Alt/Win）、字母数字、常用标点、F1–F12、方向与编辑键等做 `GetAsyncKeyState` 边沿采样并派发 `GlobalKey*`；获焦时另有 `Key*`。
+**键盘说明**：完整全局热键钩子不在本契约内。壳对修饰键（Ctrl/Shift/Alt/Win）、主键区字母数字、常用标点、F1–F12、方向与编辑键、小键盘数字/运算符/NumLock/扩展 Enter 等做低级 Hook，并以 `GetAsyncKeyState` 边沿采样回退，派发 `GlobalKey*`；获焦时另有 `Key*`。
 
-外观：`PetPaint.bubble_text` 可选短句；壳按宠窗宽度换行（最多约 3 行，过长加 `…`）。
+外观：`PetPaint.bubble_text` 可选短句；当前 Windows 原生后端把它绘制在宿主管理的独立透明工具窗中，超长截断，并按工作区自动选择宠物上方或下方、限制在屏幕内。后续 `PetFrame` 会增加平台无关的首选方位、气泡皮肤、透明度、尾巴与文字样式；包不得直接创建平台窗口。
+
+宠物可以自发显示对话：在 `tick(dt)` 中累计提醒计时，到点后更新包内状态；随后由 `paint(...)` 把提示写入 `bubble_text`。宿主每帧调用 `tick` / `paint`，并自动显示、定位和隐藏对话窗。当前没有全局“定时提醒器”替包决定内容；提醒周期、随机性、冷却与文案属于宠物行为。此能力现在适用于原生内置宠，社区 WASM 包需等待 Guest runtime 接入同一帧契约。
+
+`PetPaint.bubble_style` 默认 `FollowTheme`，宿主会按 `ctx.theme` 选择高对比度浅/深配色。包也可填写 `PetBubbleStyle::Custom` 的背景 RGBA、文字 RGBA 与圆角，完全使用自定义样式；包仍不得创建平台窗口。
 
 ### 1.5 贴边与拖动（壳行为，包只读状态）
 

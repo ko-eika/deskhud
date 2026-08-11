@@ -11,6 +11,7 @@ mod pet_key;
 mod pet_kind;
 mod pet_kind_info;
 mod pet_paint;
+mod pet_theme;
 
 pub use dock_state::DockState;
 pub use drag_state::DragState;
@@ -22,4 +23,5 @@ pub use pet_event::PetEvent;
 pub use pet_key::PetKey;
 pub use pet_kind::{PetConfigBag, PetKind, PetPaintCtx};
 pub use pet_kind_info::PetKindInfo;
-pub use pet_paint::PetPaint;
+pub use pet_paint::{PetBubbleStyle, PetPaint};
+pub use pet_theme::PetTheme;

@@ -1,6 +1,6 @@
 //! 设置页图标 / 预览：SVG 与光栅图统一解码为 RGBA。
 
-use eframe::egui::ColorImage;
+use egui::ColorImage;
 use resvg::tiny_skia;
 use resvg::usvg;
 

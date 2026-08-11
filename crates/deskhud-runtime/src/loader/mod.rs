@@ -4,12 +4,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use deskhud_package::{
-    engine_family_of_product, open_pack, pack_engine_matches, read_catalog_dir, read_manifest_dir,
-    PackCatalog, PackManifest, PackageError,
+    PackCatalog, PackManifest, PackageError, engine_family_of_product, open_pack,
+    pack_engine_matches, read_catalog_dir, read_manifest_dir,
 };
 use tracing::{info, warn};
 
-use crate::{default_package_dirs, RuntimeError};
+use crate::{RuntimeError, default_package_dirs};
 
 /// 本 crate / workspace 的引擎产品 SemVer（发现时用于 `engine` 门闸）。
 const RUNTIME_PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -102,11 +102,7 @@ impl PackageLoader {
                 return Ok(None);
             }
             let manifest = read_manifest_dir(path)?;
-            return Ok(Some(make_discovered(
-                path.to_path_buf(),
-                None,
-                manifest,
-            )));
+            return Ok(Some(make_discovered(path.to_path_buf(), None, manifest)));
         }
         let ext = path
             .extension()
@@ -118,11 +114,7 @@ impl PackageLoader {
         }
         let opened = open_pack(path, &self.cache_dir)?;
         let manifest = read_manifest_dir(&opened.path)?;
-        Ok(Some(make_discovered(
-            opened.path,
-            opened.archive,
-            manifest,
-        )))
+        Ok(Some(make_discovered(opened.path, opened.archive, manifest)))
     }
 
     /// 读取包内某一 locale 的目录（文件可不存在）。

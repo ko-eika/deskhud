@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use super::{DockState, DragState, MouseState, PetConfigOption, PetEvent, PetKindInfo, PetPaint};
+use super::{
+    DockState, DragState, MouseState, PetConfigOption, PetEvent, PetKindInfo, PetPaint, PetTheme,
+};
 
 /// 当前帧可读的宠配置（短键 → 布尔；由壳从 `[pet.config]` 解析）。
 #[derive(Debug, Clone, Copy)]
@@ -43,6 +45,8 @@ pub struct PetPaintCtx<'a> {
     pub mouse: MouseState,
     /// 当前宠的布尔配置（短键）。
     pub config: PetConfigBag<'a>,
+    /// 宿主已解析的明暗方案，供宠物决定是否跟随主题绘制气泡等附属内容。
+    pub theme: PetTheme,
 }
 
 /// 桌宠类型扩展点。

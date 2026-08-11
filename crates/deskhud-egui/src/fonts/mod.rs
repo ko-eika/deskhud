@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use eframe::egui::{self, FontData, FontDefinitions, FontFamily, FontId, TextStyle, Theme};
+use egui::{self, FontData, FontDefinitions, FontFamily, FontId, TextStyle, Theme};
 
 pub use classify::{normalize_style_name, style_sort_key};
 pub use scan::system_font_families;

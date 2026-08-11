@@ -105,7 +105,9 @@ impl PetKind for BuiltinBlobPet {
             bounce,
             pupil_offset: [0.0, 0.0],
             draw_eyes: true,
+            eye_open: 1.0,
             bubble_text: None,
+            bubble_style: Default::default(),
         }
     }
 }

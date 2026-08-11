@@ -55,8 +55,9 @@ Host 契约（当前）：
 - `tick(dt)`：自主状态 / 动画（默认空）
 - `on_event(PetEvent)`：贴边 / 拖拽 / 键鼠（`DockChanged`、`Drag*`、`Mouse*`、`Key*`）
 - `config_options()` / `apply_config`：声明布尔行为开关；prefs 键 `{pet_id}.{key}`
-- `paint(PetPaintCtx)`：输出 `PetPaint`；可读 `dock` / `drag` / `mouse` / `config`
+- `paint(PetPaintCtx)`：输出 `PetPaint`；可读 `dock` / `drag` / `mouse` / `config` / 已解析的 `theme`
 - UI 壳负责工作区几何、拖动吸附与输入转发；宠物包不读 HWND / 屏幕坐标
+- 对话气泡由宿主管理的独立透明工具窗承载，避免频繁扩缩宠物合成面；未来包通过中性视觉字段自定义首选方位、背景、透明度、尾巴与文字样式，壳负责屏幕避让、穿透和生命周期。它是逻辑子窗而非受父客户区裁剪的 `WS_CHILD`，包不创建平台窗口
 
 作者向说明见 [`extension-guide.md`](./extension-guide.md)。
 
@@ -77,7 +78,7 @@ Host 契约（当前）：
 
 ## 原生桌面覆盖层迁移
 
-当前稳定运行态维持透明宠窗与每屏 HUD 合成窗。为了逐步实现“可交互局部命中、被动内容和空白区穿透到其他应用”，后续以平台无关的覆盖层契约推进；阶段、降级原则和验收条件见 [`overlay-migration.md`](./overlay-migration.md)。在原生后端通过验收前，不以全屏 Glow 主窗替换稳定运行态。
+当前 Windows 运行态由原生 GPU 宠物窗与直接托管的 egui 菜单/设置窗组成；HUD 原生合成仍在迁移中。为了实现“可交互局部命中、被动内容和空白区穿透到其他应用”，各平台只通过平台无关的覆盖层契约接入；阶段、降级原则和验收条件见 [`overlay-migration.md`](./overlay-migration.md)。不再以全屏 Glow 主窗或 eframe 回退路径替代原生后端。
 
 ## 设置窗
 

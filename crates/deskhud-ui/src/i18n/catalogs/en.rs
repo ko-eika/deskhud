@@ -17,11 +17,15 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::SettingsAboutVersion => "Version",
         MessageKey::SettingsAboutLicense => "License",
         MessageKey::SettingsAboutStack => "A desktop pet engine built with Rust and egui.",
-        MessageKey::SettingsPetIntro => "Takes effect after you Select and Apply. Third-party pets may monitor keyboard/mouse input and pose privacy or security risks—only install packs from sources you trust.",
+        MessageKey::SettingsPetIntro => {
+            "Takes effect after you Select and Apply. Third-party pets may monitor keyboard/mouse input and pose privacy or security risks—only install packs from sources you trust."
+        }
         MessageKey::SettingsPetWindowSize => "Window",
         MessageKey::SettingsPetSelected => "In use",
         MessageKey::SettingsPetOptions => "Active pet behavior",
-        MessageKey::HudSettingsIntro => "Takes effect after you Enable and Apply. Third-party plugins may read system info or show content and pose privacy or security risks—only enable plugins from sources you trust.",
+        MessageKey::HudSettingsIntro => {
+            "Takes effect after you Enable and Apply. Third-party plugins may read system info or show content and pose privacy or security risks—only enable plugins from sources you trust."
+        }
         MessageKey::HudSettingsEmpty => "No plugin contributions available.",
         MessageKey::MetaAuthor => "Author",
         MessageKey::HudItemsEnabled => "enabled",
@@ -41,7 +45,9 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::HudMasterEnableHint => "When off, no HUD is shown",
         MessageKey::HudMasterDisabledHint => "Off: all HUD stays hidden",
         MessageKey::HudLayoutEdit => "Plugin layout",
-        MessageKey::HudLayoutEditingHint => "Layout editor is open: drag chips; Reset/Cancel/Apply at the top",
+        MessageKey::HudLayoutEditingHint => {
+            "Layout editor is open: drag chips; Reset/Cancel/Apply at the top"
+        }
         MessageKey::HudLayoutDone => "Apply",
         MessageKey::HudLayoutCancel => "Cancel",
         MessageKey::HudLayoutHint => "Click to select · drag to move · corner scales by grid",
@@ -49,7 +55,9 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::HudLayoutResetSizeHint => "Restore the default 1× size",
         MessageKey::MenuHudLayout => "Plugin layout",
         MessageKey::SettingsTopmost => "Keep on top",
-        MessageKey::SettingsTopmostHint => "Pet, HUD, settings, and menu share one topmost level.",
+        MessageKey::SettingsTopmostHint => {
+            "Keep only the pet and HUD on top; Settings remains a normal window."
+        }
         MessageKey::OptLocaleZh => "简体中文",
         MessageKey::OptLocaleEn => "English",
     }

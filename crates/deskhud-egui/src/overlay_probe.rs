@@ -1,6 +1,6 @@
 //! Windows 原生桌面覆盖层探针。
 //!
-//! 它由 `DESKHUD_OVERLAY_PROBE=1` 显式启动，绝不接管正常的 eframe 运行路径。
+//! 它由 `DESKHUD_OVERLAY_PROBE=1` 显式启动，绝不接管正常运行路径。
 //! 目的仅是验证 native layered window 能否稳定提供透明、局部命中和空白穿透。
 
 use std::cell::RefCell;
@@ -10,24 +10,23 @@ use std::time::Instant;
 
 use deskhud_engine::{
     DockState, DragState, EngineRegistry, MouseState, OverlayCircle, OverlayDisplayTarget,
-    OverlayPoint, OverlayScene, OverlayVisual, PetConfigBag, PetPaint, PetPaintCtx,
+    OverlayPoint, OverlayScene, OverlayVisual, PetConfigBag, PetPaint, PetPaintCtx, PetTheme,
 };
 use deskhud_ui::UiPreferences;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetMonitorInfoW,
-    MonitorFromPoint, SelectObject, AC_SRC_ALPHA, AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER,
-    BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ, MONITORINFO,
-    MONITOR_DEFAULTTOPRIMARY,
+    AC_SRC_ALPHA, AC_SRC_OVER, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BLENDFUNCTION,
+    CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetMonitorInfoW,
+    HBITMAP, HDC, HGDIOBJ, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromPoint, SelectObject,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_ESCAPE, VK_LBUTTON};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW,
-    GetSystemMetrics, GetWindowLongPtrW, PostQuitMessage, RegisterClassW, SetTimer,
-    SetWindowLongPtrW, SetWindowPos, TranslateMessage, UpdateLayeredWindow, CS_HREDRAW, CS_VREDRAW,
-    GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, MSG, SM_CXSCREEN, SM_CYSCREEN, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, ULW_ALPHA, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED,
+    CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
+    GWL_EXSTYLE, GetCursorPos, GetMessageW, GetSystemMetrics, GetWindowLongPtrW, HWND_NOTOPMOST,
+    HWND_TOPMOST, MSG, PostQuitMessage, RegisterClassW, SM_CXSCREEN, SM_CYSCREEN, SWP_FRAMECHANGED,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetTimer, SetWindowLongPtrW, SetWindowPos,
+    TranslateMessage, ULW_ALPHA, UpdateLayeredWindow, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED,
     WM_LBUTTONDOWN, WM_RBUTTONUP, WM_TIMER, WNDCLASSW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
     WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
 };
@@ -82,7 +81,7 @@ thread_local! {
     static SURFACE: RefCell<Option<OverlaySurface>> = const { RefCell::new(None) };
 }
 
-/// 探针私有的宠物宿主；它与正式 eframe 壳隔离，但复用同一引擎契约与 prefs。
+/// 探针私有的宠物宿主；它与正式原生壳隔离，但复用同一引擎契约与 prefs。
 struct ProbePetRuntime {
     host: EngineRegistry,
     prefs: UiPreferences,
@@ -160,7 +159,7 @@ impl Drop for OverlaySurface {
 }
 
 /// 运行探针。按 Escape 退出；右键会改变宠物颜色，用来确认命中没有被穿透。
-pub fn run() -> eframe::Result {
+pub fn run() -> anyhow::Result<()> {
     unsafe {
         initialize_pet_runtime();
         let instance = GetModuleHandleW(std::ptr::null());
@@ -571,6 +570,7 @@ fn probe_scene() -> OverlayScene {
         },
         mouse: MouseState::IDLE,
         config,
+        theme: PetTheme::Dark,
     });
     runtime.pupil_smooth[0] += (paint.pupil_offset[0] - runtime.pupil_smooth[0]) * 0.28;
     runtime.pupil_smooth[1] += (paint.pupil_offset[1] - runtime.pupil_smooth[1]) * 0.28;
@@ -633,6 +633,7 @@ fn draw_scene(pixels: &mut [u8], width: i32, height: i32, scene: &OverlayScene) 
     for visual in &scene.visuals {
         match visual {
             OverlayVisual::Circle(circle) => draw_circle(pixels, width, height, circle),
+            OverlayVisual::Ellipse(_) | OverlayVisual::RoundedRect(_) | OverlayVisual::Text(_) => {}
         }
     }
 }
@@ -641,6 +642,7 @@ fn clear_scene(pixels: &mut [u8], width: i32, height: i32, scene: &OverlayScene)
     for visual in &scene.visuals {
         match visual {
             OverlayVisual::Circle(circle) => clear_circle(pixels, width, height, circle),
+            OverlayVisual::Ellipse(_) | OverlayVisual::RoundedRect(_) | OverlayVisual::Text(_) => {}
         }
     }
 }

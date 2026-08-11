@@ -14,16 +14,17 @@ pub mod registry;
 /// 引擎产品 SemVer（与 workspace / 本 crate 版本一致）。
 pub const ENGINE_PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// 引擎兼容族：`0.x` 为 `MAJOR.MINOR`（与当前 workspace `0.4.1` / 族 `0.4` 对齐）。
-pub const ENGINE_COMPAT_FAMILY: &str = "0.4";
+/// 引擎兼容族：`0.x` 为 `MAJOR.MINOR`（与当前 workspace `0.5.0` / 族 `0.5` 对齐）。
+pub const ENGINE_COMPAT_FAMILY: &str = "0.5";
 
 pub use overlay::{
-    OverlayBackendCapabilities, OverlayCircle, OverlayColor, OverlayDisplayTarget, OverlayHitKind,
-    OverlayHitRegion, OverlayHitShape, OverlayPoint, OverlayRect, OverlayScene, OverlayVisual,
+    OverlayBackendCapabilities, OverlayCircle, OverlayColor, OverlayDisplayTarget, OverlayEllipse,
+    OverlayHitKind, OverlayHitRegion, OverlayHitShape, OverlayPoint, OverlayRect,
+    OverlayRoundedRect, OverlayScene, OverlayText, OverlayVisual,
 };
 pub use pet::{
-    DockState, DragState, MouseState, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind,
-    PetKindInfo, PetModifiers, PetMouseButton, PetPaint, PetPaintCtx,
+    DockState, DragState, MouseState, PetBubbleStyle, PetConfigBag, PetConfigOption, PetEvent,
+    PetKey, PetKind, PetKindInfo, PetModifiers, PetMouseButton, PetPaint, PetPaintCtx, PetTheme,
 };
 pub use plugin::{HudContribution, Plugin, PluginInfo};
 pub use registry::EngineRegistry;

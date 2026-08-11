@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{catalogs, Locale, MessageKey};
+use super::{Locale, MessageKey, catalogs};
 
 /// 动态键值表（按 locale 分桶）；缺键回退到 `en`。
 #[derive(Debug, Clone, Default)]

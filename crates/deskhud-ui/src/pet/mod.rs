@@ -10,7 +10,11 @@ use crate::shell::PetPickerMode;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PetPrefs {
     /// 当前宠物类型 ID。
-    #[serde(default = "default_kind", alias = "active_pet_kind_id", alias = "kind_id")]
+    #[serde(
+        default = "default_kind",
+        alias = "active_pet_kind_id",
+        alias = "kind_id"
+    )]
     pub kind: String,
     /// 宠窗宽（来自宠物包元数据缓存）。
     #[serde(default = "default_size", alias = "pet_width")]
@@ -113,11 +117,7 @@ impl PetPrefs {
     }
 
     /// 解析当前宠的短键表（供 `PetConfigBag`）。
-    pub fn short_map_for(
-        &self,
-        pet_id: &str,
-        options: &[(&str, bool)],
-    ) -> HashMap<String, bool> {
+    pub fn short_map_for(&self, pet_id: &str, options: &[(&str, bool)]) -> HashMap<String, bool> {
         let mut map = HashMap::new();
         for &(key, default) in options {
             map.insert(key.to_string(), self.get_option(pet_id, key, default));

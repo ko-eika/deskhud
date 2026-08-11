@@ -1,5 +1,5 @@
 display_name = "Big Eyes"
-description = "Follows the cursor; key/mouse tip bubbles; hover highlight"
+description = "Natural blinking; follows the cursor; key/mouse tip bubbles; hover highlight"
 "follow_eyes.label" = "Eyes follow pointer"
 "follow_eyes.description" = "Pupils track desktop cursor direction"
 "key_tips.label" = "Key tips"

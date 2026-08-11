@@ -216,8 +216,7 @@ impl HudPrefs {
                 }
             }
         }
-        self.get_bool(contribution_id)
-            .unwrap_or(default_enabled)
+        self.get_bool(contribution_id).unwrap_or(default_enabled)
     }
 
     /// 设置条目启用状态。
@@ -237,24 +236,16 @@ impl HudPrefs {
         for &legacy in legacy_plugin_ids(plugin_id) {
             self.config
                 .remove(&Self::contribution_enable_key(legacy, contribution_id));
-            self.config
-                .remove(&format!("{legacy}.{contribution_id}"));
-            self.config
-                .remove(&format!("{legacy}/{contribution_id}"));
+            self.config.remove(&format!("{legacy}.{contribution_id}"));
+            self.config.remove(&format!("{legacy}/{contribution_id}"));
             if legacy == "demo.hud" {
-                self.config
-                    .remove(&format!("demo.{contribution_id}"));
+                self.config.remove(&format!("demo.{contribution_id}"));
             }
         }
     }
 
     /// 全局总开关、插件开启 **且** 条目开启时才真正显示。
-    pub fn is_active(
-        &self,
-        plugin_id: &str,
-        contribution_id: &str,
-        default_enabled: bool,
-    ) -> bool {
+    pub fn is_active(&self, plugin_id: &str, contribution_id: &str, default_enabled: bool) -> bool {
         self.is_master_enabled()
             && self.is_plugin_enabled(plugin_id)
             && self.is_enabled(plugin_id, contribution_id, default_enabled)
@@ -273,9 +264,7 @@ impl HudPrefs {
         index: usize,
     ) -> HudSlotLayout {
         let base = Self::layout_key(plugin_id, contribution_id);
-        let has_flat = self
-            .get_str(&format!("{base}.display"))
-            .is_some()
+        let has_flat = self.get_str(&format!("{base}.display")).is_some()
             || self.get_f32(&format!("{base}.x")).is_some()
             || self.get_f32(&format!("{base}.y")).is_some()
             || self.get_f32(&format!("{base}.scale")).is_some()
@@ -389,14 +378,8 @@ mod tests {
         assert!(!hud.is_plugin_enabled("hud.deskhud.demo"));
         assert!(!hud.is_active("hud.deskhud.demo", "clock", true));
         assert!(hud.is_enabled("hud.deskhud.demo", "clock", false));
-        assert_eq!(
-            hud.get_bool("hud.deskhud.demo.enable"),
-            Some(false)
-        );
-        assert_eq!(
-            hud.get_bool("hud.deskhud.demo.clock.enable"),
-            Some(true)
-        );
+        assert_eq!(hud.get_bool("hud.deskhud.demo.enable"), Some(false));
+        assert_eq!(hud.get_bool("hud.deskhud.demo.clock.enable"), Some(true));
     }
 
     #[test]

@@ -11,13 +11,11 @@ pub mod i18n;
 pub mod io;
 pub mod manifest;
 
-pub use compat::{
-    engine_family_of_product, pack_engine_matches, ENGINE_PRODUCT_VERSION,
-};
+pub use compat::{ENGINE_PRODUCT_VERSION, engine_family_of_product, pack_engine_matches};
 pub use error::PackageError;
 pub use i18n::PackCatalog;
 pub use io::{
-    open_pack, pack_directory, read_catalog_dir, read_manifest_dir, unpack_archive,
-    write_manifest_dir, PackRoot,
+    PackRoot, open_pack, pack_directory, read_catalog_dir, read_manifest_dir, unpack_archive,
+    write_manifest_dir,
 };
 pub use manifest::{PackHudEntry, PackKind, PackManifest};
