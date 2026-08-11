@@ -65,7 +65,10 @@ pub fn window_screen_pos_from_ctx(ctx: &egui::Context) -> Option<(i32, i32)> {
         (v.outer_rect, i.pixels_per_point())
     });
     let rect = rect?;
-    Some(((rect.min.x * ppp).round() as i32, (rect.min.y * ppp).round() as i32))
+    Some((
+        (rect.min.x * ppp).round() as i32,
+        (rect.min.y * ppp).round() as i32,
+    ))
 }
 
 /// 无 HWND 时的空实现。
@@ -79,7 +82,9 @@ pub fn window_screen_rect(_hwnd: isize) -> Option<(i32, i32, i32, i32)> {
 
 /// 用 ViewportCommand 移动（逻辑点）。
 pub fn move_viewport_points(ctx: &egui::Context, x_points: f32, y_points: f32) {
-    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(x_points, y_points)));
+    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(
+        x_points, y_points,
+    )));
 }
 
 /// 兼容旧签名：无原生 move。

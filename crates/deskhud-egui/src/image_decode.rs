@@ -14,9 +14,7 @@ pub const PREVIEW_RASTER_EDGE: u32 = 1536;
 /// 按 DPI 把逻辑边长换成实际栅格边长。
 pub fn physical_raster_edge(logical_edge: u32, pixels_per_point: f32) -> u32 {
     let ppp = pixels_per_point.clamp(1.0, 4.0);
-    ((logical_edge as f32) * ppp)
-        .ceil()
-        .clamp(1.0, 4096.0) as u32
+    ((logical_edge as f32) * ppp).ceil().clamp(1.0, 4096.0) as u32
 }
 
 /// 将资源字节解码为 egui [`ColorImage`]。

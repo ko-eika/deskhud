@@ -1,25 +1,25 @@
-﻿//! 桌宠主应用：透明宠窗 + 右键菜单 + 统一设置窗。
+//! 桌宠主应用：透明宠窗 + 右键菜单 + 统一设置窗。
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, Color32, Frame, Sense, Stroke, Vec2};
 use deskhud_engine::{
     DockState, DragState, EngineRegistry, MouseState, PetConfigBag, PetEvent, PetModifiers,
     PetPaintCtx,
 };
 use deskhud_ui::{persist, UiPreferences};
+use eframe::egui::{self, Color32, Frame, Sense, Stroke, Vec2};
 use raw_window_handle::HasWindowHandle;
 use tracing::{info, warn};
 
 use crate::fonts;
+use crate::hud_overlay::HudOverlayHost;
 use crate::pet_dock;
 use crate::pet_draw;
 use crate::pet_input;
-use crate::hud_overlay::HudOverlayHost;
 use crate::pet_menu::PetMenuHost;
-use crate::settings::{SettingsHost, SettingsTab};
 use crate::platform;
+use crate::settings::{SettingsHost, SettingsTab};
 
 const PREFS_SAVE_DEBOUNCE: Duration = Duration::from_millis(400);
 
@@ -85,10 +85,7 @@ impl PetApp {
         let boot = deskhud_runtime::bootstrap_registry();
         let mut host = boot.registry;
         let catalogs = deskhud_runtime::build_catalog_store(&boot.discovered, prefs.locale);
-        info!(
-            packs = boot.discovered.len(),
-            "local packages discovered"
-        );
+        info!(packs = boot.discovered.len(), "local packages discovered");
         if !host.set_active_pet(&prefs.pet.kind) {
             warn!(
                 id = %prefs.pet.kind,
@@ -431,7 +428,11 @@ impl PetApp {
             self.pending_resize = size_changed;
             self.pending_topmost = topmost_changed;
             self.defer_topmost_sync = false;
-            self.apply_delay_frames = if size_changed || topmost_changed { 4 } else { 0 };
+            self.apply_delay_frames = if size_changed || topmost_changed {
+                4
+            } else {
+                0
+            };
             self.maybe_save_prefs(true);
             ctx.request_repaint();
             return;
@@ -463,7 +464,6 @@ impl PetApp {
             ctx.request_repaint();
         }
     }
-
 
     /// 延迟结束后再改宠窗尺寸 / 置顶。
     fn flush_pending_window_ops(&mut self, ctx: &egui::Context) {
@@ -497,12 +497,7 @@ impl PetApp {
     }
 
     /// 只写 prefs / 切宠 / 主题字体；不发 InnerSize、WindowLevel。
-    fn apply_prefs_soft(
-        &mut self,
-        ctx: &egui::Context,
-        draft: UiPreferences,
-        save: bool,
-    ) -> bool {
+    fn apply_prefs_soft(&mut self, ctx: &egui::Context, draft: UiPreferences, save: bool) -> bool {
         let size_changed = draft.pet.width != self.prefs.pet.width
             || draft.pet.height != self.prefs.pet.height
             || draft.pet.kind != self.prefs.pet.kind;
@@ -555,11 +550,7 @@ impl PetApp {
         if let Some(enabled) = toggle_master {
             self.prefs.hud.set_master_enabled(enabled);
             if self.settings.is_open() {
-                self.settings
-                    .lock()
-                    .prefs
-                    .hud
-                    .set_master_enabled(enabled);
+                self.settings.lock().prefs.hud.set_master_enabled(enabled);
             }
             // 关闭总开关时若正在布局编辑，取消
             if !enabled {
@@ -642,10 +633,9 @@ impl PetApp {
         }
         let from = self.pet_dock;
         self.pet_dock = next;
-        self.host.active_pet().on_event(PetEvent::DockChanged {
-            from,
-            to: next,
-        });
+        self.host
+            .active_pet()
+            .on_event(PetEvent::DockChanged { from, to: next });
     }
 
     fn set_pet_dragging(&mut self, active: bool) {
@@ -672,14 +662,12 @@ impl PetApp {
         let ppp = ctx.pixels_per_point();
         #[cfg(windows)]
         if let Some(hwnd) = self.hwnd {
-            let dock =
-                pet_dock::snap_on_release(hwnd, pet_dock::SNAP_THRESHOLD_POINTS, ppp);
+            let dock = pet_dock::snap_on_release(hwnd, pet_dock::SNAP_THRESHOLD_POINTS, ppp);
             self.set_pet_dock(dock);
         }
         #[cfg(not(windows))]
         {
-            let dock =
-                pet_dock::snap_on_release_ctx(ctx, pet_dock::SNAP_THRESHOLD_POINTS, ppp);
+            let dock = pet_dock::snap_on_release_ctx(ctx, pet_dock::SNAP_THRESHOLD_POINTS, ppp);
             self.set_pet_dock(dock);
         }
         self.capture_pet_position(ctx);
@@ -956,8 +944,7 @@ impl PetApp {
         let center = ui.max_rect().center();
         let pointer_dir = self.pointer_dir(&ctx, center);
 
-        let base_radius =
-            pet_draw::pet_base_radius(self.prefs.pet.width, self.prefs.pet.height);
+        let base_radius = pet_draw::pet_base_radius(self.prefs.pet.width, self.prefs.pet.height);
         // 先用近似半径做命中，再按 paint.bounce 微调绘制
         let hit = egui::Rect::from_center_size(center, Vec2::splat(base_radius * 2.15));
         let response = ui.interact(hit, ui.id().with("pet"), Sense::click_and_drag());
@@ -1000,7 +987,8 @@ impl PetApp {
             }
             #[cfg(not(windows))]
             {
-                let (pointer, outer) = ui.input(|i| (i.pointer.latest_pos(), i.viewport().outer_rect));
+                let (pointer, outer) =
+                    ui.input(|i| (i.pointer.latest_pos(), i.viewport().outer_rect));
                 if let (Some(pointer), Some(outer)) = (pointer, outer) {
                     self.drag_grab_points =
                         Some((pointer.x - outer.min.x, pointer.y - outer.min.y));
@@ -1012,11 +1000,9 @@ impl PetApp {
         if self.drag_grab_px.is_some() {
             let primary_down = ui.input(|i| i.pointer.primary_down());
             if primary_down {
-                if let (Some(hwnd), Some(grab), Some(cur)) = (
-                    self.hwnd,
-                    self.drag_grab_px,
-                    platform::cursor_screen_px(),
-                ) {
+                if let (Some(hwnd), Some(grab), Some(cur)) =
+                    (self.hwnd, self.drag_grab_px, platform::cursor_screen_px())
+                {
                     platform::move_window_screen(hwnd, cur.0 - grab.0, cur.1 - grab.1);
                 }
             } else {
@@ -1028,10 +1014,9 @@ impl PetApp {
         if self.drag_grab_points.is_some() {
             let primary_down = ui.input(|i| i.pointer.primary_down());
             if primary_down {
-                if let (Some(grab), Some(pointer)) = (
-                    self.drag_grab_points,
-                    ui.input(|i| i.pointer.latest_pos()),
-                ) {
+                if let (Some(grab), Some(pointer)) =
+                    (self.drag_grab_points, ui.input(|i| i.pointer.latest_pos()))
+                {
                     let x = pointer.x - grab.0;
                     let y = pointer.y - grab.1;
                     platform::move_viewport_points(&ctx, x, y);
@@ -1162,12 +1147,24 @@ impl eframe::App for PetApp {
         let hud_items = self.host.all_hud_contributions();
         // 设置打开时 HUD 仍用已应用 prefs：草稿开关即时拆建槽窗极易 AV
         let (done_l, cancel_l, reset_l, reset_size_l, reset_size_hint_l, hint_l) = (
-            self.prefs.t(deskhud_ui::MessageKey::HudLayoutDone).to_string(),
-            self.prefs.t(deskhud_ui::MessageKey::HudLayoutCancel).to_string(),
-            self.prefs.t(deskhud_ui::MessageKey::ActionReset).to_string(),
-            self.prefs.t(deskhud_ui::MessageKey::HudLayoutResetSize).to_string(),
-            self.prefs.t(deskhud_ui::MessageKey::HudLayoutResetSizeHint).to_string(),
-            self.prefs.t(deskhud_ui::MessageKey::HudLayoutHint).to_string(),
+            self.prefs
+                .t(deskhud_ui::MessageKey::HudLayoutDone)
+                .to_string(),
+            self.prefs
+                .t(deskhud_ui::MessageKey::HudLayoutCancel)
+                .to_string(),
+            self.prefs
+                .t(deskhud_ui::MessageKey::ActionReset)
+                .to_string(),
+            self.prefs
+                .t(deskhud_ui::MessageKey::HudLayoutResetSize)
+                .to_string(),
+            self.prefs
+                .t(deskhud_ui::MessageKey::HudLayoutResetSizeHint)
+                .to_string(),
+            self.prefs
+                .t(deskhud_ui::MessageKey::HudLayoutHint)
+                .to_string(),
         );
         let topmost = self.window_topmost();
         HudOverlayHost::show(

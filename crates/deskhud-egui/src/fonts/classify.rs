@@ -38,26 +38,41 @@ pub fn classify_stem(stem: &str) -> (String, String, String, Vec<String>) {
 
 fn classify_windows_short(lower: &str) -> Option<(String, String, String, Vec<String>)> {
     let mapped: Option<(&str, &str, &str, &[&str])> = match lower {
-        "msyh" | "microsoftyahei" | "msyhui" => {
-            Some(("msyh", "微软雅黑", "Regular", &["微软雅黑", "microsoft yahei", "yahei", "msyh"]))
-        }
-        "msyhbd" | "microsoftyaheibold" => {
-            Some(("msyh", "微软雅黑", "Bold", &["微软雅黑", "microsoft yahei", "msyhbd", "bold"]))
-        }
-        "msyhl" | "microsoftyaheilight" => {
-            Some(("msyh", "微软雅黑", "Light", &["微软雅黑", "microsoft yahei", "msyhl", "light"]))
-        }
+        "msyh" | "microsoftyahei" | "msyhui" => Some((
+            "msyh",
+            "微软雅黑",
+            "Regular",
+            &["微软雅黑", "microsoft yahei", "yahei", "msyh"],
+        )),
+        "msyhbd" | "microsoftyaheibold" => Some((
+            "msyh",
+            "微软雅黑",
+            "Bold",
+            &["微软雅黑", "microsoft yahei", "msyhbd", "bold"],
+        )),
+        "msyhl" | "microsoftyaheilight" => Some((
+            "msyh",
+            "微软雅黑",
+            "Light",
+            &["微软雅黑", "microsoft yahei", "msyhl", "light"],
+        )),
         "simhei" => Some(("simhei", "黑体", "Regular", &["黑体", "simhei"])),
         "simsun" | "nsimsun" => Some(("simsun", "宋体", "Regular", &["宋体", "simsun"])),
         "simkai" | "kaiu" => Some(("simkai", "楷体", "Regular", &["楷体", "simkai"])),
         "simfang" | "fangsong" => Some(("simfang", "仿宋", "Regular", &["仿宋", "simfang"])),
         "dengxian" | "deng" => Some(("dengxian", "等线", "Regular", &["等线", "dengxian"])),
-        "msjh" | "microsoftjhenghei" => {
-            Some(("msjh", "微软正黑体", "Regular", &["微软正黑体", "microsoft jhenghei", "msjh"]))
-        }
-        "msjhbd" => {
-            Some(("msjh", "微软正黑体", "Bold", &["微软正黑体", "microsoft jhenghei", "msjhbd"]))
-        }
+        "msjh" | "microsoftjhenghei" => Some((
+            "msjh",
+            "微软正黑体",
+            "Regular",
+            &["微软正黑体", "microsoft jhenghei", "msjh"],
+        )),
+        "msjhbd" => Some((
+            "msjh",
+            "微软正黑体",
+            "Bold",
+            &["微软正黑体", "microsoft jhenghei", "msjhbd"],
+        )),
         _ => None,
     };
     mapped.map(|(k, l, s, a)| {

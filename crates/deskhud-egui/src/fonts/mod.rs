@@ -121,12 +121,14 @@ fn upsert_face(
     aliases: Vec<String>,
     face: FontFace,
 ) {
-    let entry = map.entry(family_key.clone()).or_insert_with(|| FontFamilyEntry {
-        family_key: family_key.clone(),
-        label: label.clone(),
-        search_terms: aliases.clone(),
-        faces: Vec::new(),
-    });
+    let entry = map
+        .entry(family_key.clone())
+        .or_insert_with(|| FontFamilyEntry {
+            family_key: family_key.clone(),
+            label: label.clone(),
+            search_terms: aliases.clone(),
+            faces: Vec::new(),
+        });
     if entry.label.is_empty() {
         entry.label = label;
     }
@@ -264,10 +266,7 @@ pub fn configure_fonts(ctx: &egui::Context, ui_font_id: &str) {
         }
     };
 
-    let prop = fonts
-        .families
-        .entry(FontFamily::Proportional)
-        .or_default();
+    let prop = fonts.families.entry(FontFamily::Proportional).or_default();
     prop.clear();
     prop.push(primary.clone());
     let noto_key = "builtin_data_NotoSansSC-Regular";

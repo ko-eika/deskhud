@@ -2,9 +2,7 @@
 
 use std::collections::HashMap;
 
-use super::{
-    DockState, DragState, MouseState, PetConfigOption, PetEvent, PetKindInfo, PetPaint,
-};
+use super::{DockState, DragState, MouseState, PetConfigOption, PetEvent, PetKindInfo, PetPaint};
 
 /// 当前帧可读的宠配置（短键 → 布尔；由壳从 `[pet.config]` 解析）。
 #[derive(Debug, Clone, Copy)]

@@ -35,7 +35,13 @@ fn work_area_for_window(l: i32, t: i32, r: i32, b: i32) -> (i32, i32, i32, i32) 
 }
 
 #[cfg(not(windows))]
-fn work_area_for_ctx(ctx: &eframe::egui::Context, l: i32, t: i32, r: i32, b: i32) -> (i32, i32, i32, i32) {
+fn work_area_for_ctx(
+    ctx: &eframe::egui::Context,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+) -> (i32, i32, i32, i32) {
     if let Some((cx, cy)) = platform::cursor_screen_px_from_ctx(ctx) {
         return platform::work_area_containing_px(cx, cy);
     }

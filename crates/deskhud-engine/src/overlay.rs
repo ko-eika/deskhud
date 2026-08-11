@@ -34,6 +34,42 @@ pub struct OverlayRect {
     pub height: f32,
 }
 
+/// 与渲染器无关的 RGBA 颜色。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OverlayColor {
+    /// 红色通道。
+    pub red: u8,
+    /// 绿色通道。
+    pub green: u8,
+    /// 蓝色通道。
+    pub blue: u8,
+    /// 不透明度。
+    pub alpha: u8,
+}
+
+/// 场景中的圆形绘制原语。
+#[derive(Debug, Clone, PartialEq)]
+pub struct OverlayCircle {
+    /// 用于诊断与事件映射的稳定标识。
+    pub id: String,
+    /// 圆心的逻辑坐标。
+    pub center: OverlayPoint,
+    /// 半径；调用方应提供非负值。
+    pub radius: f32,
+    /// 填充颜色。
+    pub color: OverlayColor,
+}
+
+/// 覆盖层后端必须支持的最小绘制原语。
+///
+/// 这是场景描述而非图形 API；平台后端可用 GDI、Direct2D、Core Animation 或其它
+/// 实现将其栅格化。
+#[derive(Debug, Clone, PartialEq)]
+pub enum OverlayVisual {
+    /// 纯色圆形。
+    Circle(OverlayCircle),
+}
+
 /// 命中区域的交互语义。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OverlayHitKind {
@@ -43,15 +79,55 @@ pub enum OverlayHitKind {
     Passthrough,
 }
 
+/// 命中区域的几何形状。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OverlayHitShape {
+    /// 轴对齐矩形。
+    Rect(OverlayRect),
+    /// 圆形；坐标与半径均使用目标显示器逻辑坐标。
+    Circle {
+        /// 圆心。
+        center: OverlayPoint,
+        /// 半径；调用方应提供非负值。
+        radius: f32,
+    },
+}
+
+impl OverlayHitShape {
+    /// 判断逻辑坐标点是否位于形状内。
+    pub fn contains(self, point: OverlayPoint) -> bool {
+        match self {
+            Self::Rect(rect) => {
+                point.x >= rect.origin.x
+                    && point.x <= rect.origin.x + rect.width
+                    && point.y >= rect.origin.y
+                    && point.y <= rect.origin.y + rect.height
+            }
+            Self::Circle { center, radius } => {
+                let dx = point.x - center.x;
+                let dy = point.y - center.y;
+                dx * dx + dy * dy <= radius * radius
+            }
+        }
+    }
+}
+
 /// 一个由壳解释的命中区域。
 #[derive(Debug, Clone, PartialEq)]
 pub struct OverlayHitRegion {
     /// 用于将平台事件路由回宠物或 HUD 条目的稳定标识。
     pub id: String,
-    /// 区域在目标显示器逻辑坐标中的范围。
-    pub bounds: OverlayRect,
+    /// 区域在目标显示器逻辑坐标中的几何形状。
+    pub shape: OverlayHitShape,
     /// 区域是否消费指针输入。
     pub kind: OverlayHitKind,
+}
+
+impl OverlayHitRegion {
+    /// 判断逻辑坐标点是否命中该区域。
+    pub fn contains(&self, point: OverlayPoint) -> bool {
+        self.shape.contains(point)
+    }
 }
 
 /// 交给平台后端的单帧覆盖层状态。
@@ -59,6 +135,8 @@ pub struct OverlayHitRegion {
 pub struct OverlayScene {
     /// 该帧目标显示器。
     pub target: OverlayDisplayTarget,
+    /// 后端需要绘制的、按顺序叠放的视觉原语。
+    pub visuals: Vec<OverlayVisual>,
     /// 需要平台按区域路由的输入范围。
     pub hit_regions: Vec<OverlayHitRegion>,
 }
@@ -77,4 +155,30 @@ pub struct OverlayBackendCapabilities {
     pub selected_display: bool,
     /// 可安全覆盖包含混合 DPI 与负坐标的虚拟桌面。
     pub virtual_desktop: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OverlayHitShape, OverlayPoint, OverlayRect};
+
+    #[test]
+    fn circle_includes_boundary_and_excludes_corner() {
+        let shape = OverlayHitShape::Circle {
+            center: OverlayPoint { x: 10.0, y: 10.0 },
+            radius: 5.0,
+        };
+        assert!(shape.contains(OverlayPoint { x: 15.0, y: 10.0 }));
+        assert!(!shape.contains(OverlayPoint { x: 14.0, y: 14.0 }));
+    }
+
+    #[test]
+    fn rectangle_includes_edges() {
+        let shape = OverlayHitShape::Rect(OverlayRect {
+            origin: OverlayPoint { x: 2.0, y: 3.0 },
+            width: 4.0,
+            height: 5.0,
+        });
+        assert!(shape.contains(OverlayPoint { x: 6.0, y: 8.0 }));
+        assert!(!shape.contains(OverlayPoint { x: 6.1, y: 8.0 }));
+    }
 }

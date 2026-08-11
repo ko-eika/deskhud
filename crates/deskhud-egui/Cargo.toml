@@ -26,6 +26,8 @@ resvg = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true }
+windows = { workspace = true }
+windows-numerics = { workspace = true }
 
 [build-dependencies]
 winresource = { workspace = true }

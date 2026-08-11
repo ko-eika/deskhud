@@ -4,12 +4,12 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
+use deskhud_engine::HudContribution;
+use deskhud_ui::{HudPrefs, HudSlotLayout, UiPreferences};
 use eframe::egui::{
     self, Align2, Color32, ColorImage, CornerRadius, FontId, Frame, Pos2, Rect, RichText, Sense,
     Stroke, TextureHandle, TextureOptions, Vec2, ViewportCommand,
 };
-use deskhud_engine::HudContribution;
-use deskhud_ui::{HudPrefs, HudSlotLayout, UiPreferences};
 
 use crate::platform::{self, DisplayInfo};
 
@@ -227,11 +227,7 @@ impl HudOverlayHost {
         self.pending.take()
     }
 
-    pub fn apply_draft_map(
-        &mut self,
-        prefs: &mut HudPrefs,
-        draft: HashMap<String, HudSlotLayout>,
-    ) {
+    pub fn apply_draft_map(&mut self, prefs: &mut HudPrefs, draft: HashMap<String, HudSlotLayout>) {
         for (key, layout) in draft {
             if let Some((plugin, contrib)) = key.rsplit_once('.') {
                 prefs.set_slot_layout(plugin, contrib, layout);
@@ -323,15 +319,8 @@ impl HudOverlayHost {
                             let d = g
                                 .editor_display
                                 .as_ref()
-                                .and_then(|prev| {
-                                    displays.iter().find(|x| x.id == prev.id).cloned()
-                                })
-                                .or_else(|| {
-                                    displays
-                                        .iter()
-                                        .find(|d| d.primary)
-                                        .cloned()
-                                })
+                                .and_then(|prev| displays.iter().find(|x| x.id == prev.id).cloned())
+                                .or_else(|| displays.iter().find(|d| d.primary).cloned())
                                 .or_else(|| displays.into_iter().next());
                             if let Some(d) = d {
                                 g.editor_display = Some(d.clone());
@@ -344,11 +333,8 @@ impl HudOverlayHost {
                                         &rgba,
                                     )
                                 });
-                                g.bg_luma = g
-                                    .screenshot
-                                    .as_ref()
-                                    .map(sample_image_luma)
-                                    .unwrap_or(0.25);
+                                g.bg_luma =
+                                    g.screenshot.as_ref().map(sample_image_luma).unwrap_or(0.25);
                                 g.screenshot_tex = None;
                             }
                         }
@@ -530,10 +516,7 @@ fn show_slots(
     if topmost_changed {
         // 只在置顶变化时对合成窗改层级；勿在 deferred 回调里每帧 WindowLevel（易 AV）
         for id in &wanted_displays {
-            ctx.send_viewport_cmd_to(
-                compose_viewport_id(id),
-                ViewportCommand::WindowLevel(level),
-            );
+            ctx.send_viewport_cmd_to(compose_viewport_id(id), ViewportCommand::WindowLevel(level));
         }
     }
 
@@ -562,10 +545,8 @@ fn show_slots(
         let chips: Vec<ComposeChip> = chips_abs
             .drain(..)
             .map(|(pos, size, mut chip)| {
-                chip.rel = Rect::from_min_size(
-                    Pos2::new(pos.x - outer_pos.x, pos.y - outer_pos.y),
-                    size,
-                );
+                chip.rel =
+                    Rect::from_min_size(Pos2::new(pos.x - outer_pos.x, pos.y - outer_pos.y), size);
                 chip
             })
             .collect();
@@ -624,7 +605,9 @@ fn show_slots(
                             if let Some(&h) = guard.compose_hwnd.get(&display_key) {
                                 platform::set_click_through(h, true);
                             }
-                            guard.compose_click_through.insert(display_key.clone(), true);
+                            guard
+                                .compose_click_through
+                                .insert(display_key.clone(), true);
                         }
                     }
 
@@ -638,7 +621,6 @@ fn show_slots(
         });
     }
 }
-
 
 fn show_editor(
     host: &Arc<Mutex<HudOverlayHost>>,
@@ -725,9 +707,7 @@ fn show_editor(
 
         ctx.send_viewport_cmd(ViewportCommand::OuterPosition(pos));
         ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
-        ctx.send_viewport_cmd(ViewportCommand::WindowLevel(
-            egui::WindowLevel::AlwaysOnTop,
-        ));
+        ctx.send_viewport_cmd(ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
         ctx.request_repaint();
 
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -759,11 +739,7 @@ fn show_editor(
                 }
 
                 // 轻遮罩：截图底透出，模拟半透明
-                painter.rect_filled(
-                    full,
-                    0.0,
-                    Color32::from_rgba_unmultiplied(8, 10, 16, 56),
-                );
+                painter.rect_filled(full, 0.0, Color32::from_rgba_unmultiplied(8, 10, 16, 56));
 
                 const BAR_H: f32 = 56.0;
                 const BAR_INSET: f32 = 20.0;
@@ -784,10 +760,7 @@ fn show_editor(
                 let work = safe_rect_from_work(screen, &display_c);
                 let bar = Rect::from_min_max(
                     Pos2::new(screen.min.x + BAR_INSET, screen.min.y + BAR_INSET),
-                    Pos2::new(
-                        screen.max.x - BAR_INSET,
-                        screen.min.y + BAR_INSET + BAR_H,
-                    ),
+                    Pos2::new(screen.max.x - BAR_INSET, screen.min.y + BAR_INSET + BAR_H),
                 );
                 // 仅按任务栏缩边 + 贴齐完整格子（底栏任务栏时顶部可贴到工作区最上）
                 let safe = layout_safe_rect(work, screen, grid);
@@ -796,11 +769,7 @@ fn show_editor(
                 // 任务栏等系统栏外侧加深；顶栏按钮不单独挖禁放带
                 paint_unsafe_dim(painter, screen, safe);
 
-                painter.rect_filled(
-                    canvas,
-                    0.0,
-                    chrome.canvas_wash,
-                );
+                painter.rect_filled(canvas, 0.0, chrome.canvas_wash);
                 paint_grid(painter, canvas, grid, chrome.grid);
                 paint_dashed_rect(
                     painter,
@@ -847,18 +816,14 @@ fn show_editor(
                     let move_id = ui.id().with(("hud_ed_mv", pid.as_str(), cid.as_str()));
                     let mut scale_started: Option<ScaleCorner> = None;
                     for (corner, rect) in &corners {
-                        let id = ui
-                            .id()
-                            .with(("hud_ed_sc", pid.as_str(), cid.as_str(), *corner as u8));
+                        let id =
+                            ui.id()
+                                .with(("hud_ed_sc", pid.as_str(), cid.as_str(), *corner as u8));
                         let resp = ui.interact(*rect, id, Sense::drag());
                         if resp.hovered() || resp.dragged() {
                             ui.ctx().set_cursor_icon(match corner {
-                                ScaleCorner::Nw | ScaleCorner::Se => {
-                                    egui::CursorIcon::ResizeNwSe
-                                }
-                                ScaleCorner::Ne | ScaleCorner::Sw => {
-                                    egui::CursorIcon::ResizeNeSw
-                                }
+                                ScaleCorner::Nw | ScaleCorner::Se => egui::CursorIcon::ResizeNwSe,
+                                ScaleCorner::Ne | ScaleCorner::Sw => egui::CursorIcon::ResizeNeSw,
                             });
                         }
                         if resp.drag_started() {
@@ -867,11 +832,7 @@ fn show_editor(
                     }
                     // 中部可点选/拖移（四角留给缩放）
                     let move_rect = chip.shrink(CORNER_HIT * 0.5);
-                    let move_resp = ui.interact(
-                        move_rect,
-                        move_id,
-                        Sense::click_and_drag(),
-                    );
+                    let move_resp = ui.interact(move_rect, move_id, Sense::click_and_drag());
 
                     let mut guard = match host_c.lock() {
                         Ok(g) => g,
@@ -1074,20 +1035,11 @@ fn show_editor(
                         );
                         let hint_size = hint_galley.size();
                         let hint_pad = Vec2::new(10.0, 4.0);
-                        let (hint_rect, _) = ui.allocate_exact_size(
-                            hint_size + hint_pad * 2.0,
-                            Sense::hover(),
-                        );
-                        ui.painter().rect_filled(
-                            hint_rect,
-                            6.0,
-                            chrome.hint_bg,
-                        );
-                        ui.painter().galley(
-                            hint_rect.min + hint_pad,
-                            hint_galley,
-                            chrome.hint,
-                        );
+                        let (hint_rect, _) =
+                            ui.allocate_exact_size(hint_size + hint_pad * 2.0, Sense::hover());
+                        ui.painter().rect_filled(hint_rect, 6.0, chrome.hint_bg);
+                        ui.painter()
+                            .galley(hint_rect.min + hint_pad, hint_galley, chrome.hint);
                         ui.add_space(2.0);
                         ui.horizontal(|ui| {
                             let total_w = 88.0 + 8.0 + 88.0 + 8.0 + 96.0;
@@ -1132,10 +1084,8 @@ fn show_editor(
                             if ui
                                 .add_sized(
                                     [96.0, 28.0],
-                                    egui::Button::new(
-                                        RichText::new(&done_l).color(Color32::WHITE),
-                                    )
-                                    .fill(Color32::from_rgb(46, 120, 210)),
+                                    egui::Button::new(RichText::new(&done_l).color(Color32::WHITE))
+                                        .fill(Color32::from_rgb(46, 120, 210)),
                                 )
                                 .clicked()
                             {
@@ -1161,17 +1111,11 @@ fn corner_hit_rects(chip: Rect, hit: f32) -> [(ScaleCorner, Rect); 4] {
         ),
         (
             ScaleCorner::Ne,
-            Rect::from_min_size(
-                Pos2::new(chip.max.x - hit, chip.min.y),
-                Vec2::splat(hit),
-            ),
+            Rect::from_min_size(Pos2::new(chip.max.x - hit, chip.min.y), Vec2::splat(hit)),
         ),
         (
             ScaleCorner::Sw,
-            Rect::from_min_size(
-                Pos2::new(chip.min.x, chip.max.y - hit),
-                Vec2::splat(hit),
-            ),
+            Rect::from_min_size(Pos2::new(chip.min.x, chip.max.y - hit), Vec2::splat(hit)),
         ),
         (
             ScaleCorner::Se,
@@ -1555,10 +1499,7 @@ fn paint_unsafe_dim(painter: &egui::Painter, screen: Rect, safe: Rect) {
     // 上
     if safe.min.y > screen.min.y {
         painter.rect_filled(
-            Rect::from_min_max(
-                screen.min,
-                Pos2::new(screen.max.x, safe.min.y),
-            ),
+            Rect::from_min_max(screen.min, Pos2::new(screen.max.x, safe.min.y)),
             0.0,
             dim,
         );
@@ -1566,10 +1507,7 @@ fn paint_unsafe_dim(painter: &egui::Painter, screen: Rect, safe: Rect) {
     // 下（任务栏）
     if safe.max.y < screen.max.y {
         painter.rect_filled(
-            Rect::from_min_max(
-                Pos2::new(screen.min.x, safe.max.y),
-                screen.max,
-            ),
+            Rect::from_min_max(Pos2::new(screen.min.x, safe.max.y), screen.max),
             0.0,
             dim,
         );
@@ -1629,18 +1567,12 @@ fn paint_grid(painter: &egui::Painter, rect: Rect, grid: f32, color: Color32) {
     let stroke = Stroke::new(1.0, color);
     let mut x = rect.min.x;
     while x <= rect.max.x + 0.5 {
-        painter.line_segment(
-            [Pos2::new(x, rect.min.y), Pos2::new(x, rect.max.y)],
-            stroke,
-        );
+        painter.line_segment([Pos2::new(x, rect.min.y), Pos2::new(x, rect.max.y)], stroke);
         x += grid;
     }
     let mut y = rect.min.y;
     while y <= rect.max.y + 0.5 {
-        painter.line_segment(
-            [Pos2::new(rect.min.x, y), Pos2::new(rect.max.x, y)],
-            stroke,
-        );
+        painter.line_segment([Pos2::new(rect.min.x, y), Pos2::new(rect.max.x, y)], stroke);
         y += grid;
     }
 }
@@ -1665,8 +1597,7 @@ fn sample_image_luma(img: &ColorImage) -> f32 {
 fn layout_chrome(raw_luma: f32) -> LayoutChrome {
     // 与编辑器遮罩 `rgba(8,10,16,56)` 一致
     const OVERLAY_A: f32 = 56.0 / 255.0;
-    let overlay_luma =
-        (0.2126 * 8.0 + 0.7152 * 10.0 + 0.0722 * 16.0) / 255.0;
+    let overlay_luma = (0.2126 * 8.0 + 0.7152 * 10.0 + 0.0722 * 16.0) / 255.0;
     let effective = (1.0 - OVERLAY_A) * raw_luma.clamp(0.0, 1.0) + OVERLAY_A * overlay_luma;
     if effective > 0.52 {
         // 浅色桌面 → 深色网格/提示

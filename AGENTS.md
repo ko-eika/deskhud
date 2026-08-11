@@ -98,6 +98,7 @@ crates/ … packs/ … packages/ … examples/
 - [x] 桌宠引擎化（`deskhud-engine`）+ 包 `version`/`engine` 适配门闸
 - [x] 内置宠/插件独立 crate + `cargo pack-builtins`
 - [x] HUD 全屏布局（多屏归一化矩形 + 设置页调整布局）；运行态每屏一合成窗同层绘制
+- [ ] Windows 原生覆盖层探针（仅 `DESKHUD_OVERLAY_PROBE=1` 启动；待人工验收透明与跨应用局部穿透）
 - [ ] 宠物行为事件完善（更多 `PetEvent`）与更中性绘制帧
 - [ ] HUD 插件真实帧数据（prefs 插件级/条目级开关已具备）
 - [ ] WASM runtime + SDK + 示例包

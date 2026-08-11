@@ -1,7 +1,7 @@
 //! 宠物帧绘制（主宠窗）。
 
-use eframe::egui::{self, Color32, CornerRadius, FontId, Galley, Pos2, Stroke, Vec2};
 use deskhud_engine::PetPaint;
+use eframe::egui::{self, Color32, CornerRadius, FontId, Galley, Pos2, Stroke, Vec2};
 use std::sync::Arc;
 
 /// 在指定中心与基准半径绘制一帧宠物。
@@ -119,7 +119,10 @@ fn draw_speech_bubble(
         egui::StrokeKind::Middle,
     );
 
-    let tip = Pos2::new(center.x, (center.y - radius * 0.35).max(rect.bottom() + 1.0));
+    let tip = Pos2::new(
+        center.x,
+        (center.y - radius * 0.35).max(rect.bottom() + 1.0),
+    );
     let base_y = rect.bottom();
     let tri = vec![
         Pos2::new(rect.center().x - 6.0, base_y),
@@ -128,10 +131,7 @@ fn draw_speech_bubble(
     ];
     painter.add(egui::Shape::convex_polygon(tri, fill, Stroke::NONE));
 
-    let text_pos = Pos2::new(
-        rect.center().x - tw * 0.5,
-        rect.center().y - th * 0.5,
-    );
+    let text_pos = Pos2::new(rect.center().x - tw * 0.5, rect.center().y - th * 0.5);
     painter.galley(text_pos, galley, color);
 }
 

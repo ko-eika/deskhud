@@ -1,7 +1,7 @@
 //! 应用主题：浅色 / 深色 / 跟随系统（宠窗保持透明底）。
 
-use eframe::egui::{Color32, Context, Shadow, Stroke, Theme, ThemePreference, Visuals};
 use deskhud_ui::UiTheme;
+use eframe::egui::{Color32, Context, Shadow, Stroke, Theme, ThemePreference, Visuals};
 
 /// 按偏好配置 Light/Dark 视觉（透明宠窗）并设置 ThemePreference。
 pub fn apply(ctx: &Context, theme: UiTheme) {

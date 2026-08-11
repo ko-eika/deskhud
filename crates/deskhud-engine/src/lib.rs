@@ -6,8 +6,8 @@
 
 #![deny(missing_docs)]
 
-pub mod pet;
 pub mod overlay;
+pub mod pet;
 pub mod plugin;
 pub mod registry;
 
@@ -17,13 +17,13 @@ pub const ENGINE_PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// 引擎兼容族：`0.x` 为 `MAJOR.MINOR`（与当前 workspace `0.4.1` / 族 `0.4` 对齐）。
 pub const ENGINE_COMPAT_FAMILY: &str = "0.4";
 
+pub use overlay::{
+    OverlayBackendCapabilities, OverlayCircle, OverlayColor, OverlayDisplayTarget, OverlayHitKind,
+    OverlayHitRegion, OverlayHitShape, OverlayPoint, OverlayRect, OverlayScene, OverlayVisual,
+};
 pub use pet::{
     DockState, DragState, MouseState, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind,
     PetKindInfo, PetModifiers, PetMouseButton, PetPaint, PetPaintCtx,
-};
-pub use overlay::{
-    OverlayBackendCapabilities, OverlayDisplayTarget, OverlayHitKind, OverlayHitRegion,
-    OverlayPoint, OverlayRect, OverlayScene,
 };
 pub use plugin::{HudContribution, Plugin, PluginInfo};
 pub use registry::EngineRegistry;

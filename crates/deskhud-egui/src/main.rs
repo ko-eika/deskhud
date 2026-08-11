@@ -1,16 +1,23 @@
-﻿//! DeskHud 入口（egui / eframe）。
+//! DeskHud 入口（egui / eframe）。
 
 // release 无控制台；debug 保留以便看 tracing 日志
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
 mod fonts;
+#[cfg(windows)]
+mod gpu_overlay_probe;
+#[cfg(windows)]
+mod gpu_probe;
 mod hud_overlay;
 mod image_decode;
+#[cfg(windows)]
+mod overlay_probe;
 mod pet_dock;
 mod pet_draw;
 mod pet_input;
 mod pet_menu;
+mod pet_scene;
 mod platform;
 mod settings;
 mod theme;
@@ -38,12 +45,26 @@ pub(crate) fn icon() -> Arc<egui::IconData> {
 }
 
 fn main() -> eframe::Result {
+    // 探针路径会提前返回；日志必须在环境变量分支之前初始化，诊断开关才有输出。
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
+
+    #[cfg(windows)]
+    if std::env::var_os("DESKHUD_OVERLAY_PROBE").is_some() {
+        return overlay_probe::run();
+    }
+    #[cfg(windows)]
+    if std::env::var_os("DESKHUD_GPU_PROBE").is_some() {
+        return gpu_probe::run();
+    }
+    #[cfg(windows)]
+    if std::env::var_os("DESKHUD_GPU_OVERLAY_PROBE").is_some() {
+        return gpu_overlay_probe::run();
+    }
 
     let prefs = match persist::load() {
         Ok(p) => p,

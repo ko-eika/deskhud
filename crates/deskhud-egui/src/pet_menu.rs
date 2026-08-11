@@ -3,8 +3,10 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Frame, Margin, Sense, Stroke, Vec2};
 use deskhud_ui::{MessageKey, UiPreferences};
+use eframe::egui::{
+    self, Align2, Color32, CornerRadius, FontId, Frame, Margin, Sense, Stroke, Vec2,
+};
 
 use crate::platform;
 
@@ -76,10 +78,7 @@ mod menu_tone {
 
 fn menu_height() -> f32 {
     // 与 Frame 上下边距一致；行间 item_spacing 在 draw 里清零，避免底项被裁
-    MENU_PAD_Y * 2.0
-        + MENU_ROWS as f32 * ROW_H
-        + MENU_SEPS as f32 * SEP_H
-        + 2.0
+    MENU_PAD_Y * 2.0 + MENU_ROWS as f32 * ROW_H + MENU_SEPS as f32 * SEP_H + 2.0
 }
 
 fn measure_text_width(ctx: &egui::Context, text: &str) -> f32 {
@@ -97,8 +96,10 @@ fn compute_menu_width(ctx: &egui::Context, labels: &[String]) -> f32 {
         content = content.max(measure_text_width(ctx, label));
     }
     let content = content.min(MENU_MAX_CONTENT_W);
-    (content + TEXT_INSET + MENU_PAD_X * 2.0)
-        .clamp(MENU_MIN_W, MENU_MAX_CONTENT_W + TEXT_INSET + MENU_PAD_X * 2.0)
+    (content + TEXT_INSET + MENU_PAD_X * 2.0).clamp(
+        MENU_MIN_W,
+        MENU_MAX_CONTENT_W + TEXT_INSET + MENU_PAD_X * 2.0,
+    )
 }
 
 fn ellipsize(ctx: &egui::Context, text: &str, max_w: f32) -> String {
@@ -235,12 +236,7 @@ impl PetMenuHost {
         s.quit = false;
     }
 
-    pub fn show(
-        &self,
-        ctx: &egui::Context,
-        pet_hwnd: Option<isize>,
-        settings_hwnd: Option<isize>,
-    ) {
+    pub fn show(&self, ctx: &egui::Context, pet_hwnd: Option<isize>, settings_hwnd: Option<isize>) {
         if !self.lock().open {
             return;
         }
@@ -306,11 +302,7 @@ impl PetMenuHost {
         if topmost {
             builder = builder.with_always_on_top();
         }
-        ctx.show_viewport_deferred(
-            viewport_id(),
-            builder,
-            move |ui, _| shared.draw(ui),
-        );
+        ctx.show_viewport_deferred(viewport_id(), builder, move |ui, _| shared.draw(ui));
 
         ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Decorations(false));
         ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::OuterPosition(anchor));
@@ -421,8 +413,13 @@ impl PetMenuHost {
                     close = true;
                 }
 
-                if check_row(ui, &ellipsize(&ctx, &topmost_l, max_text_w), topmost_on, dark)
-                    .clicked()
+                if check_row(
+                    ui,
+                    &ellipsize(&ctx, &topmost_l, max_text_w),
+                    topmost_on,
+                    dark,
+                )
+                .clicked()
                 {
                     s.toggle_topmost = Some(!topmost_on);
                     close = true;
@@ -430,8 +427,7 @@ impl PetMenuHost {
 
                 menu_separator(ui, dark);
 
-                if check_row(ui, &ellipsize(&ctx, &plugins, max_text_w), master_on, dark)
-                    .clicked()
+                if check_row(ui, &ellipsize(&ctx, &plugins, max_text_w), master_on, dark).clicked()
                 {
                     s.toggle_master = Some(!master_on);
                     close = true;
