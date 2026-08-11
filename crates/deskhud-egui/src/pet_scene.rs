@@ -2,6 +2,8 @@
 //!
 //! 此模块只保留既有圆形宠物的视觉语义；原生窗口、GDI 或 egui 细节不进入这里。
 
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use deskhud_engine::{
     OverlayCircle, OverlayColor, OverlayDisplayTarget, OverlayEllipse, OverlayHitKind,
     OverlayHitRegion, OverlayHitShape, OverlayPoint, OverlayRect, OverlayRoundedRect, OverlayScene,

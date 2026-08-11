@@ -287,6 +287,7 @@ impl NativeHost {
             values
         };
         if apply {
+            #[cfg(windows)]
             let topmost_changed = self.prefs.shell.topmost != draft.shell.topmost;
             self.prefs = draft.clone();
             self.save_prefs();
@@ -384,6 +385,8 @@ impl ApplicationHandler<UserEvent> for NativeHost {
         self.gl = Some(gl);
         self.egui = Some(egui);
         self.sync_pet_theme();
+        #[cfg(not(windows))]
+        self.show_settings();
     }
 
     fn window_event(
@@ -483,6 +486,7 @@ struct GlutinWindow {
 
 impl GlutinWindow {
     unsafe fn new(event_loop: &ActiveEventLoop) -> Result<(Self, glow::Context)> {
+        #[allow(unused_mut)]
         let mut attributes = WindowAttributes::default()
             .with_title("DeskHud")
             .with_visible(false)
