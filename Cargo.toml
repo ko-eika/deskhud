@@ -25,7 +25,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -46,7 +46,7 @@ pet-deskhud-blob = { path = "packs/pet-deskhud-blob" }
 hud-deskhud-demo = { path = "packs/hud-deskhud-demo" }
 
 egui = "0.36"
-egui-winit = { version = "0.36", default-features = false }
+egui-winit = { version = "0.36", default-features = false, features = ["links"] }
 egui_glow = { version = "0.36", features = ["winit"] }
 winit = { version = "0.30", default-features = false, features = ["rwh_06"] }
 glutin = "0.32"

@@ -46,7 +46,7 @@ pub fn user_data_dir() -> Option<PathBuf> {
 
 /// 偏好文件路径。
 pub fn prefs_path() -> Option<PathBuf> {
-    Some(user_data_dir()?.join("prefs.toml"))
+    Some(user_data_dir()?.join("config.toml"))
 }
 
 /// 从磁盘加载；文件不存在或损坏时返回 `Default`。
@@ -89,9 +89,9 @@ pub fn save_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> Result<()
         ))
     })?;
     fs::create_dir_all(&dir)?;
-    let path = dir.join("prefs.toml");
+    let path = dir.join("config.toml");
     let text = format_prefs_ordered(prefs, order);
-    let tmp = dir.join("prefs.toml.tmp");
+    let tmp = dir.join("config.toml.tmp");
     fs::write(&tmp, text)?;
     fs::rename(&tmp, &path)?;
     Ok(())
@@ -110,7 +110,7 @@ pub struct PrefsWriteOrder {
     pub plugin_contrib_ids: Vec<(String, Vec<String>)>,
 }
 
-/// 生成分类、键序稳定的 prefs.toml 文本。
+/// 生成分类、键序稳定的 config.toml 文本。
 pub fn format_prefs(prefs: &UiPreferences) -> String {
     format_prefs_ordered(prefs, &PrefsWriteOrder::default())
 }
@@ -118,13 +118,17 @@ pub fn format_prefs(prefs: &UiPreferences) -> String {
 /// 带注册顺序的 prefs 文本。
 pub fn format_prefs_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> String {
     let mut out = String::new();
-    out.push_str("# DeskHud preferences\n");
+    out.push_str("# DeskHud configuration\n");
 
-    out.push_str("\n[settings]\n");
-    write_opt_f32(&mut out, "width", prefs.shell.settings_width);
-    write_opt_f32(&mut out, "height", prefs.shell.settings_height);
-    write_opt_f32(&mut out, "pos_x", prefs.shell.settings_pos_x);
-    write_opt_f32(&mut out, "pos_y", prefs.shell.settings_pos_y);
+    out.push_str("\n[prefs]\n");
+    if let (Some(width), Some(height)) = (prefs.shell.settings_width, prefs.shell.settings_height) {
+        out.push_str(&format!("\"settings.size\" = [{width}, {height}]\n"));
+    }
+    if let (Some(x), Some(y)) = (prefs.shell.settings_pos_x, prefs.shell.settings_pos_y) {
+        out.push_str(&format!("\"settings.position\" = [{x}, {y}]\n"));
+    }
+
+    out.push_str("\n[general]\n");
     out.push_str(&format!("topmost = {}\n", prefs.shell.topmost));
 
     out.push_str("\n[theme]\n");
@@ -151,20 +155,14 @@ pub fn format_prefs_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> S
         escape(&prefs.pet.kind)
     ));
     out.push_str(&format!(
-        "\"{}\" = {}\n",
-        PetPrefs::GLOBAL_WIDTH_KEY,
-        prefs.pet.width
+        "\"pet.global.size\" = [{}, {}]\n",
+        prefs.pet.width, prefs.pet.height
     ));
-    out.push_str(&format!(
-        "\"{}\" = {}\n",
-        PetPrefs::GLOBAL_HEIGHT_KEY,
-        prefs.pet.height
-    ));
-    if let Some(x) = prefs.pet.pos_x {
-        out.push_str(&format!("\"{}\" = {}\n", PetPrefs::GLOBAL_POS_X_KEY, x));
-    }
-    if let Some(y) = prefs.pet.pos_y {
-        out.push_str(&format!("\"{}\" = {}\n", PetPrefs::GLOBAL_POS_Y_KEY, y));
+    if let Some(pos) = prefs.pet.position() {
+        out.push_str(&format!(
+            "\"pet.global.position\" = [{}, {}]\n",
+            pos.x, pos.y
+        ));
     }
     out.push_str(&format!(
         "\"{}\" = \"{}\"\n",
@@ -193,23 +191,30 @@ fn prefs_from_value(root: toml::Value) -> UiPreferences {
     if let Some(v) = table.get("locale").and_then(|v| v.as_str()) {
         prefs.locale = parse_locale(v);
     }
+    if let Some(general) = table.get("general").and_then(|v| v.as_table()) {
+        if let Some(topmost) = general.get("topmost").and_then(|v| v.as_bool()) {
+            prefs.shell.topmost = topmost;
+        }
+    }
 
-    // [theme] / [settings]；兼容旧 [ui] / [shell]
+    // [theme] / [prefs]
     if let Some(theme) = table.get("theme").and_then(|v| v.as_table()) {
         merge_theme_table(&mut prefs.shell, theme);
         if let Some(v) = theme.get("locale").and_then(|v| v.as_str()) {
             prefs.locale = parse_locale(v);
         }
     }
-    if let Some(settings) = table.get("settings").and_then(|v| v.as_table()) {
-        merge_settings_table(&mut prefs.shell, settings);
+    if let Some(settings) = table.get("prefs").and_then(|v| v.as_table()) {
+        if let Some(pair) = settings.get("settings.size").and_then(toml_pair) {
+            prefs.shell.settings_width = Some(pair[0]);
+            prefs.shell.settings_height = Some(pair[1]);
+        }
+        if let Some(pair) = settings.get("settings.position").and_then(toml_pair) {
+            prefs.shell.settings_pos_x = Some(pair[0]);
+            prefs.shell.settings_pos_y = Some(pair[1]);
+        }
     }
-    let settings_has_topmost = table
-        .get("settings")
-        .and_then(|v| v.as_table())
-        .and_then(|t| t.get("topmost"))
-        .and_then(|v| v.as_bool())
-        .is_some();
+    let settings_has_topmost = true;
     if let Some(ui) = table.get("ui").and_then(|v| v.as_table()) {
         merge_ui_table(&mut prefs.shell, ui);
         // 旧 shell 误写在 ui 里的宠字段 → pet
@@ -419,6 +424,14 @@ fn merge_legacy_pet_fields(pet: &mut PetPrefs, t: &toml::map::Map<String, toml::
     {
         pet.height = v as f32;
     }
+    if let Some([w, h]) = t
+        .get("pet.global.size")
+        .or_else(|| t.get("size"))
+        .and_then(toml_pair)
+    {
+        pet.width = w;
+        pet.height = h;
+    }
     if let Some(v) = t
         .get(PetPrefs::GLOBAL_POS_X_KEY)
         .or_else(|| t.get("pos_x"))
@@ -435,6 +448,14 @@ fn merge_legacy_pet_fields(pet: &mut PetPrefs, t: &toml::map::Map<String, toml::
     {
         pet.pos_y = Some(v as f32);
     }
+    if let Some([x, y]) = t
+        .get("pet.global.position")
+        .or_else(|| t.get("position"))
+        .and_then(toml_pair)
+    {
+        pet.pos_x = Some(x);
+        pet.pos_y = Some(y);
+    }
     // topmost 已迁到 [settings]；此处仅兼容旧键，由调用方写入 shell
     if let Some(v) = t
         .get(PetPrefs::GLOBAL_PICKER_MODE_KEY)
@@ -444,6 +465,14 @@ fn merge_legacy_pet_fields(pet: &mut PetPrefs, t: &toml::map::Map<String, toml::
     {
         pet.picker_mode = parse_picker(v);
     }
+}
+
+fn toml_pair(value: &toml::Value) -> Option<[f32; 2]> {
+    let values = value.as_array()?;
+    Some([
+        values.first().and_then(toml_f64)? as f32,
+        values.get(1).and_then(toml_f64)? as f32,
+    ])
 }
 
 fn legacy_topmost_from_pet_table(t: &toml::map::Map<String, toml::Value>) -> Option<bool> {
@@ -600,12 +629,6 @@ fn parse_picker(s: &str) -> PetPickerMode {
 
 fn escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-fn write_opt_f32(out: &mut String, key: &str, v: Option<f32>) {
-    if let Some(v) = v {
-        out.push_str(&format!("{key} = {v}\n"));
-    }
 }
 
 fn ordered_pet_options<'a>(
@@ -774,10 +797,10 @@ mod tests {
         assert!(text.contains("[theme]\n"));
         assert!(text.contains("locale = \"en\""));
         assert!(!text.starts_with("locale ="));
-        assert!(text.contains("[settings]\n"));
+        assert!(text.contains("[prefs]\n"));
         assert!(
-            text.find("[settings]").unwrap() < text.find("[theme]").unwrap(),
-            "settings section should precede theme"
+            text.find("[prefs]").unwrap() < text.find("[theme]").unwrap(),
+            "prefs section should precede theme"
         );
         assert!(text.contains("[font]\n"));
         assert!(text.contains("[pet]\n"));
@@ -787,7 +810,7 @@ mod tests {
         assert!(!text.contains("pet.config"));
         assert!(!text.contains("hud.config"));
         assert!(text.contains("\"pet.global.kind\" = \"pet.deskhud.blob\""));
-        assert!(text.contains("\"pet.global.width\""));
+        assert!(text.contains("\"pet.global.size\""));
         assert!(text.contains("topmost = false"));
         assert!(!text.contains("pet.global.topmost"));
         assert!(!text.contains("\nkind = "));
@@ -915,7 +938,7 @@ locale = "en"
         assert_eq!(prefs.locale, Locale::En);
         assert_eq!(prefs.shell.ui_theme, UiTheme::Dark);
         let out = format_prefs(&prefs);
-        let settings_at = out.find("[settings]").unwrap();
+        let settings_at = out.find("[prefs]").unwrap();
         let theme_at = out.find("[theme]").unwrap();
         let locale_at = out.find("locale = \"en\"").unwrap();
         assert!(settings_at < theme_at);

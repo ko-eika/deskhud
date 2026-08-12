@@ -132,9 +132,9 @@ impl ShellPrefs {
     /// 设置窗最小内高度（16:9）。
     pub const SETTINGS_MIN_H: f32 = 450.0;
     /// 设置窗默认宽（16:9）。
-    pub const SETTINGS_DEFAULT_W: f32 = 960.0;
+    pub const SETTINGS_DEFAULT_W: f32 = 1600.0;
     /// 设置窗默认高（16:9）。
-    pub const SETTINGS_DEFAULT_H: f32 = 540.0;
+    pub const SETTINGS_DEFAULT_H: f32 = 900.0;
 
     /// 设置窗默认 / 已存尺寸。
     pub fn settings_size(&self) -> [f32; 2] {
@@ -144,7 +144,7 @@ impl ShellPrefs {
                 .clamp(Self::SETTINGS_MIN_W, 1600.0),
             self.settings_height
                 .unwrap_or(Self::SETTINGS_DEFAULT_H)
-                .clamp(Self::SETTINGS_MIN_H, 1200.0),
+                .clamp(Self::SETTINGS_MIN_H, 900.0),
         ]
     }
 
@@ -156,7 +156,7 @@ impl ShellPrefs {
     /// 写入设置窗几何（尺寸 + 外框位置）。
     pub fn set_settings_geometry(&mut self, width: f32, height: f32, pos_x: f32, pos_y: f32) {
         self.settings_width = Some(width.clamp(Self::SETTINGS_MIN_W, 1600.0));
-        self.settings_height = Some(height.clamp(Self::SETTINGS_MIN_H, 1200.0));
+        self.settings_height = Some(height.clamp(Self::SETTINGS_MIN_H, 900.0));
         self.settings_pos_x = Some(pos_x);
         self.settings_pos_y = Some(pos_y);
     }

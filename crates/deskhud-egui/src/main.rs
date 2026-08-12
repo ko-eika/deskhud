@@ -4,13 +4,9 @@
 mod fonts;
 #[cfg(windows)]
 mod gpu_overlay_probe;
-#[cfg(windows)]
-mod gpu_probe;
 mod image_decode;
 mod native_host;
 mod overlay_control;
-#[cfg(windows)]
-mod overlay_probe;
 mod pet_menu;
 mod pet_scene;
 mod platform;
@@ -27,19 +23,6 @@ fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
-
-    #[cfg(windows)]
-    if std::env::var_os("DESKHUD_OVERLAY_PROBE").is_some() {
-        return overlay_probe::run();
-    }
-    #[cfg(windows)]
-    if std::env::var_os("DESKHUD_GPU_PROBE").is_some() {
-        return gpu_probe::run();
-    }
-    #[cfg(windows)]
-    if std::env::var_os("DESKHUD_GPU_OVERLAY_PROBE").is_some() {
-        return gpu_overlay_probe::run();
-    }
 
     let prefs = persist::load().unwrap_or_else(|error| {
         tracing::warn!(%error, "prefs load failed; using defaults");

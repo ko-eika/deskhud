@@ -36,6 +36,24 @@ pub struct PetPrefs {
     pub options: HashMap<String, bool>,
 }
 
+/// 二维宠物窗口尺寸。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PetSize {
+    /// 窗口宽度。
+    pub width: f32,
+    /// 窗口高度。
+    pub height: f32,
+}
+
+/// 二维宠物屏幕位置。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PetPosition {
+    /// 屏幕 X 坐标。
+    pub x: f32,
+    /// 屏幕 Y 坐标。
+    pub y: f32,
+}
+
 fn default_kind() -> String {
     "pet.deskhud.specs".into()
 }
@@ -59,6 +77,21 @@ impl Default for PetPrefs {
 }
 
 impl PetPrefs {
+    /// 返回组合尺寸。
+    pub fn size(&self) -> PetSize {
+        PetSize {
+            width: self.width,
+            height: self.height,
+        }
+    }
+
+    /// 返回组合位置（仅当 X/Y 均存在时）。
+    pub fn position(&self) -> Option<PetPosition> {
+        Some(PetPosition {
+            x: self.pos_x?,
+            y: self.pos_y?,
+        })
+    }
     /// 当前宠物类型：`pet.global.kind`。
     pub const GLOBAL_KIND_KEY: &'static str = "pet.global.kind";
     /// 宠窗宽：`pet.global.width`。

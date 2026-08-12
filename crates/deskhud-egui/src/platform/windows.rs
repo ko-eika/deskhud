@@ -51,11 +51,21 @@ pub fn fit_popup_pos_points(
         }
         let width = (width_points * scale).round() as i32;
         let height = (height_points * scale).round() as i32;
-        let x = cursor.x.clamp(
+        let preferred_x = if cursor.x + width <= info.rcWork.right {
+            cursor.x
+        } else {
+            cursor.x - width
+        };
+        let preferred_y = if cursor.y + height <= info.rcWork.bottom {
+            cursor.y
+        } else {
+            cursor.y - height
+        };
+        let x = preferred_x.clamp(
             info.rcWork.left,
             (info.rcWork.right - width).max(info.rcWork.left),
         );
-        let y = cursor.y.clamp(
+        let y = preferred_y.clamp(
             info.rcWork.top,
             (info.rcWork.bottom - height).max(info.rcWork.top),
         );

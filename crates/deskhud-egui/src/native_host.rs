@@ -24,8 +24,6 @@ use crate::pet_menu::PetMenuHost;
 use crate::settings::{SettingsHost, SettingsTab};
 
 const MENU_INITIAL_WIDTH: f64 = 180.0;
-const SETTINGS_WIDTH: f64 = 920.0;
-const SETTINGS_HEIGHT: f64 = 680.0;
 const MENU_FOCUS_GRACE: Duration = Duration::from_millis(180);
 
 #[derive(Debug)]
@@ -186,7 +184,7 @@ impl NativeHost {
         window.set_title("DeskHud 设置");
         window.set_decorations(true);
         window.set_resizable(true);
-        window.set_min_inner_size(Some(LogicalSize::new(720.0, 520.0)));
+        window.set_min_inner_size(Some(LogicalSize::new(800.0, 450.0)));
         // 设置是普通工具窗口；宠物置顶偏好不得把设置也提升为系统置顶。
         window.set_window_level(WindowLevel::Normal);
         #[cfg(windows)]
@@ -196,7 +194,14 @@ impl NativeHost {
         if let Some([x, y]) = self.prefs.shell.settings_pos() {
             window.set_outer_position(LogicalPosition::new(x as f64, y as f64));
         } else {
-            let _ = window.request_inner_size(LogicalSize::new(SETTINGS_WIDTH, SETTINGS_HEIGHT));
+            if let Some(monitor) = window.current_monitor() {
+                let scale = monitor.scale_factor();
+                let work = monitor.position();
+                let area = monitor.size();
+                let x = work.x as f64 + (area.width as f64 / scale - size[0] as f64) / 2.0;
+                let y = work.y as f64 + (area.height as f64 / scale - size[1] as f64) / 2.0;
+                window.set_outer_position(LogicalPosition::new(x.max(0.0), y.max(0.0)));
+            }
         }
         window.set_visible(true);
         window.focus_window();
@@ -208,6 +213,8 @@ impl NativeHost {
         if let Some(window) = self.window() {
             window.set_visible(false);
         }
+        #[cfg(windows)]
+        crate::gpu_overlay_probe::set_topmost(self.prefs.shell.topmost);
     }
 
     fn save_prefs(&self) {
@@ -265,6 +272,7 @@ impl NativeHost {
         } else if open_settings {
             self.show_settings();
         } else if open_hud_settings {
+            self.settings.begin_hud_layout_edit();
             self.show_settings_tab(SettingsTab::Hud);
         } else if !open && self.control_surface == ControlSurface::Menu {
             self.hide_control_window();
@@ -272,6 +280,11 @@ impl NativeHost {
     }
 
     fn pull_settings(&mut self) {
+        // 关闭请求可能在 egui 最后一帧绘制之后才到达；先从原生窗口
+        // 读取最终几何，再复制草稿，确保“关闭”与“取消”都能保存尺寸/位置。
+        if self.control_surface == ControlSurface::Settings && !self.settings.lock().open {
+            self.capture_settings_geometry();
+        }
         let (open, apply, pending_flush, discard, draft) = {
             let mut state = self.settings.lock();
             let values = (
@@ -302,9 +315,39 @@ impl NativeHost {
         } else if pending_flush && !discard {
             self.prefs = draft;
             self.save_prefs();
+        } else if pending_flush && discard {
+            let geometry = draft.shell.clone();
+            self.prefs.shell.settings_width = geometry.settings_width;
+            self.prefs.shell.settings_height = geometry.settings_height;
+            self.prefs.shell.settings_pos_x = geometry.settings_pos_x;
+            self.prefs.shell.settings_pos_y = geometry.settings_pos_y;
+            self.save_prefs();
         }
         if !open && self.control_surface == ControlSurface::Settings {
             self.hide_control_window();
+        }
+    }
+
+    fn capture_settings_geometry(&mut self) {
+        let Some(window) = self.window() else { return };
+        let size = window.inner_size();
+        let scale = window.scale_factor().max(0.01);
+        let position = window
+            .outer_position()
+            .ok()
+            .map(|p| (p.x as f64 / scale, p.y as f64 / scale));
+        if let Some((x, y)) = position {
+            let width = size.width as f32 / scale as f32;
+            let height = size.height as f32 / scale as f32;
+            self.prefs
+                .shell
+                .set_settings_geometry(width, height, x as f32, y as f32);
+            let mut settings = self.settings.lock();
+            settings
+                .prefs
+                .shell
+                .set_settings_geometry(width, height, x as f32, y as f32);
+            self.save_prefs();
         }
     }
 
@@ -403,8 +446,16 @@ impl ApplicationHandler<UserEvent> for NativeHost {
             self.sync_pet_theme();
         }
         if matches!(event, WindowEvent::CloseRequested) {
+            if self.control_surface == ControlSurface::Settings {
+                self.capture_settings_geometry();
+            }
             self.hide_control_window();
             return;
+        }
+        if matches!(event, WindowEvent::Moved(_))
+            && self.control_surface == ControlSurface::Settings
+        {
+            self.capture_settings_geometry();
         }
         if matches!(event, WindowEvent::Focused(false))
             && self.control_surface == ControlSurface::Menu
@@ -422,6 +473,9 @@ impl ApplicationHandler<UserEvent> for NativeHost {
             if size.width > 0 && size.height > 0 {
                 if let Some(window) = self.gl_window.as_ref() {
                     window.resize(size);
+                }
+                if self.control_surface == ControlSurface::Settings {
+                    self.capture_settings_geometry();
                 }
             }
         }

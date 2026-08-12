@@ -1,7 +1,6 @@
-//! D3D11 + Direct2D + DirectComposition 的可视覆盖层探针。
+//! Windows D3D11 + Direct2D + DirectComposition 宠物覆盖层后端。
 //!
-//! 它复用当前宠物包的最小绘制与拖动行为，用来验收 GPU 呈现链路；绝不接管
-//! 默认运行路径。
+//! 它复用引擎契约与 prefs，承载正式 Windows 宠物运行态。
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -27,19 +26,20 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_VREDRAW, CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow,
     DispatchMessageW, GetMessageW, GetSystemMetrics, HC_ACTION, HTTRANSPARENT, HWND_NOTOPMOST,
     HWND_TOPMOST, IDC_ARROW, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, LoadCursorW, MSG, MSLLHOOKSTRUCT,
-    PostQuitMessage, RegisterClassW, SM_CXSCREEN, SM_CYSCREEN, SW_HIDE, SW_SHOWNOACTIVATE,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetTimer, SetWindowPos,
-    SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL,
-    WH_MOUSE_LL, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEWHEEL, WM_NCHITTEST, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WNDCLASSW, WS_EX_TOOLWINDOW,
-    WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
+    PostMessageW, PostQuitMessage, RegisterClassW, SM_CXSCREEN, SM_CYSCREEN, SW_HIDE,
+    SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
+    SetTimer, SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx,
+    WH_KEYBOARD_LL, WH_MOUSE_LL, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_KEYDOWN, WM_KEYUP,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEWHEEL, WM_NCHITTEST,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WNDCLASSW,
+    WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
 };
 
 use crate::overlay_control::{OverlayControlBus, OverlayControlCommand};
 use crate::platform::{GpuCompositor, is_device_lost};
 
 const TIMER_ID: usize = 1;
+const WM_SYNC_TOPMOST: u32 = 0x8000 + 17;
 // DwmFlush 会把实际提交节奏限制在桌面合成器刷新率；短计时器仅用于尽快开始下一帧。
 const TIMER_INTERVAL_MS: u32 = 1;
 const FRAME_STATS_WINDOW_SECS: f32 = 5.0;
@@ -93,6 +93,7 @@ static DIALOGUE_HWND: AtomicIsize = AtomicIsize::new(0);
 static RELOAD_PREFS: AtomicBool = AtomicBool::new(false);
 static PET_THEME: AtomicU8 = AtomicU8::new(1);
 static ALLOW_ESCAPE_EXIT: AtomicBool = AtomicBool::new(false);
+static DESIRED_TOPMOST: AtomicBool = AtomicBool::new(true);
 
 struct GpuOverlayRenderer {
     compositor: GpuCompositor,
@@ -151,6 +152,14 @@ impl GpuOverlayRenderer {
                 if !self.dialogue_visible {
                     let _ = ShowWindow(self.dialogue_hwnd, SW_SHOWNOACTIVATE);
                     self.dialogue_visible = true;
+                    // 气泡首次显示会改变 DWM 的窗口排序；显示完成后立即
+                    // 重新提交宠物与气泡的共同层级，避免冷启动只剩气泡置顶。
+                    let pet_hwnd = OVERLAY_HWND.load(Ordering::Acquire) as HWND;
+                    apply_topmost(
+                        DESIRED_TOPMOST.load(Ordering::Acquire),
+                        pet_hwnd,
+                        self.dialogue_hwnd,
+                    );
                 }
             } else if self.dialogue_visible {
                 let _ = ShowWindow(self.dialogue_hwnd, SW_HIDE);
@@ -716,10 +725,6 @@ unsafe fn refresh_primary_bounds(hwnd: HWND) {
     }
 }
 
-pub fn run() -> anyhow::Result<()> {
-    run_with_controls(OverlayControlBus::default())
-}
-
 pub fn spawn(
     controls: OverlayControlBus,
     topmost: bool,
@@ -753,43 +758,41 @@ fn pet_theme() -> PetTheme {
 }
 
 pub fn set_topmost(enabled: bool) {
+    DESIRED_TOPMOST.store(enabled, Ordering::Release);
     let hwnd = OVERLAY_HWND.load(Ordering::Acquire) as HWND;
     if hwnd.is_null() {
         return;
     }
+    unsafe {
+        // 由覆盖层自己的窗口线程执行层级变更，避免跨线程 SetWindowPos
+        // 在冷启动时与 DirectComposition/窗口创建时序竞争。
+        let _ = PostMessageW(hwnd, WM_SYNC_TOPMOST, 0, 0);
+    }
+}
+
+fn apply_topmost(enabled: bool, hwnd: HWND, dialogue_hwnd: HWND) {
     unsafe {
         let insert_after = if enabled {
             HWND_TOPMOST
         } else {
             HWND_NOTOPMOST
         };
-        let _ = SetWindowPos(
-            hwnd,
-            insert_after,
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-        );
-        let dialogue = DIALOGUE_HWND.load(Ordering::Acquire) as HWND;
-        if !dialogue.is_null() {
-            let _ = SetWindowPos(
-                dialogue,
-                insert_after,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
+        // 将两个窗口作为一次层级事务处理：先处理气泡，再处理宠物，
+        // 让最终层级锚定在宠物窗口，避免气泡更新后宠物仍停留在旧层级。
+        for window in [dialogue_hwnd, hwnd] {
+            if !window.is_null() {
+                let _ = SetWindowPos(
+                    window,
+                    insert_after,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+            }
         }
     }
-}
-
-fn run_with_controls(controls: OverlayControlBus) -> anyhow::Result<()> {
-    let prefs = deskhud_ui::persist::load().unwrap_or_default();
-    run_with_controls_and_level(controls, prefs.shell.topmost, true, prefs.pet.pos())
 }
 
 fn run_with_controls_and_level(
@@ -799,6 +802,7 @@ fn run_with_controls_and_level(
     initial_pos: Option<[f32; 2]>,
 ) -> anyhow::Result<()> {
     CONTROLS.with(|slot| *slot.borrow_mut() = Some(controls));
+    DESIRED_TOPMOST.store(topmost, Ordering::Release);
     ALLOW_ESCAPE_EXIT.store(allow_escape_exit, Ordering::Relaxed);
     unsafe {
         let instance = GetModuleHandleW(std::ptr::null());
@@ -864,26 +868,7 @@ fn run_with_controls_and_level(
         }
         DIALOGUE_HWND.store(dialogue_hwnd as isize, Ordering::Release);
         // 探针只在创建时设一次层级，避免每帧改变窗口层级；正式运行态仍由 prefs 决定。
-        if topmost {
-            let _ = SetWindowPos(
-                hwnd,
-                HWND_TOPMOST,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
-            let _ = SetWindowPos(
-                dialogue_hwnd,
-                HWND_TOPMOST,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
-        }
+        apply_topmost(topmost, hwnd, dialogue_hwnd);
         match GpuOverlayRenderer::create(hwnd, dialogue_hwnd) {
             Ok(renderer) => {
                 RENDERER.with(|slot| *slot.borrow_mut() = Some(renderer));
@@ -892,6 +877,7 @@ fn run_with_controls_and_level(
                     WINDOW_LEFT.load(Ordering::Relaxed),
                     WINDOW_TOP.load(Ordering::Relaxed),
                 ));
+                apply_topmost(topmost, hwnd, dialogue_hwnd);
             }
             Err(error) => {
                 eprintln!("DeskHud GPU overlay probe initialization failed: {error}");
@@ -901,6 +887,9 @@ fn run_with_controls_and_level(
             }
         }
         render(hwnd);
+        // 等窗口首次提交后再由其所属线程重放一次，覆盖冷启动时层级被 DWM
+        // 或首次显示流程改写的情况。
+        let _ = PostMessageW(hwnd, WM_SYNC_TOPMOST, 0, 0);
         let keyboard_hook =
             SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_hook_proc), instance, 0);
         let mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), instance, 0);
@@ -996,6 +985,12 @@ unsafe extern "system" fn window_proc(
 ) -> LRESULT {
     unsafe {
         match message {
+            WM_SYNC_TOPMOST => {
+                let enabled = DESIRED_TOPMOST.load(Ordering::Acquire);
+                let dialogue = DIALOGUE_HWND.load(Ordering::Acquire) as HWND;
+                apply_topmost(enabled, hwnd, dialogue);
+                0
+            }
             WM_NCHITTEST if hwnd as isize == DIALOGUE_HWND.load(Ordering::Acquire) => {
                 HTTRANSPARENT as LRESULT
             }
@@ -1271,7 +1266,7 @@ fn render(_hwnd: HWND) {
         }
         Err(recreate_error) => {
             eprintln!(
-                "DeskHud GPU overlay recovery failed: {recreate_error}; close the probe and restart without DESKHUD_GPU_OVERLAY_PROBE"
+                "DeskHud GPU overlay recovery failed: {recreate_error}; restart DeskHud to retry"
             );
             let _ = unsafe { DestroyWindow(_hwnd) };
         }

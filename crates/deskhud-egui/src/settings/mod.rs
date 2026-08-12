@@ -210,6 +210,10 @@ pub struct SettingsState {
 }
 
 impl SettingsHost {
+    pub(crate) fn begin_hud_layout_edit(&self) {
+        let mut state = self.lock();
+        state.hud_layout_begin = true;
+    }
     /// Draw the existing settings surface inside a directly hosted egui root
     /// window. Window creation/visibility is owned by the native host.
     pub(crate) fn draw_native(&self, ui: &mut egui::Ui) {
@@ -282,6 +286,13 @@ impl SettingsHost {
     }
 
     fn draw(&self, ui: &mut egui::Ui) {
+        {
+            let mut state = self.lock();
+            if state.hud_layout_begin {
+                state.hud_layout_begin = false;
+                state.hud_layout_editing = true;
+            }
+        }
         // 草稿主题即时预览（取消时主壳会恢复已应用偏好）
         let draft_theme = self.lock().prefs.shell.ui_theme;
         crate::theme::apply(ui.ctx(), draft_theme);
@@ -291,6 +302,9 @@ impl SettingsHost {
         let fill = tone::bg();
         ui.painter()
             .rect_filled(ui.max_rect(), CornerRadius::ZERO, fill);
+
+        // 持续记录窗口几何，避免关闭事件发生在最后一帧之后而丢失尺寸。
+        self.capture_geometry(ui);
 
         // 主壳为透明宠窗把全局 window_fill 设成透明；设置窗内控件/弹出层需不透明
         opaque_settings_visuals(ui);
@@ -414,6 +428,7 @@ impl SettingsHost {
             s.prefs
                 .shell
                 .set_settings_geometry(w, h, outer.left(), outer.top());
+            s.pending_flush = true;
         }
     }
 
