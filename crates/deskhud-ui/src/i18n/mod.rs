@@ -13,5 +13,5 @@ pub use locale::Locale;
 
 /// 翻译固定键（外壳静态目录）。
 pub fn t(locale: Locale, key: MessageKey) -> &'static str {
-    catalogs::lookup(locale, key)
+    catalogs::lookup(locale.resolved(), key)
 }

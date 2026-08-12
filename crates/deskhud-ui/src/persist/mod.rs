@@ -269,7 +269,27 @@ fn prefs_from_value(root: toml::Value) -> UiPreferences {
             prefs.shell.settings_pos_y = Some(pair[1]);
         }
     }
-    let settings_has_topmost = true;
+    // Only suppress legacy pet/shell topmost keys when the new canonical
+    // setting is actually present. A hard-coded `true` would silently ignore
+    // old `[pet].topmost` values and break migration.
+    let settings_has_topmost = table
+        .get("general")
+        .and_then(|v| v.as_table())
+        .and_then(|t| t.get("topmost"))
+        .and_then(|v| v.as_bool())
+        .is_some()
+        || table
+            .get("prefs")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("topmost"))
+            .and_then(|v| v.as_bool())
+            .is_some()
+        || table
+            .get("settings")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("topmost"))
+            .and_then(|v| v.as_bool())
+            .is_some();
     if let Some(ui) = table.get("ui").and_then(|v| v.as_table()) {
         merge_ui_table(&mut prefs.shell, ui);
         // 旧 shell 误写在 ui 里的宠字段 → pet
@@ -640,6 +660,7 @@ fn toml_f64(v: &toml::Value) -> Option<f64> {
 
 fn locale_tag(locale: Locale) -> &'static str {
     match locale {
+        Locale::System => "system",
         Locale::ZhCn => "zh-cn",
         Locale::En => "en",
     }
@@ -647,6 +668,7 @@ fn locale_tag(locale: Locale) -> &'static str {
 
 fn parse_locale(s: &str) -> Locale {
     match s {
+        "system" | "auto" => Locale::System,
         "en" | "en-US" | "en_US" => Locale::En,
         _ => Locale::ZhCn,
     }
@@ -979,6 +1001,14 @@ picker_mode = "list"
         // global 开关应排在其它 hud 键前
         let g = out.find("\"hud.global.enable\"").unwrap();
         assert!(out[g..].contains("\"hud.global.enable\" = false"));
+    }
+
+    #[test]
+    fn canonical_general_topmost_wins_over_legacy_pet_key() {
+        let value: toml::Value =
+            toml::from_str("[general]\ntopmost = true\n\n[pet]\ntopmost = false\n").unwrap();
+        let prefs = prefs_from_value(value);
+        assert!(prefs.shell.topmost);
     }
 
     #[test]

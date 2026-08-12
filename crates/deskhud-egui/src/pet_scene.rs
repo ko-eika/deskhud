@@ -9,6 +9,7 @@ use deskhud_engine::{
     OverlayHitRegion, OverlayHitShape, OverlayPoint, OverlayRect, OverlayRoundedRect, OverlayScene,
     OverlayText, OverlayVisual, PetBubbleStyle, PetPaint, PetTheme,
 };
+use deskhud_ui::GraphicsPreferences;
 
 const PUPIL_COLOR: OverlayColor = OverlayColor {
     red: 28,
@@ -125,7 +126,11 @@ pub(crate) fn dialogue_scene_from_pet_paint(
     size: [f32; 2],
     paint: &PetPaint,
     theme: PetTheme,
+    graphics: GraphicsPreferences,
 ) -> Option<OverlayScene> {
+    if !graphics.effects {
+        return None;
+    }
     paint
         .bubble_text
         .as_deref()
@@ -138,6 +143,21 @@ pub(crate) fn dialogue_scene_from_pet_paint(
             };
             let (bubble_color, text_color, corner_radius) = bubble_appearance(paint, theme);
             let visuals = vec![
+                OverlayVisual::RoundedRect(OverlayRoundedRect {
+                    id: "pet.bubble.shadow".into(),
+                    rect: OverlayRect {
+                        origin: OverlayPoint { x: 5.0, y: 5.0 },
+                        width: bubble_rect.width,
+                        height: bubble_rect.height,
+                    },
+                    corner_radius: corner_radius + 1.0,
+                    color: OverlayColor {
+                        red: 0,
+                        green: 0,
+                        blue: 0,
+                        alpha: 48,
+                    },
+                }),
                 OverlayVisual::RoundedRect(OverlayRoundedRect {
                     id: "pet.bubble.background".into(),
                     rect: bubble_rect,
@@ -271,6 +291,7 @@ fn finite_or_zero(value: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use deskhud_engine::{OverlayDisplayTarget, OverlayPoint, OverlayVisual, PetPaint, PetTheme};
+    use deskhud_ui::GraphicsPreferences;
 
     use super::{dialogue_scene_from_pet_paint, scene_from_pet_paint};
 
@@ -307,16 +328,17 @@ mod tests {
             [190.0, 50.0],
             &paint,
             PetTheme::Dark,
+            GraphicsPreferences::default(),
         )
         .expect("bubble text should create a dialogue scene");
 
         assert_eq!(pet_scene.visuals.len(), 5);
-        assert_eq!(dialogue_scene.visuals.len(), 2);
+        assert_eq!(dialogue_scene.visuals.len(), 3);
         assert!(matches!(
-            dialogue_scene.visuals[0],
+            dialogue_scene.visuals[1],
             OverlayVisual::RoundedRect(_)
         ));
-        assert!(matches!(dialogue_scene.visuals[1], OverlayVisual::Text(_)));
+        assert!(matches!(dialogue_scene.visuals[2], OverlayVisual::Text(_)));
     }
 
     #[test]
@@ -330,12 +352,34 @@ mod tests {
             [190.0, 50.0],
             &paint,
             PetTheme::Light,
+            GraphicsPreferences::default(),
         )
         .expect("bubble text should create a dialogue scene");
-        let OverlayVisual::RoundedRect(background) = &scene.visuals[0] else {
+        let OverlayVisual::RoundedRect(background) = &scene.visuals[1] else {
             panic!("first visual should be the bubble background");
         };
         assert_eq!(background.color.red, 248);
+    }
+
+    #[test]
+    fn effects_off_hides_bubble_scene() {
+        let paint = PetPaint {
+            bubble_text: Some("hello".into()),
+            ..PetPaint::default()
+        };
+        assert!(
+            dialogue_scene_from_pet_paint(
+                OverlayDisplayTarget::Display("primary".into()),
+                [190.0, 50.0],
+                &paint,
+                PetTheme::Light,
+                GraphicsPreferences {
+                    effects: false,
+                    ..GraphicsPreferences::default()
+                },
+            )
+            .is_none()
+        );
     }
 
     #[test]

@@ -44,3 +44,18 @@ api_version = 1      # Guest/契约 ABI
 ## 内置包
 
 内置宠物 / 插件与社区包使用同一套 manifest 字段；运行时以原生 crate **compile-in**，也可用 `cargo pack-builtins` / `cargo pack-builtin <dir>` 从 [`packs/`](../packs/) 导出 `.deskhud` 做规范校验（不嵌入可执行文件加载路径）。完整命令见 [`extension-guide.md`](./extension-guide.md) §1.6 与 [`release.md`](./release.md)。
+
+## 版本提交描述
+
+版本提交描述使用 Conventional Commits 风格，并统一使用中文正文，便于发布记录、变更追踪与复制使用：
+
+```yaml
+feat: DeskHud 0.x.y — 简短主题
+
+- 使用动词开头，描述一个可验证的用户可见变更
+- 每条只描述一个变更点，避免把多个模块揉成一句
+- 优先说明运行时行为、配置迁移、兼容性、国际化和内置包版本等影响
+- 不写实现过程、测试过程或无法从代码验证的宣传性描述
+```
+
+标题类型按变更性质选择：功能与体验改进使用 `feat:`，问题修复使用 `fix:`，纯版本号或发版元数据调整才使用 `release:`。包含多类变更时，优先使用主要用户价值对应的类型。标题必须包含目标版本，正文条目使用中文并保持简洁、平行、可核对。

@@ -66,17 +66,19 @@ impl CatalogStore {
 
 /// UI / 文件用的 locale 标签。
 pub fn locale_tag(locale: Locale) -> &'static str {
-    match locale {
+    match locale.resolved() {
         Locale::ZhCn => "zh-CN",
         Locale::En => "en",
+        Locale::System => unreachable!("system locale must be resolved"),
     }
 }
 
 /// 尝试的 locale 文件名（含别名）。
 pub fn locale_file_candidates(locale: Locale) -> &'static [&'static str] {
-    match locale {
+    match locale.resolved() {
         Locale::ZhCn => &["zh-CN", "zh_cn", "zh"],
         Locale::En => &["en", "en-US"],
+        Locale::System => unreachable!("system locale must be resolved"),
     }
 }
 

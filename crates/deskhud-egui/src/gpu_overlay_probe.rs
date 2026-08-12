@@ -12,7 +12,7 @@ use deskhud_engine::{
     OverlayScene, PetConfigBag, PetEvent, PetKey, PetModifiers, PetMouseButton, PetPaintCtx,
     PetTheme,
 };
-use deskhud_ui::{FpsLimit, UiPreferences};
+use deskhud_ui::{AnimationQuality, FpsLimit, PowerMode, UiPreferences};
 use windows::Win32::Foundation::POINT;
 use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, WS_EX_NOREDIRECTIONBITMAP};
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
@@ -466,8 +466,13 @@ impl GpuOverlayRenderer {
             config,
             theme: pet_theme(),
         });
-        self.pet.pupil_smooth[0] += (paint.pupil_offset[0] - self.pet.pupil_smooth[0]) * 0.28;
-        self.pet.pupil_smooth[1] += (paint.pupil_offset[1] - self.pet.pupil_smooth[1]) * 0.28;
+        let smoothing = match self.pet.prefs.graphics.animation_quality {
+            AnimationQuality::Low => 0.12,
+            AnimationQuality::Standard => 0.28,
+            AnimationQuality::High => 0.42,
+        };
+        self.pet.pupil_smooth[0] += (paint.pupil_offset[0] - self.pet.pupil_smooth[0]) * smoothing;
+        self.pet.pupil_smooth[1] += (paint.pupil_offset[1] - self.pet.pupil_smooth[1]) * smoothing;
         let target = OverlayDisplayTarget::Display("primary".into());
         let scene = crate::pet_scene::scene_from_pet_paint(
             target.clone(),
@@ -484,6 +489,7 @@ impl GpuOverlayRenderer {
             [DIALOGUE_WIDTH as f32, DIALOGUE_HEIGHT as f32],
             &paint,
             pet_theme(),
+            self.pet.prefs.graphics,
         );
         (scene, dialogue)
     }
@@ -1241,12 +1247,15 @@ fn render(_hwnd: HWND) {
     let result = RENDERER.with(|slot| {
         let mut slot = slot.borrow_mut();
         if let Some(renderer) = slot.as_ref() {
-            let fps = match renderer.pet.prefs.graphics.fps_limit {
+            let mut fps = match renderer.pet.prefs.graphics.fps_limit {
                 FpsLimit::Auto => None,
                 FpsLimit::Fps30 => Some(30.0),
                 FpsLimit::Fps60 => Some(60.0),
                 FpsLimit::Fps120 => Some(120.0),
             };
+            if matches!(renderer.pet.prefs.graphics.power_mode, PowerMode::Saving) {
+                fps = Some(fps.unwrap_or(60.0_f32).min(30.0_f32));
+            }
             if let Some(fps) = fps {
                 if renderer.pet.frame_stats.last_present.elapsed()
                     < std::time::Duration::from_secs_f32(1.0 / fps)

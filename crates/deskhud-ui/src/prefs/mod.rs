@@ -24,7 +24,7 @@ impl Default for UiPreferences {
     fn default() -> Self {
         Self {
             graphics: Default::default(),
-            locale: Locale::ZhCn,
+            locale: Locale::System,
             shell: ShellPrefs::default(),
             pet: PetPrefs::default(),
             hud: HudPrefs::default(),

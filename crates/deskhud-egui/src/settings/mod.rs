@@ -451,7 +451,7 @@ impl SettingsHost {
             (SettingsTab::General, MessageKey::SettingsNavGeneral, "○"),
             (
                 SettingsTab::Performance,
-                MessageKey::SettingsNavGeneral,
+                MessageKey::SettingsNavPerformance,
                 "◒",
             ),
             (SettingsTab::Pet, MessageKey::SettingsNavPet, "●"),
@@ -621,7 +621,7 @@ impl SettingsHost {
                 s.prefs.t(MessageKey::MetaAuthor).to_string(),
                 s.prefs.t(MessageKey::MetaHomepage).to_string(),
                 s.catalogs.clone(),
-                s.prefs.locale,
+                s.prefs.locale.resolved(),
             )
         };
 
@@ -1212,6 +1212,7 @@ impl SettingsHost {
             locale_l,
             zh,
             en,
+            system,
             locale,
             theme_l,
             theme_light,
@@ -1234,6 +1235,7 @@ impl SettingsHost {
                 s.prefs.t(MessageKey::SettingsLocale).to_string(),
                 s.prefs.t(MessageKey::OptLocaleZh).to_string(),
                 s.prefs.t(MessageKey::OptLocaleEn).to_string(),
+                s.prefs.t(MessageKey::OptLocaleSystem).to_string(),
                 s.prefs.locale,
                 s.prefs.t(MessageKey::SettingsTheme).to_string(),
                 s.prefs.t(MessageKey::OptThemeLight).to_string(),
@@ -1274,6 +1276,7 @@ impl SettingsHost {
         }
         let family_label = crate::fonts::label_for_family(&families, &family_key);
         let style_disp = match locale_enum {
+            Locale::System => crate::fonts::style_label_zh(&font_style),
             Locale::ZhCn => crate::fonts::style_label_zh(&font_style),
             Locale::En => crate::fonts::style_label_en(&font_style),
         };
@@ -1332,13 +1335,13 @@ impl SettingsHost {
                     .color(tone::text()),
             );
             ui.add_space(8.0);
-            setting_row_divided(ui, "帧率上限", true, |ui| {
+            setting_row_divided(ui, &fps_label, true, |ui| {
                 settings_combo(
                     ui,
                     "graphics_fps",
                     SETTINGS_COMBO_W,
                     match fps {
-                        FpsLimit::Auto => "自动",
+                        FpsLimit::Auto => &auto_label,
                         FpsLimit::Fps30 => "30",
                         FpsLimit::Fps60 => "60",
                         FpsLimit::Fps120 => "120",
@@ -1352,7 +1355,7 @@ impl SettingsHost {
                     4,
                     |ui| {
                         for (v, t) in [
-                            (FpsLimit::Auto, "自动"),
+                            (FpsLimit::Auto, auto_label.as_str()),
                             (FpsLimit::Fps30, "30"),
                             (FpsLimit::Fps60, "60"),
                             (FpsLimit::Fps120, "120"),
@@ -1364,15 +1367,15 @@ impl SettingsHost {
                     },
                 );
             });
-            setting_row_divided(ui, "动画质量", true, |ui| {
+            setting_row_divided(ui, &animation_label, true, |ui| {
                 settings_combo(
                     ui,
                     "graphics_animation",
                     SETTINGS_COMBO_W,
                     match animation {
-                        AnimationQuality::Low => "低",
-                        AnimationQuality::Standard => "标准",
-                        AnimationQuality::High => "高",
+                        AnimationQuality::Low => &low_label,
+                        AnimationQuality::Standard => &standard_label,
+                        AnimationQuality::High => &high_label,
                     },
                     match animation {
                         AnimationQuality::Low => 0,
@@ -1382,9 +1385,9 @@ impl SettingsHost {
                     3,
                     |ui| {
                         for (v, t) in [
-                            (AnimationQuality::Low, "低"),
-                            (AnimationQuality::Standard, "标准"),
-                            (AnimationQuality::High, "高"),
+                            (AnimationQuality::Low, low_label.as_str()),
+                            (AnimationQuality::Standard, standard_label.as_str()),
+                            (AnimationQuality::High, high_label.as_str()),
                         ] {
                             let current = match animation { AnimationQuality::Low=>"low",AnimationQuality::Standard=>"standard",AnimationQuality::High=>"high" };
                             let next = match v { AnimationQuality::Low=>"low",AnimationQuality::Standard=>"standard",AnimationQuality::High=>"high" };
@@ -1441,6 +1444,7 @@ impl SettingsHost {
         section_card(ui, |ui| {
             setting_row(ui, &locale_l, |ui| {
                 let locale_text = match locale {
+                    Locale::System => system.as_str(),
                     Locale::ZhCn => zh.as_str(),
                     Locale::En => en.as_str(),
                 };
@@ -1450,11 +1454,14 @@ impl SettingsHost {
                     SETTINGS_COMBO_W,
                     locale_text,
                     match locale {
-                        Locale::ZhCn => 0,
-                        Locale::En => 1,
+                        Locale::System => 0,
+                        Locale::ZhCn => 1,
+                        Locale::En => 2,
                     },
-                    2,
+                    3,
                     |ui| {
+                        locale_combo_option(ui, &mut locale, Locale::System, &system);
+                        ui.add_space(2.0);
                         locale_combo_option(ui, &mut locale, Locale::ZhCn, &zh);
                         ui.add_space(2.0);
                         locale_combo_option(ui, &mut locale, Locale::En, &en);
@@ -1533,7 +1540,9 @@ impl SettingsHost {
                                     ui.add_space(2.0);
                                 }
                                 let label = match locale_enum {
-                                    Locale::ZhCn => crate::fonts::style_label_zh(st),
+                                    Locale::System | Locale::ZhCn => {
+                                        crate::fonts::style_label_zh(st)
+                                    }
                                     Locale::En => crate::fonts::style_label_en(st),
                                 };
                                 string_combo_option(ui, &mut font_style, st, &label);
@@ -1604,16 +1613,56 @@ impl SettingsHost {
                 s.prefs.graphics.effects,
             )
         };
-        page_header(ui, "性能", "调整帧率、动画和特效偏好。");
+        let (
+            title,
+            intro,
+            fps_label,
+            auto_label,
+            animation_label,
+            low_label,
+            standard_label,
+            high_label,
+            power_label,
+            saving_label,
+            balanced_label,
+            smooth_label,
+            effects_label,
+        ) = {
+            let s = self.lock();
+            (
+                s.prefs.t(MessageKey::SettingsNavPerformance).to_string(),
+                s.prefs.t(MessageKey::SettingsPerformanceIntro).to_string(),
+                s.prefs.t(MessageKey::SettingsPerformanceFps).to_string(),
+                s.prefs.t(MessageKey::SettingsPerformanceAuto).to_string(),
+                s.prefs
+                    .t(MessageKey::SettingsPerformanceAnimation)
+                    .to_string(),
+                s.prefs.t(MessageKey::SettingsPerformanceLow).to_string(),
+                s.prefs
+                    .t(MessageKey::SettingsPerformanceStandard)
+                    .to_string(),
+                s.prefs.t(MessageKey::SettingsPerformanceHigh).to_string(),
+                s.prefs.t(MessageKey::SettingsPerformancePower).to_string(),
+                s.prefs.t(MessageKey::SettingsPerformanceSaving).to_string(),
+                s.prefs
+                    .t(MessageKey::SettingsPerformanceBalanced)
+                    .to_string(),
+                s.prefs.t(MessageKey::SettingsPerformanceSmooth).to_string(),
+                s.prefs
+                    .t(MessageKey::SettingsPerformanceEffects)
+                    .to_string(),
+            )
+        };
+        page_header(ui, &title, &intro);
         ui.add_space(16.0);
         section_card(ui, |ui| {
-            setting_row_divided(ui, "帧率上限", true, |ui| {
+            setting_row_divided(ui, &fps_label, true, |ui| {
                 settings_combo(
                     ui,
                     "performance_fps",
                     SETTINGS_COMBO_W,
                     match fps {
-                        FpsLimit::Auto => "自动",
+                        FpsLimit::Auto => &auto_label,
                         FpsLimit::Fps30 => "30",
                         FpsLimit::Fps60 => "60",
                         FpsLimit::Fps120 => "120",
@@ -1627,7 +1676,7 @@ impl SettingsHost {
                     4,
                     |ui| {
                         for (v, t) in [
-                            (FpsLimit::Auto, "自动"),
+                            (FpsLimit::Auto, auto_label.as_str()),
                             (FpsLimit::Fps30, "30"),
                             (FpsLimit::Fps60, "60"),
                             (FpsLimit::Fps120, "120"),
@@ -1655,15 +1704,15 @@ impl SettingsHost {
                     },
                 )
             });
-            setting_row_divided(ui, "动画质量", true, |ui| {
+            setting_row_divided(ui, &animation_label, true, |ui| {
                 settings_combo(
                     ui,
                     "performance_animation",
                     SETTINGS_COMBO_W,
                     match animation {
-                        AnimationQuality::Low => "低",
-                        AnimationQuality::Standard => "标准",
-                        AnimationQuality::High => "高",
+                        AnimationQuality::Low => &low_label,
+                        AnimationQuality::Standard => &standard_label,
+                        AnimationQuality::High => &high_label,
                     },
                     match animation {
                         AnimationQuality::Low => 0,
@@ -1673,9 +1722,9 @@ impl SettingsHost {
                     3,
                     |ui| {
                         for (v, t) in [
-                            (AnimationQuality::Low, "低"),
-                            (AnimationQuality::Standard, "标准"),
-                            (AnimationQuality::High, "高"),
+                            (AnimationQuality::Low, low_label.as_str()),
+                            (AnimationQuality::Standard, standard_label.as_str()),
+                            (AnimationQuality::High, high_label.as_str()),
                         ] {
                             let current = match animation {
                                 AnimationQuality::Low => "low",
@@ -1698,15 +1747,15 @@ impl SettingsHost {
                     },
                 )
             });
-            setting_row_divided(ui, "性能模式", true, |ui| {
+            setting_row_divided(ui, &power_label, true, |ui| {
                 settings_combo(
                     ui,
                     "performance_power",
                     SETTINGS_COMBO_W,
                     match power {
-                        PowerMode::Saving => "省电",
-                        PowerMode::Balanced => "平衡",
-                        PowerMode::Smooth => "流畅",
+                        PowerMode::Saving => &saving_label,
+                        PowerMode::Balanced => &balanced_label,
+                        PowerMode::Smooth => &smooth_label,
                     },
                     match power {
                         PowerMode::Saving => 0,
@@ -1716,9 +1765,9 @@ impl SettingsHost {
                     3,
                     |ui| {
                         for (v, t) in [
-                            (PowerMode::Saving, "省电"),
-                            (PowerMode::Balanced, "平衡"),
-                            (PowerMode::Smooth, "流畅"),
+                            (PowerMode::Saving, saving_label.as_str()),
+                            (PowerMode::Balanced, balanced_label.as_str()),
+                            (PowerMode::Smooth, smooth_label.as_str()),
                         ] {
                             let current = match power {
                                 PowerMode::Saving => "saving",
@@ -1744,7 +1793,7 @@ impl SettingsHost {
         });
         ui.add_space(12.0);
         section_card(ui, |ui| {
-            setting_row_divided(ui, "气泡与阴影", false, |ui| {
+            setting_row_divided(ui, &effects_label, false, |ui| {
                 toggle_switch(ui, &mut effects);
             });
         });

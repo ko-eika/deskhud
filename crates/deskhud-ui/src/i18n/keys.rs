@@ -23,6 +23,32 @@ pub enum MessageKey {
     SettingsNavHud,
     /// 侧栏：常规。
     SettingsNavGeneral,
+    /// 侧栏：性能。
+    SettingsNavPerformance,
+    /// 性能页说明。
+    SettingsPerformanceIntro,
+    /// 性能页帧率标签。
+    SettingsPerformanceFps,
+    /// 自动帧率选项。
+    SettingsPerformanceAuto,
+    /// 动画质量标签。
+    SettingsPerformanceAnimation,
+    /// 低动画质量选项。
+    SettingsPerformanceLow,
+    /// 标准动画质量选项。
+    SettingsPerformanceStandard,
+    /// 高动画质量选项。
+    SettingsPerformanceHigh,
+    /// 性能模式标签。
+    SettingsPerformancePower,
+    /// 省电性能模式选项。
+    SettingsPerformanceSaving,
+    /// 平衡性能模式选项。
+    SettingsPerformanceBalanced,
+    /// 流畅性能模式选项。
+    SettingsPerformanceSmooth,
+    /// 气泡与阴影开关标签。
+    SettingsPerformanceEffects,
     /// 侧栏：关于。
     SettingsNavAbout,
     /// 关于页说明。
@@ -101,6 +127,8 @@ pub enum MessageKey {
     SettingsTopmostHint,
     /// 简体中文。
     OptLocaleZh,
+    /// 自动识别系统语言。
+    OptLocaleSystem,
     /// English。
     OptLocaleEn,
 }
