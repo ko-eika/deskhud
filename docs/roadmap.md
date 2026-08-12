@@ -1,4 +1,6 @@
-# DeskHud 路线图
+# DeskHud 0.5.x 路线图
+
+当前产品状态：Windows 宠物覆盖层已可用；HUD 真实帧数据与每屏原生合成仍是 0.5.x 的主要缺口。
 
 ## Phase 0 — 底座规划
 
@@ -15,7 +17,7 @@
 - [x] HUD 全屏 overlay + 布局 prefs（帧数据仍待）
 - 扩展 `Plugin`：`HudFrame` 真实帧数据
 
-## Phase 1b — 跨平台 MVP（与 Phase 1 并行）
+## Phase 1b — 跨平台 MVP（与 Phase 1 并行，基础完成）
 
 - [x] `deskhud-egui`：`platform` 抽象（Windows 原生 + macOS/Linux egui 回退）
 - [x] 非 Win：视口拖移；全局键鼠降级；CJK 字体候选扩展
@@ -28,18 +30,19 @@
 - [x] 包内 `i18n/*.toml` 扫描（经 runtime 装配）
 - [x] 设置页语言切换作用于 shell + 已加载包文案（宠/插件/配置项 + 字体来源后缀）
 
-## Phase 3 — 社区 WASM
+## Phase 3 — 社区 WASM（0.5.x 后续）
 
 - `deskhud-runtime` 接入 wasmtime
 - `deskhud-sdk` 可编译 `wasm32-unknown-unknown`
 - 示例：`examples/community-pet-idle`、`examples/community-hud-clock`
 - 打包脚本 → `.deskhud`
 
-## Phase 4 — 体验打磨
+## Phase 4 — 体验打磨（0.5.x）
 
 - [x] prefs 持久化
 - 更多内置宠
-- HUD 布局与可读性
+- [ ] HUD 真实帧数据与每屏原生合成
+- [ ] HUD 布局与可读性
 
 ## 明确后置
 

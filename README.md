@@ -2,7 +2,7 @@
 <h4 align="center">一个可扩展的桌宠引擎</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.4.1-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.5.4-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -13,7 +13,9 @@
 
 简体中文 | [English](./README_EN.md)
 
-DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（外观 + 行为），并按需开关 **HUD 插件** 及其贡献条目。界面基于 **egui / eframe**，支持多语言与本地社区包加载（商店能力后置）。
+DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（外观 + 行为），并按需开关 **HUD 插件** 及其贡献条目。界面基于 **egui + winit / egui_glow**，支持多语言与本地社区包加载（商店能力后置）。
+
+当前状态：Windows 宠物覆盖层已可用，支持透明、局部命中、拖拽和置顶；HUD 的真实帧数据与原生合成仍是当前主要缺口。
 
 ## 功能概览
 
@@ -60,7 +62,7 @@ DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（�
 
 | 领域 | 选择 |
 |------|------|
-| UI | egui / eframe（Glow），唯一 UI 框架；无系统托盘 |
+| UI | egui + winit / egui_glow，唯一 UI；透明合成由平台覆盖层负责；无系统托盘 |
 | 内置扩展 | 原生 Rust `PetKind` / `Plugin` |
 | 社区扩展 | WASM（wasmtime）+ `deskhud-sdk`（规划中） |
 | 包格式 | `.deskhud` + `manifest.toml` |
@@ -134,8 +136,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud
 
 # 4. 打 tag 并推送后，在 GitHub Release 上传二进制
-git tag -a v0.4.1 -m "DeskHud 0.4.1"
-git push origin v0.4.1
+git tag -a v0.5.4 -m "DeskHud 0.5.4"
+git push origin v0.5.4
 ```
 
 当前 CI（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）只做三端 `check` / 测试，**不会**自动发布安装包。
