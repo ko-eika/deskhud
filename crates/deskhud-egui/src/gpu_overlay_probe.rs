@@ -12,7 +12,7 @@ use deskhud_engine::{
     OverlayScene, PetConfigBag, PetEvent, PetKey, PetModifiers, PetMouseButton, PetPaintCtx,
     PetTheme,
 };
-use deskhud_ui::UiPreferences;
+use deskhud_ui::{FpsLimit, UiPreferences};
 use windows::Win32::Foundation::POINT;
 use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, WS_EX_NOREDIRECTIONBITMAP};
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
@@ -1240,6 +1240,21 @@ fn signed_high_word(value: LPARAM) -> i32 {
 fn render(_hwnd: HWND) {
     let result = RENDERER.with(|slot| {
         let mut slot = slot.borrow_mut();
+        if let Some(renderer) = slot.as_ref() {
+            let fps = match renderer.pet.prefs.graphics.fps_limit {
+                FpsLimit::Auto => None,
+                FpsLimit::Fps30 => Some(30.0),
+                FpsLimit::Fps60 => Some(60.0),
+                FpsLimit::Fps120 => Some(120.0),
+            };
+            if let Some(fps) = fps {
+                if renderer.pet.frame_stats.last_present.elapsed()
+                    < std::time::Duration::from_secs_f32(1.0 / fps)
+                {
+                    return Ok(());
+                }
+            }
+        }
         slot.as_mut()
             .map(|renderer| unsafe { renderer.render() })
             .unwrap_or(Ok(()))

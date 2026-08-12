@@ -22,6 +22,13 @@ pub struct BuiltinSpecsPet {
     hover_highlight: AtomicBool,
     dock_tint: AtomicBool,
     blink: Mutex<BlinkState>,
+    gaze: Mutex<GazeState>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct GazeState {
+    last: [f32; 2],
+    idle_secs: f32,
 }
 
 /// Short, asymmetric eye-close cycle with locally generated timing jitter.
@@ -120,6 +127,10 @@ impl Default for BuiltinSpecsPet {
             hover_highlight: AtomicBool::new(true),
             dock_tint: AtomicBool::new(true),
             blink: Mutex::new(BlinkState::new()),
+            gaze: Mutex::new(GazeState {
+                last: [0.0, 0.0],
+                idle_secs: 0.0,
+            }),
         }
     }
 }
@@ -415,8 +426,21 @@ impl PetKind for BuiltinSpecsPet {
         if follow {
             let dx = ctx.pointer_dir[0].clamp(-1.0, 1.0);
             let dy = ctx.pointer_dir[1].clamp(-1.0, 1.0);
+            let mut gaze = self.gaze.lock().unwrap_or_else(|e| e.into_inner());
+            let moved = (dx - gaze.last[0]).abs() + (dy - gaze.last[1]).abs() > 0.015;
+            gaze.idle_secs = if moved {
+                0.0
+            } else {
+                gaze.idle_secs + 1.0 / 60.0
+            };
+            gaze.last = [dx, dy];
+            let follow_amount =
+                (1.0 - ((gaze.idle_secs - 1.2) / 0.45).clamp(0.0, 1.0)).clamp(0.0, 1.0);
             let max_shift = if dragging || global_lmb { 6.0 } else { 4.5 };
-            pupil = [dx * max_shift, dy * max_shift * 0.9];
+            pupil = [
+                dx * max_shift * follow_amount,
+                dy * max_shift * 0.9 * follow_amount,
+            ];
             if !dragging {
                 if dock.left {
                     pupil[0] = (pupil[0] - 1.8).clamp(-max_shift, max_shift);

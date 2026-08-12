@@ -131,6 +131,34 @@ pub fn format_prefs_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> S
     out.push_str("\n[general]\n");
     out.push_str(&format!("topmost = {}\n", prefs.shell.topmost));
 
+    out.push_str("\n[graphics]\n");
+    out.push_str(&format!(
+        "fps_limit = \"{}\"\n",
+        match prefs.graphics.fps_limit {
+            crate::FpsLimit::Auto => "auto",
+            crate::FpsLimit::Fps30 => "30",
+            crate::FpsLimit::Fps60 => "60",
+            crate::FpsLimit::Fps120 => "120",
+        }
+    ));
+    out.push_str(&format!(
+        "animation_quality = \"{}\"\n",
+        match prefs.graphics.animation_quality {
+            crate::AnimationQuality::Low => "low",
+            crate::AnimationQuality::Standard => "standard",
+            crate::AnimationQuality::High => "high",
+        }
+    ));
+    out.push_str(&format!("effects = {}\n", prefs.graphics.effects));
+    out.push_str(&format!(
+        "power_mode = \"{}\"\n",
+        match prefs.graphics.power_mode {
+            crate::PowerMode::Saving => "saving",
+            crate::PowerMode::Balanced => "balanced",
+            crate::PowerMode::Smooth => "smooth",
+        }
+    ));
+
     out.push_str("\n[theme]\n");
     out.push_str(&format!("mode = \"{}\"\n", theme_tag(prefs.shell.ui_theme)));
     out.push_str(&format!("locale = \"{}\"\n", locale_tag(prefs.locale)));
@@ -194,6 +222,33 @@ fn prefs_from_value(root: toml::Value) -> UiPreferences {
     if let Some(general) = table.get("general").and_then(|v| v.as_table()) {
         if let Some(topmost) = general.get("topmost").and_then(|v| v.as_bool()) {
             prefs.shell.topmost = topmost;
+        }
+    }
+    if let Some(g) = table.get("graphics").and_then(|v| v.as_table()) {
+        if let Some(v) = g.get("fps_limit").and_then(|v| v.as_str()) {
+            prefs.graphics.fps_limit = match v {
+                "auto" => crate::FpsLimit::Auto,
+                "30" => crate::FpsLimit::Fps30,
+                "120" => crate::FpsLimit::Fps120,
+                _ => crate::FpsLimit::Auto,
+            };
+        }
+        if let Some(v) = g.get("animation_quality").and_then(|v| v.as_str()) {
+            prefs.graphics.animation_quality = match v {
+                "low" => crate::AnimationQuality::Low,
+                "high" => crate::AnimationQuality::High,
+                _ => crate::AnimationQuality::Standard,
+            };
+        }
+        if let Some(v) = g.get("effects").and_then(|v| v.as_bool()) {
+            prefs.graphics.effects = v;
+        }
+        if let Some(v) = g.get("power_mode").and_then(|v| v.as_str()) {
+            prefs.graphics.power_mode = match v {
+                "saving" => crate::PowerMode::Saving,
+                "smooth" => crate::PowerMode::Smooth,
+                _ => crate::PowerMode::Balanced,
+            };
         }
     }
 

@@ -16,6 +16,13 @@ fn main() {
         let mut res = winresource::WindowsResource::new();
         res.set_icon("assets/icon.ico");
         res.set_manifest_file("assets/app.manifest");
+        // Windows Explorer reads these fields from the PE version resource.
+        // Keep the technical Cargo crate name separate from the product name.
+        res.set("FileDescription", "DeskHud");
+        res.set("ProductName", "DeskHud");
+        res.set("InternalName", "DeskHud");
+        res.set("OriginalFilename", "deskhud.exe");
+        res.set("CompanyName", "KO.EIKA");
         if let Err(e) = res.compile() {
             println!("cargo:warning=embed icon.ico failed: {e}");
         }

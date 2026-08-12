@@ -14,7 +14,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalPosition, LogicalSize, PhysicalPosition};
 use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
-use winit::window::{Window, WindowAttributes, WindowId, WindowLevel};
+use winit::window::{Icon, Window, WindowAttributes, WindowId, WindowLevel};
 
 #[cfg(windows)]
 use winit::platform::windows::{WindowAttributesExtWindows as _, WindowExtWindows as _};
@@ -543,6 +543,7 @@ impl GlutinWindow {
         #[allow(unused_mut)]
         let mut attributes = WindowAttributes::default()
             .with_title("DeskHud")
+            .with_window_icon(app_window_icon())
             .with_visible(false)
             .with_decorations(false)
             .with_resizable(false)
@@ -638,4 +639,12 @@ impl GlutinWindow {
     fn swap_buffers(&self) -> glutin::error::Result<()> {
         self.surface.swap_buffers(&self.context)
     }
+}
+
+fn app_window_icon() -> Option<Icon> {
+    let image = image::load_from_memory(include_bytes!("../assets/icon.png"))
+        .ok()?
+        .into_rgba8();
+    let (width, height) = (image.width(), image.height());
+    Icon::from_rgba(image.into_raw(), width, height).ok()
 }

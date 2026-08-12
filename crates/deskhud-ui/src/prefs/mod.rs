@@ -8,6 +8,8 @@ use crate::shell::ShellPrefs;
 /// 壳偏好（内存模型；落盘形状见 `persist`）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct UiPreferences {
+    /// Rendering and animation preferences.
+    pub graphics: crate::shell::GraphicsPreferences,
     /// 语言。
     pub locale: Locale,
     /// 界面 / 设置窗（落盘 `[ui]`）；字体落盘 `[font]`。
@@ -21,6 +23,7 @@ pub struct UiPreferences {
 impl Default for UiPreferences {
     fn default() -> Self {
         Self {
+            graphics: Default::default(),
             locale: Locale::ZhCn,
             shell: ShellPrefs::default(),
             pet: PetPrefs::default(),

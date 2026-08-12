@@ -1,6 +1,6 @@
 id = "hud.deskhud.demo"
 kind = "plugin"
-version = "0.5.2"
+version = "0.5.3"
 engine = "0.5"
 api_version = 1
 display_name = "Demo HUD"

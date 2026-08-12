@@ -23,4 +23,6 @@ pub use persist::{
 pub use pet::PetPrefs;
 pub use pet::{PetPosition, PetSize};
 pub use prefs::{UiPreferences, migrate_pet_id};
-pub use shell::{PetPickerMode, ShellPrefs, UiTheme};
+pub use shell::{
+    AnimationQuality, FpsLimit, GraphicsPreferences, PetPickerMode, PowerMode, ShellPrefs, UiTheme,
+};

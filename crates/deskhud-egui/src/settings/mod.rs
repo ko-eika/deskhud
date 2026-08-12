@@ -5,7 +5,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use deskhud_engine::{HudContribution, PetConfigOption, PetKindInfo, PluginInfo};
-use deskhud_ui::{CatalogStore, Locale, MessageKey, PetPickerMode, UiPreferences, UiTheme};
+use deskhud_ui::{
+    AnimationQuality, CatalogStore, FpsLimit, Locale, MessageKey, PetPickerMode, PowerMode,
+    UiPreferences, UiTheme,
+};
 use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditState;
 use egui::{
@@ -154,6 +157,7 @@ pub enum SettingsTab {
     Pet,
     Hud,
     General,
+    Performance,
     About,
 }
 
@@ -443,15 +447,20 @@ impl SettingsHost {
         ui.label(RichText::new("DeskHud").size(11.5).color(tone::muted()));
         ui.add_space(18.0);
 
-        for (next, key) in [
-            (SettingsTab::General, MessageKey::SettingsNavGeneral),
-            (SettingsTab::Pet, MessageKey::SettingsNavPet),
-            (SettingsTab::Hud, MessageKey::SettingsNavHud),
-            (SettingsTab::About, MessageKey::SettingsNavAbout),
+        for (next, key, icon) in [
+            (SettingsTab::General, MessageKey::SettingsNavGeneral, "○"),
+            (
+                SettingsTab::Performance,
+                MessageKey::SettingsNavGeneral,
+                "◒",
+            ),
+            (SettingsTab::Pet, MessageKey::SettingsNavPet, "●"),
+            (SettingsTab::Hud, MessageKey::SettingsNavHud, "▦"),
+            (SettingsTab::About, MessageKey::SettingsNavAbout, "ⓘ"),
         ] {
             let label = self.lock().prefs.t(key).to_string();
             let selected = tab == next;
-            if nav_item(ui, &label, selected).clicked() {
+            if nav_item(ui, &format!("{icon}  {label}"), selected).clicked() {
                 let mut s = self.lock();
                 s.tab = next;
                 if next == SettingsTab::Pet {
@@ -518,6 +527,7 @@ impl SettingsHost {
         let tab = self.lock().tab;
         match tab {
             SettingsTab::General => self.draw_general_page(ui),
+            SettingsTab::Performance => self.draw_performance_page(ui),
             SettingsTab::Pet => self.draw_pet_page(ui),
             SettingsTab::Hud => self.draw_hud_page(ui),
             SettingsTab::About => self.draw_about_page(ui),
@@ -705,6 +715,8 @@ impl SettingsHost {
                                 pet.author,
                                 &author_l,
                                 &size_label,
+                                Some(pet.version),
+                                Some(pet.engine),
                                 &selected_badge,
                                 selected,
                                 tex,
@@ -747,6 +759,8 @@ impl SettingsHost {
                         pet.author,
                         &author_l,
                         &size_label,
+                        Some(pet.version),
+                        Some(pet.engine),
                         &selected_badge,
                         selected,
                         tex,
@@ -1042,6 +1056,8 @@ impl SettingsHost {
                                 plugin.id,
                                 &author_l,
                                 plugin.author,
+                                Some(plugin.version),
+                                Some(plugin.engine),
                                 None,
                                 plugin.homepage,
                                 &homepage_l,
@@ -1293,6 +1309,135 @@ impl SettingsHost {
 
         ui.add_space(12.0);
 
+        /* PERFORMANCE_PAGE_MOVED */
+        /*
+        let (fps, animation, effects, power) = {
+            let s = self.lock();
+            (
+                s.prefs.graphics.fps_limit,
+                s.prefs.graphics.animation_quality,
+                s.prefs.graphics.effects,
+                s.prefs.graphics.power_mode,
+            )
+        };
+        let mut fps = fps;
+        let mut animation = animation;
+        let mut power = power;
+        let mut effects = effects;
+        section_card(ui, |ui| {
+            ui.label(
+                RichText::new("性能")
+                    .size(13.5)
+                    .strong()
+                    .color(tone::text()),
+            );
+            ui.add_space(8.0);
+            setting_row_divided(ui, "帧率上限", true, |ui| {
+                settings_combo(
+                    ui,
+                    "graphics_fps",
+                    SETTINGS_COMBO_W,
+                    match fps {
+                        FpsLimit::Auto => "自动",
+                        FpsLimit::Fps30 => "30",
+                        FpsLimit::Fps60 => "60",
+                        FpsLimit::Fps120 => "120",
+                    },
+                    match fps {
+                        FpsLimit::Auto => 0,
+                        FpsLimit::Fps30 => 1,
+                        FpsLimit::Fps60 => 2,
+                        FpsLimit::Fps120 => 3,
+                    },
+                    4,
+                    |ui| {
+                        for (v, t) in [
+                            (FpsLimit::Auto, "自动"),
+                            (FpsLimit::Fps30, "30"),
+                            (FpsLimit::Fps60, "60"),
+                            (FpsLimit::Fps120, "120"),
+                        ] {
+                            let current = match fps { FpsLimit::Auto=>"auto",FpsLimit::Fps30=>"30",FpsLimit::Fps60=>"60",FpsLimit::Fps120=>"120" };
+                            let next = match v { FpsLimit::Auto=>"auto",FpsLimit::Fps30=>"30",FpsLimit::Fps60=>"60",FpsLimit::Fps120=>"120" };
+                            graphics_combo_option(ui, &mut fps, v, current, next, t);
+                        }
+                    },
+                );
+            });
+            setting_row_divided(ui, "动画质量", true, |ui| {
+                settings_combo(
+                    ui,
+                    "graphics_animation",
+                    SETTINGS_COMBO_W,
+                    match animation {
+                        AnimationQuality::Low => "低",
+                        AnimationQuality::Standard => "标准",
+                        AnimationQuality::High => "高",
+                    },
+                    match animation {
+                        AnimationQuality::Low => 0,
+                        AnimationQuality::Standard => 1,
+                        AnimationQuality::High => 2,
+                    },
+                    3,
+                    |ui| {
+                        for (v, t) in [
+                            (AnimationQuality::Low, "低"),
+                            (AnimationQuality::Standard, "标准"),
+                            (AnimationQuality::High, "高"),
+                        ] {
+                            let current = match animation { AnimationQuality::Low=>"low",AnimationQuality::Standard=>"standard",AnimationQuality::High=>"high" };
+                            let next = match v { AnimationQuality::Low=>"low",AnimationQuality::Standard=>"standard",AnimationQuality::High=>"high" };
+                            graphics_combo_option(ui, &mut animation, v, current, next, t);
+                        }
+                    },
+                );
+            });
+            setting_row_divided(ui, "气泡与阴影", true, |ui| {
+                toggle_switch(ui, &mut effects);
+            });
+            setting_row_divided(ui, "性能模式", false, |ui| {
+                settings_combo(
+                    ui,
+                    "graphics_power",
+                    SETTINGS_COMBO_W,
+                    match power {
+                        PowerMode::Saving => "省电",
+                        PowerMode::Balanced => "平衡",
+                        PowerMode::Smooth => "流畅",
+                    },
+                    match power {
+                        PowerMode::Saving => 0,
+                        PowerMode::Balanced => 1,
+                        PowerMode::Smooth => 2,
+                    },
+                    3,
+                    |ui| {
+                        for (v, t) in [
+                            (PowerMode::Saving, "省电"),
+                            (PowerMode::Balanced, "平衡"),
+                            (PowerMode::Smooth, "流畅"),
+                        ] {
+                            let current = match power { PowerMode::Saving=>"saving",PowerMode::Balanced=>"balanced",PowerMode::Smooth=>"smooth" };
+                            let next = match v { PowerMode::Saving=>"saving",PowerMode::Balanced=>"balanced",PowerMode::Smooth=>"smooth" };
+                            graphics_combo_option(ui, &mut power, v, current, next, t);
+                        }
+                    },
+                );
+            });
+        });
+
+        {
+            let mut s = self.lock();
+            s.prefs.graphics.fps_limit = fps;
+            s.prefs.graphics.animation_quality = animation;
+            s.prefs.graphics.effects = effects;
+            s.prefs.graphics.power_mode = power;
+        }
+
+        ui.add_space(12.0);
+        */
+
         section_card(ui, |ui| {
             setting_row(ui, &locale_l, |ui| {
                 let locale_text = match locale {
@@ -1448,6 +1593,167 @@ impl SettingsHost {
             crate::fonts::configure_typography(ui.ctx(), &resolved_id, font_size);
         }
     }
+
+    fn draw_performance_page(&self, ui: &mut egui::Ui) {
+        let (mut fps, mut animation, mut power, mut effects) = {
+            let s = self.lock();
+            (
+                s.prefs.graphics.fps_limit,
+                s.prefs.graphics.animation_quality,
+                s.prefs.graphics.power_mode,
+                s.prefs.graphics.effects,
+            )
+        };
+        page_header(ui, "性能", "调整帧率、动画和特效偏好。");
+        ui.add_space(16.0);
+        section_card(ui, |ui| {
+            setting_row_divided(ui, "帧率上限", true, |ui| {
+                settings_combo(
+                    ui,
+                    "performance_fps",
+                    SETTINGS_COMBO_W,
+                    match fps {
+                        FpsLimit::Auto => "自动",
+                        FpsLimit::Fps30 => "30",
+                        FpsLimit::Fps60 => "60",
+                        FpsLimit::Fps120 => "120",
+                    },
+                    match fps {
+                        FpsLimit::Auto => 0,
+                        FpsLimit::Fps30 => 1,
+                        FpsLimit::Fps60 => 2,
+                        FpsLimit::Fps120 => 3,
+                    },
+                    4,
+                    |ui| {
+                        for (v, t) in [
+                            (FpsLimit::Auto, "自动"),
+                            (FpsLimit::Fps30, "30"),
+                            (FpsLimit::Fps60, "60"),
+                            (FpsLimit::Fps120, "120"),
+                        ] {
+                            let current = match fps {
+                                FpsLimit::Auto => "auto",
+                                FpsLimit::Fps30 => "30",
+                                FpsLimit::Fps60 => "60",
+                                FpsLimit::Fps120 => "120",
+                            };
+                            graphics_combo_option(
+                                ui,
+                                &mut fps,
+                                v,
+                                current,
+                                match v {
+                                    FpsLimit::Auto => "auto",
+                                    FpsLimit::Fps30 => "30",
+                                    FpsLimit::Fps60 => "60",
+                                    FpsLimit::Fps120 => "120",
+                                },
+                                t,
+                            );
+                        }
+                    },
+                )
+            });
+            setting_row_divided(ui, "动画质量", true, |ui| {
+                settings_combo(
+                    ui,
+                    "performance_animation",
+                    SETTINGS_COMBO_W,
+                    match animation {
+                        AnimationQuality::Low => "低",
+                        AnimationQuality::Standard => "标准",
+                        AnimationQuality::High => "高",
+                    },
+                    match animation {
+                        AnimationQuality::Low => 0,
+                        AnimationQuality::Standard => 1,
+                        AnimationQuality::High => 2,
+                    },
+                    3,
+                    |ui| {
+                        for (v, t) in [
+                            (AnimationQuality::Low, "低"),
+                            (AnimationQuality::Standard, "标准"),
+                            (AnimationQuality::High, "高"),
+                        ] {
+                            let current = match animation {
+                                AnimationQuality::Low => "low",
+                                AnimationQuality::Standard => "standard",
+                                AnimationQuality::High => "high",
+                            };
+                            graphics_combo_option(
+                                ui,
+                                &mut animation,
+                                v,
+                                current,
+                                match v {
+                                    AnimationQuality::Low => "low",
+                                    AnimationQuality::Standard => "standard",
+                                    AnimationQuality::High => "high",
+                                },
+                                t,
+                            );
+                        }
+                    },
+                )
+            });
+            setting_row_divided(ui, "性能模式", true, |ui| {
+                settings_combo(
+                    ui,
+                    "performance_power",
+                    SETTINGS_COMBO_W,
+                    match power {
+                        PowerMode::Saving => "省电",
+                        PowerMode::Balanced => "平衡",
+                        PowerMode::Smooth => "流畅",
+                    },
+                    match power {
+                        PowerMode::Saving => 0,
+                        PowerMode::Balanced => 1,
+                        PowerMode::Smooth => 2,
+                    },
+                    3,
+                    |ui| {
+                        for (v, t) in [
+                            (PowerMode::Saving, "省电"),
+                            (PowerMode::Balanced, "平衡"),
+                            (PowerMode::Smooth, "流畅"),
+                        ] {
+                            let current = match power {
+                                PowerMode::Saving => "saving",
+                                PowerMode::Balanced => "balanced",
+                                PowerMode::Smooth => "smooth",
+                            };
+                            graphics_combo_option(
+                                ui,
+                                &mut power,
+                                v,
+                                current,
+                                match v {
+                                    PowerMode::Saving => "saving",
+                                    PowerMode::Balanced => "balanced",
+                                    PowerMode::Smooth => "smooth",
+                                },
+                                t,
+                            );
+                        }
+                    },
+                )
+            });
+        });
+        ui.add_space(12.0);
+        section_card(ui, |ui| {
+            setting_row_divided(ui, "气泡与阴影", false, |ui| {
+                toggle_switch(ui, &mut effects);
+            });
+        });
+        let mut s = self.lock();
+        s.prefs.graphics.fps_limit = fps;
+        s.prefs.graphics.animation_quality = animation;
+        s.prefs.graphics.power_mode = power;
+        s.prefs.graphics.effects = effects;
+    }
 }
 
 fn setting_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
@@ -1518,6 +1824,21 @@ fn string_combo_option(ui: &mut egui::Ui, selected: &mut String, value: &str, la
     font_combo_option(ui, &mut cur, value, label);
     if cur == value {
         *selected = value.to_string();
+    }
+}
+
+fn graphics_combo_option<T: Copy + PartialEq>(
+    ui: &mut egui::Ui,
+    selected: &mut T,
+    value: T,
+    current: &str,
+    tag: &str,
+    label: &str,
+) {
+    let mut cur = current.to_string();
+    font_combo_option(ui, &mut cur, tag, label);
+    if cur == tag {
+        *selected = value;
     }
 }
 
@@ -2629,6 +2950,8 @@ fn attach_pack_tooltip(
     id: &str,
     author_label: &str,
     author: &str,
+    version: Option<&str>,
+    engine: Option<&str>,
     extra: Option<&str>,
     homepage: Option<&str>,
     homepage_label: &str,
@@ -2659,6 +2982,20 @@ fn attach_pack_tooltip(
                 ui.add_space(6.0);
                 ui.label(RichText::new(&id).size(12.0).color(tone::text()));
                 ui.label(RichText::new(&author_line).size(11.5).color(tone::muted()));
+                if let Some(version) = version {
+                    ui.label(
+                        RichText::new(format!("版本  {version}"))
+                            .size(11.5)
+                            .color(tone::muted()),
+                    );
+                }
+                if let Some(engine) = engine {
+                    ui.label(
+                        RichText::new(format!("引擎  {engine}"))
+                            .size(11.5)
+                            .color(tone::muted()),
+                    );
+                }
                 if let Some(ex) = &extra {
                     ui.label(RichText::new(ex).size(11.5).color(tone::muted()));
                 }
@@ -3072,6 +3409,8 @@ fn pet_list_row(
     author: &str,
     author_prefix: &str,
     size_label: &str,
+    version: Option<&str>,
+    engine: Option<&str>,
     selected_badge: &str,
     selected: bool,
     preview: Option<&TextureHandle>,
@@ -3104,6 +3443,8 @@ fn pet_list_row(
         id,
         author_prefix,
         author,
+        version,
+        engine,
         Some(size_label),
         homepage,
         homepage_label,
@@ -3238,6 +3579,8 @@ fn pet_preview_card(
     author: &str,
     author_prefix: &str,
     size_label: &str,
+    version: Option<&str>,
+    engine: Option<&str>,
     selected_badge: &str,
     selected: bool,
     preview: Option<&TextureHandle>,
@@ -3252,6 +3595,8 @@ fn pet_preview_card(
         id,
         author_prefix,
         author,
+        version,
+        engine,
         Some(size_label),
         homepage,
         homepage_label,
