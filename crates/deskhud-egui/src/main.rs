@@ -11,6 +11,7 @@ mod pet_menu;
 mod pet_scene;
 mod platform;
 mod settings;
+mod single_instance;
 mod theme;
 
 use deskhud_ui::persist;
@@ -23,6 +24,10 @@ fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
+
+    let Some(_instance_guard) = single_instance::acquire_or_activate() else {
+        return Ok(());
+    };
 
     let prefs = persist::load().unwrap_or_else(|error| {
         tracing::warn!(%error, "prefs load failed; using defaults");

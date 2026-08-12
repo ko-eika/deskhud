@@ -13,6 +13,8 @@ type CommandWaker = Arc<dyn Fn() + Send + Sync>;
 /// 原生覆盖层可请求的产品级操作。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum OverlayControlCommand {
+    /// Wake the existing pet overlay without opening a menu.
+    ActivateExisting,
     /// 打开现有 egui 宠物菜单。
     OpenMenu,
     /// Persist the pet's snapped logical-screen position.

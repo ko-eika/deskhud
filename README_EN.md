@@ -2,7 +2,7 @@
 <h4 align="center">An extensible desktop pet engine</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.4.1-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.5.5-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -134,8 +134,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud
 
 # 4. Tag, push, and attach binaries on a GitHub Release
-git tag -a v0.4.1 -m "DeskHud 0.4.1"
-git push origin v0.4.1
+git tag -a v0.5.5 -m "DeskHud 0.5.5"
+git push origin v0.5.5
 ```
 
 CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs cross-platform `check` / tests only; it does **not** publish installers yet.

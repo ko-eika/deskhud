@@ -10,6 +10,23 @@ use windows_sys::Win32::Graphics::Gdi::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
+pub fn primary_monitor_geometry() -> ((i32, i32, i32, i32), (i32, i32, i32, i32)) {
+    unsafe {
+        let monitor = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTONEAREST);
+        let mut info: MONITORINFO = std::mem::zeroed();
+        info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if !monitor.is_null() && GetMonitorInfoW(monitor, &mut info) != 0 {
+            let m = info.rcMonitor;
+            let w = info.rcWork;
+            return (
+                (m.left, m.top, m.right - m.left, m.bottom - m.top),
+                (w.left, w.top, w.right - w.left, w.bottom - w.top),
+            );
+        }
+    }
+    ((0, 0, 1, 1), (0, 0, 1, 1))
+}
+
 pub fn cursor_screen_px() -> Option<(i32, i32)> {
     unsafe {
         let mut point = POINT { x: 0, y: 0 };

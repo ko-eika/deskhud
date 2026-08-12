@@ -25,14 +25,15 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_ESCAP
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_VREDRAW, CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow,
     DispatchMessageW, GetMessageW, GetSystemMetrics, HC_ACTION, HTTRANSPARENT, HWND_NOTOPMOST,
-    HWND_TOPMOST, IDC_ARROW, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, LoadCursorW, MSG, MSLLHOOKSTRUCT,
-    PostMessageW, PostQuitMessage, RegisterClassW, SM_CXSCREEN, SM_CYSCREEN, SW_HIDE,
-    SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
-    SetTimer, SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx,
-    WH_KEYBOARD_LL, WH_MOUSE_LL, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_KEYDOWN, WM_KEYUP,
-    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEWHEEL, WM_NCHITTEST,
-    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WNDCLASSW,
-    WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
+    HWND_TOPMOST, IDC_ARROW, IDC_SIZENWSE, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, LoadCursorW, MSG,
+    MSLLHOOKSTRUCT, PostMessageW, PostQuitMessage, RegisterClassW, SM_CXSCREEN, SM_CYSCREEN,
+    SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SWP_SHOWWINDOW, SetCursor, SetTimer, SetWindowPos, SetWindowsHookExW, ShowWindow,
+    TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_DESTROY,
+    WM_DISPLAYCHANGE, WM_DPICHANGED, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCHITTEST, WM_RBUTTONDOWN,
+    WM_RBUTTONUP, WM_SETCURSOR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WNDCLASSW, WS_EX_TOOLWINDOW,
+    WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
 };
 
 use crate::overlay_control::{OverlayControlBus, OverlayControlCommand};
@@ -40,6 +41,24 @@ use crate::platform::{GpuCompositor, is_device_lost};
 
 const TIMER_ID: usize = 1;
 const WM_SYNC_TOPMOST: u32 = 0x8000 + 17;
+const WM_ACTIVATE_EXISTING: u32 = 0x8000 + 1;
+const WM_OPEN_LAYOUT_EDITOR: u32 = 0x8000 + 2;
+const LAYOUT_CLASS: &[u16] = &[
+    b'D' as u16,
+    b'e' as u16,
+    b's' as u16,
+    b'k' as u16,
+    b'H' as u16,
+    b'u' as u16,
+    b'd' as u16,
+    b'L' as u16,
+    b'a' as u16,
+    b'y' as u16,
+    b'o' as u16,
+    b'u' as u16,
+    b't' as u16,
+    b'\0' as u16,
+];
 // DwmFlush 会把实际提交节奏限制在桌面合成器刷新率；短计时器仅用于尽快开始下一帧。
 const TIMER_INTERVAL_MS: u32 = 1;
 const FRAME_STATS_WINDOW_SECS: f32 = 5.0;
@@ -74,6 +93,26 @@ const CLASS_NAME: &[u16] = &[
 thread_local! {
     static RENDERER: RefCell<Option<GpuOverlayRenderer>> = const { RefCell::new(None) };
     static CONTROLS: RefCell<Option<OverlayControlBus>> = const { RefCell::new(None) };
+    static LAYOUT_COMPOSITOR: RefCell<Option<GpuCompositor>> = const { RefCell::new(None) };
+    static LAYOUT_SELECTED: RefCell<Option<usize>> = const { RefCell::new(None) };
+    static LAYOUT_PREFS: RefCell<Option<UiPreferences>> = const { RefCell::new(None) };
+    static LAYOUT_DRAG: RefCell<Option<LayoutDrag>> = const { RefCell::new(None) };
+    static LAYOUT_RESIZING: RefCell<bool> = const { RefCell::new(false) };
+}
+
+struct LayoutDrag {
+    index: usize,
+    offset_x: f32,
+    offset_y: f32,
+    resize: Option<ResizeCorner>,
+    start_layout: deskhud_ui::hud::HudSlotLayout,
+    start_w: f32,
+    start_h: f32,
+}
+
+#[derive(Clone, Copy)]
+enum ResizeCorner {
+    BottomRight,
 }
 
 static WINDOW_LEFT: AtomicI32 = AtomicI32::new(INITIAL_LEFT);
@@ -747,6 +786,594 @@ pub fn request_prefs_reload() {
     RELOAD_PREFS.store(true, Ordering::Release);
 }
 
+/// Open the native Windows DirectComposition layout editor.
+pub fn open_layout_editor() {
+    let hwnd = OVERLAY_HWND.load(Ordering::Acquire) as HWND;
+    if !hwnd.is_null() {
+        unsafe {
+            let _ = PostMessageW(hwnd, WM_OPEN_LAYOUT_EDITOR, 0, 0);
+        }
+    }
+}
+
+fn open_layout_editor_window() {
+    std::thread::Builder::new()
+        .name("deskhud-layout-overlay".into())
+        .spawn(|| unsafe {
+            let instance = GetModuleHandleW(std::ptr::null());
+            let class = WNDCLASSW {
+                lpfnWndProc: Some(layout_window_proc),
+                hInstance: instance,
+                lpszClassName: LAYOUT_CLASS.as_ptr(),
+                hCursor: LoadCursorW(std::ptr::null_mut(), IDC_ARROW),
+                ..std::mem::zeroed()
+            };
+            let _ = RegisterClassW(&class);
+            let (monitor, work) = crate::platform::primary_monitor_geometry();
+            WORK_WIDTH.store(work.2.max(1), Ordering::Relaxed);
+            WORK_HEIGHT.store(work.3.max(1), Ordering::Relaxed);
+            WORK_LEFT.store(work.0 - monitor.0, Ordering::Relaxed);
+            WORK_TOP.store(work.1 - monitor.1, Ordering::Relaxed);
+            let hwnd = CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP.0,
+                LAYOUT_CLASS.as_ptr(),
+                LAYOUT_CLASS.as_ptr(),
+                WS_POPUP | WS_VISIBLE,
+                monitor.0,
+                monitor.1,
+                monitor.2,
+                monitor.3,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                instance,
+                std::ptr::null(),
+            );
+            if hwnd.is_null() {
+                return;
+            }
+            apply_topmost(true, hwnd, std::ptr::null_mut());
+            if let Ok(mut compositor) = GpuCompositor::create(hwnd as isize, monitor.2, monitor.3) {
+                let prefs = deskhud_ui::persist::load().unwrap_or_default();
+                let registry = deskhud_runtime::bootstrap_registry().registry;
+                let scene = layout_editor_scene(
+                    monitor.2 as f32,
+                    monitor.3 as f32,
+                    &registry,
+                    &prefs,
+                    None,
+                );
+                let _ = compositor.render(&scene);
+                LAYOUT_COMPOSITOR.with(|slot| *slot.borrow_mut() = Some(compositor));
+                LAYOUT_PREFS.with(|slot| *slot.borrow_mut() = Some(prefs));
+            }
+            let mut message: MSG = std::mem::zeroed();
+            while GetMessageW(&mut message, std::ptr::null_mut(), 0, 0) > 0 {
+                let _ = TranslateMessage(&message);
+                let _ = DispatchMessageW(&message);
+            }
+            LAYOUT_COMPOSITOR.with(|slot| slot.borrow_mut().take());
+        })
+        .ok();
+}
+
+fn layout_editor_scene(
+    _width: f32,
+    _height: f32,
+    registry: &EngineRegistry,
+    prefs: &deskhud_ui::UiPreferences,
+    selected: Option<usize>,
+) -> OverlayScene {
+    let mut visuals = Vec::new();
+    let color = deskhud_engine::OverlayColor {
+        red: 50,
+        green: 120,
+        blue: 230,
+        alpha: 230,
+    };
+    let safe_x = WORK_LEFT.load(Ordering::Relaxed) as f32;
+    let safe_y = WORK_TOP.load(Ordering::Relaxed) as f32;
+    let safe_w = WORK_WIDTH.load(Ordering::Relaxed) as f32;
+    let safe_h = WORK_HEIGHT.load(Ordering::Relaxed) as f32;
+    let inset = 2.0;
+    for x in (safe_x as i32..(safe_x + safe_w - inset) as i32).step_by(12) {
+        visuals.push(deskhud_engine::OverlayVisual::RoundedRect(
+            deskhud_engine::OverlayRoundedRect {
+                id: format!("layout.top.{x}"),
+                rect: deskhud_engine::OverlayRect {
+                    origin: deskhud_engine::OverlayPoint {
+                        x: x as f32,
+                        y: safe_y + inset,
+                    },
+                    width: 6.0,
+                    height: 2.0,
+                },
+                corner_radius: 1.0,
+                color,
+            },
+        ));
+        visuals.push(deskhud_engine::OverlayVisual::RoundedRect(
+            deskhud_engine::OverlayRoundedRect {
+                id: format!("layout.bottom.{x}"),
+                rect: deskhud_engine::OverlayRect {
+                    origin: deskhud_engine::OverlayPoint {
+                        x: x as f32,
+                        y: safe_y + safe_h - inset - 2.0,
+                    },
+                    width: 6.0,
+                    height: 2.0,
+                },
+                corner_radius: 1.0,
+                color,
+            },
+        ));
+    }
+    for y in (safe_y as i32..(safe_y + safe_h - inset) as i32).step_by(12) {
+        visuals.push(deskhud_engine::OverlayVisual::RoundedRect(
+            deskhud_engine::OverlayRoundedRect {
+                id: format!("layout.left.{y}"),
+                rect: deskhud_engine::OverlayRect {
+                    origin: deskhud_engine::OverlayPoint {
+                        x: safe_x + inset,
+                        y: y as f32,
+                    },
+                    width: 2.0,
+                    height: 6.0,
+                },
+                corner_radius: 1.0,
+                color,
+            },
+        ));
+        visuals.push(deskhud_engine::OverlayVisual::RoundedRect(
+            deskhud_engine::OverlayRoundedRect {
+                id: format!("layout.right.{y}"),
+                rect: deskhud_engine::OverlayRect {
+                    origin: deskhud_engine::OverlayPoint {
+                        x: safe_x + safe_w - inset - 2.0,
+                        y: y as f32,
+                    },
+                    width: 2.0,
+                    height: 6.0,
+                },
+                corner_radius: 1.0,
+                color,
+            },
+        ));
+    }
+    let mut hud_index = 0usize;
+    for (_item_index, (plugin_id, contribution)) in
+        registry.all_hud_contributions().into_iter().enumerate()
+    {
+        if !prefs
+            .hud
+            .is_active(plugin_id, contribution.id, contribution.default_enabled)
+        {
+            continue;
+        }
+        let layout = prefs.hud.slot_layout(plugin_id, contribution.id, hud_index);
+        let frame = registry.hud_frame(plugin_id, contribution.id, 0.0);
+        let origin = deskhud_engine::OverlayPoint {
+            x: safe_x + layout.x * safe_w,
+            y: safe_y + layout.y * safe_h,
+        };
+        let scale = layout.scale;
+        let mut panel = deskhud_engine::OverlayRect {
+            origin,
+            width: 180.0 * scale,
+            height: 48.0 * scale,
+        };
+        if let Some(deskhud_engine::HudVisual::Panel { width, height, .. }) = frame.visuals.first()
+        {
+            panel.width = *width * scale;
+            panel.height = *height * scale;
+        }
+        for (visual_index, visual) in frame.visuals.into_iter().enumerate() {
+            match visual {
+                deskhud_engine::HudVisual::Panel {
+                    width: visual_width,
+                    height: visual_height,
+                    radius,
+                    color: rgba,
+                } => visuals.push(deskhud_engine::OverlayVisual::RoundedRect(
+                    deskhud_engine::OverlayRoundedRect {
+                        id: format!("hud.{plugin_id}.{}.panel.{visual_index}", contribution.id),
+                        rect: deskhud_engine::OverlayRect {
+                            origin,
+                            width: visual_width * scale,
+                            height: visual_height * scale,
+                        },
+                        corner_radius: radius * scale,
+                        color: deskhud_engine::OverlayColor {
+                            red: rgba[0],
+                            green: rgba[1],
+                            blue: rgba[2],
+                            alpha: rgba[3],
+                        },
+                    },
+                )),
+                deskhud_engine::HudVisual::Text {
+                    text,
+                    font_size,
+                    color: rgba,
+                } => visuals.push(deskhud_engine::OverlayVisual::Text(
+                    deskhud_engine::OverlayText {
+                        id: format!("hud.{plugin_id}.{}.text.{visual_index}", contribution.id),
+                        rect: panel,
+                        text,
+                        font_size: font_size * scale,
+                        color: deskhud_engine::OverlayColor {
+                            red: rgba[0],
+                            green: rgba[1],
+                            blue: rgba[2],
+                            alpha: rgba[3],
+                        },
+                    },
+                )),
+            }
+        }
+        if selected == Some(hud_index) {
+            let border = deskhud_engine::OverlayColor {
+                red: 0,
+                green: 220,
+                blue: 255,
+                alpha: 255,
+            };
+            let x = origin.x - 3.0;
+            let y = origin.y - 3.0;
+            let w = panel.width + 6.0;
+            let h = panel.height + 6.0;
+            for (side, horizontal, length) in [
+                ("top", true, w),
+                ("bottom", true, w),
+                ("left", false, h),
+                ("right", false, h),
+            ] {
+                let count = (length / 12.0).ceil() as i32;
+                for n in 0..count {
+                    let (sx, sy) = match side {
+                        "top" => (x + n as f32 * 12.0, y),
+                        "bottom" => (x + n as f32 * 12.0, y + h - 3.0),
+                        "left" => (x, y + n as f32 * 12.0),
+                        _ => (x + w - 3.0, y + n as f32 * 12.0),
+                    };
+                    let remaining = (length - n as f32 * 12.0).max(0.0);
+                    let rect = if horizontal {
+                        deskhud_engine::OverlayRect {
+                            origin: deskhud_engine::OverlayPoint { x: sx, y: sy },
+                            width: 12.0_f32.min(remaining),
+                            height: 4.0,
+                        }
+                    } else {
+                        deskhud_engine::OverlayRect {
+                            origin: deskhud_engine::OverlayPoint { x: sx, y: sy },
+                            width: 4.0,
+                            height: 12.0_f32.min(remaining),
+                        }
+                    };
+                    visuals.push(deskhud_engine::OverlayVisual::RoundedRect(
+                        deskhud_engine::OverlayRoundedRect {
+                            id: format!("hud.selected.{hud_index}.{side}.{n}"),
+                            rect,
+                            corner_radius: 1.0,
+                            color: border,
+                        },
+                    ));
+                }
+            }
+            // A right-corner triangle marks the only resize handle. Its right angle is
+            // attached to the HUD's bottom-right corner and the diagonal faces inward.
+            for (n, width) in [(0, 16.0), (1, 12.0), (2, 8.0), (3, 4.0)] {
+                visuals.push(deskhud_engine::OverlayVisual::RoundedRect(
+                    deskhud_engine::OverlayRoundedRect {
+                        id: format!("hud.selected.{hud_index}.resize-triangle.{n}"),
+                        rect: deskhud_engine::OverlayRect {
+                            origin: deskhud_engine::OverlayPoint {
+                                x: x + w - width,
+                                y: y + h - 4.0 - n as f32 * 4.0,
+                            },
+                            width,
+                            height: 3.0,
+                        },
+                        corner_radius: 1.0,
+                        color: deskhud_engine::OverlayColor {
+                            red: 70,
+                            green: 150,
+                            blue: 255,
+                            alpha: 220,
+                        },
+                    },
+                ));
+            }
+            /* for (id, rect) in [
+                (
+                    "top",
+                    deskhud_engine::OverlayRect {
+                        origin: deskhud_engine::OverlayPoint { x, y },
+                        width: w,
+                        height: 3.0,
+                    },
+                ),
+                (
+                    "bottom",
+                    deskhud_engine::OverlayRect {
+                        origin: deskhud_engine::OverlayPoint { x, y: y + h - 3.0 },
+                        width: w,
+                        height: 3.0,
+                    },
+                ),
+                (
+                    "left",
+                    deskhud_engine::OverlayRect {
+                        origin: deskhud_engine::OverlayPoint { x, y },
+                        width: 3.0,
+                        height: h,
+                    },
+                ),
+                (
+                    "right",
+                    deskhud_engine::OverlayRect {
+                        origin: deskhud_engine::OverlayPoint { x: x + w - 3.0, y },
+                        width: 3.0,
+                        height: h,
+                    },
+                ),
+            ] {
+                visuals.push(deskhud_engine::OverlayVisual::RoundedRect(
+                    deskhud_engine::OverlayRoundedRect {
+                        id: format!("hud.selected.{hud_index}.{id}"),
+                        rect,
+                        corner_radius: 1.0,
+                        color: border,
+                    },
+                ));
+            } */
+        }
+        hud_index += 1;
+    }
+    OverlayScene {
+        target: OverlayDisplayTarget::Display("primary".into()),
+        visuals,
+        hit_regions: Vec::new(),
+    }
+}
+
+unsafe extern "system" fn layout_window_proc(
+    hwnd: HWND,
+    message: u32,
+    _wparam: WPARAM,
+    _lparam: LPARAM,
+) -> LRESULT {
+    unsafe {
+        match message {
+            WM_LBUTTONDOWN => {
+                let x = signed_low_word(_lparam) as f32;
+                let y = signed_high_word(_lparam) as f32;
+                let registry = deskhud_runtime::bootstrap_registry().registry;
+                let prefs = LAYOUT_PREFS.with(|slot| slot.borrow().clone().unwrap_or_default());
+                let mut index = 0usize;
+                let mut selected = None;
+                let mut hit = None;
+                for (plugin_id, contribution) in registry.all_hud_contributions() {
+                    if !prefs.hud.is_active(
+                        plugin_id,
+                        contribution.id,
+                        contribution.default_enabled,
+                    ) {
+                        continue;
+                    }
+                    let layout = prefs.hud.slot_layout(plugin_id, contribution.id, index);
+                    let left = WORK_LEFT.load(Ordering::Relaxed) as f32
+                        + layout.x * WORK_WIDTH.load(Ordering::Relaxed) as f32;
+                    let top = WORK_TOP.load(Ordering::Relaxed) as f32
+                        + layout.y * WORK_HEIGHT.load(Ordering::Relaxed) as f32;
+                    let frame = registry.hud_frame(plugin_id, contribution.id, 0.0);
+                    let (base_w, base_h) = match frame.visuals.first() {
+                        Some(deskhud_engine::HudVisual::Panel { width, height, .. }) => {
+                            (*width, *height)
+                        }
+                        _ => (180.0, 48.0),
+                    };
+                    let item_w = base_w * layout.scale;
+                    let item_h = base_h * layout.scale;
+                    let hit_left = left - 6.0;
+                    let hit_top = top - 6.0;
+                    let hit_right = left + item_w + 6.0;
+                    let hit_bottom = top + item_h + 6.0;
+                    if x >= hit_left && x <= hit_right && y >= hit_top && y <= hit_bottom {
+                        selected = Some(index);
+                        hit = Some((
+                            plugin_id.to_string(),
+                            contribution.id.to_string(),
+                            layout,
+                            item_w,
+                            item_h,
+                        ));
+                        break;
+                    }
+                    index += 1;
+                }
+                LAYOUT_SELECTED.with(|slot| *slot.borrow_mut() = selected);
+                if let Some((plugin, contribution, layout, item_w, item_h)) = hit {
+                    let corner = 18.0;
+                    let left = WORK_LEFT.load(Ordering::Relaxed) as f32
+                        + layout.x * WORK_WIDTH.load(Ordering::Relaxed) as f32;
+                    let top = WORK_TOP.load(Ordering::Relaxed) as f32
+                        + layout.y * WORK_HEIGHT.load(Ordering::Relaxed) as f32;
+                    let frame_right = left + item_w + 3.0;
+                    let frame_bottom = top + item_h + 3.0;
+                    let resize =
+                        if (x - frame_right).abs() < corner && (y - frame_bottom).abs() < corner {
+                            Some(ResizeCorner::BottomRight)
+                        } else {
+                            None
+                        };
+                    LAYOUT_DRAG.with(|slot| {
+                        *slot.borrow_mut() = selected.map(|index| LayoutDrag {
+                            index,
+                            offset_x: x - left,
+                            offset_y: y - top,
+                            resize,
+                            start_layout: layout,
+                            start_w: item_w,
+                            start_h: item_h,
+                        })
+                    });
+                    LAYOUT_RESIZING.with(|slot| *slot.borrow_mut() = resize.is_some());
+                    let _ = (plugin, contribution);
+                }
+                if let Some(selected) = selected {
+                    let scene = layout_editor_scene(
+                        WORK_WIDTH.load(Ordering::Relaxed) as f32,
+                        WORK_HEIGHT.load(Ordering::Relaxed) as f32,
+                        &registry,
+                        &prefs,
+                        Some(selected),
+                    );
+                    LAYOUT_COMPOSITOR.with(|slot| {
+                        if let Some(compositor) = slot.borrow_mut().as_mut() {
+                            let _ = compositor.render(&scene);
+                        }
+                    });
+                }
+                0
+            }
+            WM_MOUSEMOVE => {
+                let x = signed_low_word(_lparam) as f32;
+                let y = signed_high_word(_lparam) as f32;
+                let drag = LAYOUT_DRAG.with(|slot| {
+                    slot.borrow().as_ref().map(|d| {
+                        (
+                            d.index,
+                            d.offset_x,
+                            d.offset_y,
+                            d.resize,
+                            d.start_layout.clone(),
+                            d.start_w,
+                            d.start_h,
+                        )
+                    })
+                });
+                if let Some((index, offset_x, offset_y, resize, start_layout, start_w, start_h)) =
+                    drag
+                {
+                    let registry = deskhud_runtime::bootstrap_registry().registry;
+                    let mut prefs =
+                        LAYOUT_PREFS.with(|slot| slot.borrow().clone().unwrap_or_default());
+                    if let Some((plugin, contribution)) = registry
+                        .all_hud_contributions()
+                        .into_iter()
+                        .filter(|(p, c)| prefs.hud.is_active(p, c.id, c.default_enabled))
+                        .nth(index)
+                    {
+                        let mut layout = start_layout.clone();
+                        if resize.is_some() {
+                            let left = WORK_LEFT.load(Ordering::Relaxed) as f32
+                                + layout.x * WORK_WIDTH.load(Ordering::Relaxed) as f32;
+                            let top = WORK_TOP.load(Ordering::Relaxed) as f32
+                                + layout.y * WORK_HEIGHT.load(Ordering::Relaxed) as f32;
+                            let factor = ((x - left) / start_w).max((y - top) / start_h);
+                            layout.scale = (start_layout.scale * factor).clamp(0.5, 3.0);
+                        } else {
+                            layout.x = ((x - offset_x - WORK_LEFT.load(Ordering::Relaxed) as f32)
+                                / WORK_WIDTH.load(Ordering::Relaxed) as f32)
+                                .clamp(0.0, 1.0);
+                            layout.y = ((y - offset_y - WORK_TOP.load(Ordering::Relaxed) as f32)
+                                / WORK_HEIGHT.load(Ordering::Relaxed) as f32)
+                                .clamp(0.0, 1.0);
+                        }
+                        prefs.hud.set_slot_layout(plugin, contribution.id, layout);
+                        LAYOUT_PREFS.with(|slot| *slot.borrow_mut() = Some(prefs.clone()));
+                        let scene = layout_editor_scene(
+                            WORK_WIDTH.load(Ordering::Relaxed) as f32,
+                            WORK_HEIGHT.load(Ordering::Relaxed) as f32,
+                            &registry,
+                            &prefs,
+                            Some(index),
+                        );
+                        LAYOUT_COMPOSITOR.with(|slot| {
+                            if let Some(c) = slot.borrow_mut().as_mut() {
+                                let _ = c.render(&scene);
+                            }
+                        });
+                    }
+                }
+                0
+            }
+            WM_LBUTTONUP => {
+                LAYOUT_DRAG.with(|slot| *slot.borrow_mut() = None);
+                LAYOUT_RESIZING.with(|slot| *slot.borrow_mut() = false);
+                let prefs = LAYOUT_PREFS.with(|slot| slot.borrow().clone());
+                if let Some(prefs) = prefs {
+                    let _ = deskhud_ui::persist::save(&prefs);
+                }
+                0
+            }
+            WM_SETCURSOR => {
+                if LAYOUT_RESIZING.with(|slot| *slot.borrow()) {
+                    let cursor = LoadCursorW(std::ptr::null_mut(), IDC_SIZENWSE);
+                    if !cursor.is_null() {
+                        SetCursor(cursor);
+                        return 1;
+                    }
+                }
+                let selected = LAYOUT_SELECTED.with(|slot| *slot.borrow());
+                if let Some(index) = selected {
+                    let mut point = POINT::default();
+                    if GetCursorPos(&mut point).is_ok() {
+                        let (_, work) = crate::platform::primary_monitor_geometry();
+                        let prefs =
+                            LAYOUT_PREFS.with(|slot| slot.borrow().clone().unwrap_or_default());
+                        let registry = deskhud_runtime::bootstrap_registry().registry;
+                        if let Some((plugin, contribution)) = registry
+                            .all_hud_contributions()
+                            .into_iter()
+                            .filter(|(p, c)| prefs.hud.is_active(p, c.id, c.default_enabled))
+                            .nth(index)
+                        {
+                            let layout = prefs.hud.slot_layout(plugin, contribution.id, index);
+                            let frame = registry.hud_frame(plugin, contribution.id, 0.0);
+                            let (base_w, base_h) = match frame.visuals.first() {
+                                Some(deskhud_engine::HudVisual::Panel {
+                                    width, height, ..
+                                }) => (*width, *height),
+                                _ => (180.0, 48.0),
+                            };
+                            let left = work.0 as f32 + layout.x * work.2 as f32;
+                            let top = work.1 as f32 + layout.y * work.3 as f32;
+                            let right = left + base_w * layout.scale;
+                            let bottom = top + base_h * layout.scale;
+                            let tolerance = 16.0;
+                            let near_right = (point.x as f32 - (right + 3.0)).abs() <= tolerance;
+                            let near_bottom = (point.y as f32 - (bottom + 3.0)).abs() <= tolerance;
+                            let cursor_id = if near_right && near_bottom {
+                                Some(IDC_SIZENWSE)
+                            } else {
+                                None
+                            };
+                            if let Some(cursor_id) = cursor_id {
+                                let cursor = LoadCursorW(std::ptr::null_mut(), cursor_id);
+                                if !cursor.is_null() {
+                                    SetCursor(cursor);
+                                    return 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                DefWindowProcW(hwnd, message, _wparam, _lparam)
+            }
+            WM_KEYDOWN if _wparam as u32 == VK_ESCAPE as u32 => {
+                let _ = DestroyWindow(hwnd);
+                0
+            }
+            WM_DESTROY => {
+                PostQuitMessage(0);
+                0
+            }
+            _ => DefWindowProcW(hwnd, message, _wparam, _lparam),
+        }
+    }
+}
+
 /// Publish the UI's resolved color scheme for platform-independent pet rendering.
 pub fn set_pet_theme(theme: PetTheme) {
     let value = match theme {
@@ -991,6 +1618,20 @@ unsafe extern "system" fn window_proc(
 ) -> LRESULT {
     unsafe {
         match message {
+            WM_OPEN_LAYOUT_EDITOR => {
+                open_layout_editor_window();
+                0
+            }
+            WM_ACTIVATE_EXISTING => {
+                CONTROLS.with(|slot| {
+                    if let Some(bus) = slot.borrow().as_ref() {
+                        bus.request(OverlayControlCommand::ActivateExisting);
+                    }
+                });
+                let dialogue = DIALOGUE_HWND.load(Ordering::Acquire) as HWND;
+                apply_topmost(DESIRED_TOPMOST.load(Ordering::Acquire), hwnd, dialogue);
+                0
+            }
             WM_SYNC_TOPMOST => {
                 let enabled = DESIRED_TOPMOST.load(Ordering::Acquire);
                 let dialogue = DIALOGUE_HWND.load(Ordering::Acquire) as HWND;

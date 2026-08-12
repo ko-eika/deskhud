@@ -2,7 +2,7 @@
 <h4 align="center">一个可扩展的桌宠引擎</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.5.4-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.5.5-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -136,8 +136,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud
 
 # 4. 打 tag 并推送后，在 GitHub Release 上传二进制
-git tag -a v0.5.4 -m "DeskHud 0.5.4"
-git push origin v0.5.4
+git tag -a v0.5.5 -m "DeskHud 0.5.5"
+git push origin v0.5.5
 ```
 
 当前 CI（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）只做三端 `check` / 测试，**不会**自动发布安装包。

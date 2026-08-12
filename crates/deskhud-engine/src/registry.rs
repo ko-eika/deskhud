@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::pet::{PetKind, PetKindInfo};
-use crate::plugin::{HudContribution, Plugin, PluginInfo};
+use crate::plugin::{HudContribution, HudFrame, Plugin, PluginInfo};
 
 /// 引擎运行时注册表（宠物 + HUD 插件）。
 pub struct EngineRegistry {
@@ -105,5 +105,66 @@ impl EngineRegistry {
             }
         }
         out
+    }
+
+    /// Produces frames for the contributions selected by the caller's prefs.
+    pub fn hud_frame(&self, plugin_id: &str, contribution_id: &str, elapsed_secs: f32) -> HudFrame {
+        self.plugins
+            .iter()
+            .find(|plugin| plugin.info().id == plugin_id)
+            .map(|plugin| plugin.hud_frame(contribution_id, elapsed_secs))
+            .unwrap_or_else(HudFrame::empty)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EngineRegistry;
+    use crate::{HudFrame, HudVisual, Plugin, PluginInfo};
+    use std::sync::Arc;
+
+    struct TestPlugin;
+    impl Plugin for TestPlugin {
+        fn info(&self) -> PluginInfo {
+            PluginInfo {
+                id: "hud.test.frame",
+                display_name: "test",
+                description: "test",
+                author: "test",
+                homepage: None,
+                version: "0.1.0",
+                engine: "0.5",
+                icon: None,
+            }
+        }
+        fn hud_frame(&self, id: &str, _elapsed_secs: f32) -> HudFrame {
+            if id == "clock" {
+                HudFrame {
+                    visuals: vec![HudVisual::Text {
+                        text: "ok".into(),
+                        font_size: 12.0,
+                        color: [255; 4],
+                    }],
+                }
+            } else {
+                HudFrame::empty()
+            }
+        }
+    }
+
+    #[test]
+    fn forwards_hud_frame_to_registered_plugin() {
+        let mut registry = EngineRegistry::empty();
+        registry.register_plugin(Arc::new(TestPlugin));
+        assert!(
+            !registry
+                .hud_frame("hud.test.frame", "clock", 1.0)
+                .is_empty()
+        );
+        assert!(
+            registry
+                .hud_frame("hud.test.frame", "missing", 1.0)
+                .is_empty()
+        );
     }
 }

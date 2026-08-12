@@ -14,7 +14,7 @@
 - [x] 本地扫描 `packages/`（目录 + `.deskhud`）并引导注册（清单 + 原生内置映射；WASM 后接）
 - [~] 引擎化 / 版本契约 / 内置 crate 化 / HUD 全屏布局（0.3）
 - 扩展 `PetKind`：更多 `PetEvent` / 中性 `PetFrame`
-- [x] HUD 全屏 overlay + 布局 prefs（帧数据仍待）
+- [x] HUD 全屏 overlay + 布局 prefs + Windows 主屏原生布局编辑器（帧数据仍待）
 - 扩展 `Plugin`：`HudFrame` 真实帧数据
 
 ## Phase 1b — 跨平台 MVP（与 Phase 1 并行，基础完成）
@@ -42,7 +42,8 @@
 - [x] prefs 持久化
 - 更多内置宠
 - [ ] HUD 真实帧数据与每屏原生合成
-- [ ] HUD 布局与可读性
+- [x] 主屏 HUD 布局编辑：安全区、选中边框、移动、右下角缩放、持久化
+- [ ] HUD 运行态布局与可读性打磨
 
 ## 明确后置
 

@@ -100,6 +100,7 @@ impl NativeHost {
     fn process_commands(&mut self, event_loop: &ActiveEventLoop) {
         for command in self.controls.drain() {
             match command {
+                OverlayControlCommand::ActivateExisting => {}
                 OverlayControlCommand::OpenMenu => self.show_menu(),
                 OverlayControlCommand::PetMoved { x_points, y_points } => {
                     self.prefs.pet.set_pos(x_points, y_points);
@@ -272,8 +273,9 @@ impl NativeHost {
         } else if open_settings {
             self.show_settings();
         } else if open_hud_settings {
-            self.settings.begin_hud_layout_edit();
-            self.show_settings_tab(SettingsTab::Hud);
+            #[cfg(windows)]
+            crate::gpu_overlay_probe::open_layout_editor();
+            self.hide_control_window();
         } else if !open && self.control_surface == ControlSurface::Menu {
             self.hide_control_window();
         }
@@ -299,6 +301,18 @@ impl NativeHost {
             state.discard_draft = false;
             values
         };
+        let layout_request = {
+            let mut state = self.settings.lock();
+            let request = state.hud_layout_request;
+            state.hud_layout_request = false;
+            request
+        };
+        if layout_request {
+            self.settings.lock().open = false;
+            self.hide_control_window();
+            #[cfg(windows)]
+            crate::gpu_overlay_probe::open_layout_editor();
+        }
         if apply {
             #[cfg(windows)]
             let topmost_changed = self.prefs.shell.topmost != draft.shell.topmost;
@@ -373,6 +387,7 @@ impl NativeHost {
         unsafe {
             use glow::HasContext as _;
             let Some(gl) = self.gl.as_ref() else { return };
+            let editing = self.settings.lock().hud_layout_editing;
             let color = self
                 .egui
                 .as_ref()
@@ -387,7 +402,7 @@ impl NativeHost {
                 color.r() as f32 / 255.0,
                 color.g() as f32 / 255.0,
                 color.b() as f32 / 255.0,
-                1.0,
+                if editing { 0.0 } else { 1.0 },
             );
             gl.clear(glow::COLOR_BUFFER_BIT);
         }
@@ -560,12 +575,17 @@ impl GlutinWindow {
             .prefer_hardware_accelerated(None)
             .with_depth_size(0)
             .with_stencil_size(0)
-            .with_transparency(false);
+            .with_alpha_size(8);
         let (window, config) = glutin_winit::DisplayBuilder::new()
             .with_preference(glutin_winit::ApiPreference::FallbackEgl)
             .with_window_attributes(Some(attributes.clone()))
-            .build(event_loop, template, |mut configs| {
-                configs.next().expect("no OpenGL configuration available")
+            .build(event_loop, template, |configs| {
+                use glutin::config::GlConfig as _;
+                let configs: Vec<_> = configs.collect();
+                configs
+                    .into_iter()
+                    .max_by_key(|config| (config.alpha_size(), config.num_samples()))
+                    .expect("no OpenGL configuration available")
             })
             .map_err(|error| anyhow::anyhow!("create OpenGL display: {error}"))?;
         let display = config.display();

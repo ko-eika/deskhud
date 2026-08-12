@@ -206,22 +206,251 @@ pub struct SettingsState {
     preview_textures: HashMap<String, TextureHandle>,
     /// 请求开始 HUD 布局编辑。
     pub hud_layout_begin: bool,
+    /// Request the host to open the native layout window.
+    pub hud_layout_request: bool,
     /// 请求完成并写回草稿布局。
     /// 请求取消布局编辑。
     pub hud_layout_cancel: bool,
     /// 当前是否在布局编辑（UI 显示用）。
     pub hud_layout_editing: bool,
+    pub hud_layout_selected: Option<(String, String)>,
 }
 
 impl SettingsHost {
-    pub(crate) fn begin_hud_layout_edit(&self) {
-        let mut state = self.lock();
-        state.hud_layout_begin = true;
-    }
     /// Draw the existing settings surface inside a directly hosted egui root
     /// window. Window creation/visibility is owned by the native host.
     pub(crate) fn draw_native(&self, ui: &mut egui::Ui) {
-        self.draw(ui);
+        {
+            let mut state = self.lock();
+            if state.hud_layout_begin {
+                state.hud_layout_begin = false;
+                state.hud_layout_editing = true;
+            }
+        }
+        if self.lock().hud_layout_editing {
+            self.draw_layout_editor(ui);
+        } else {
+            self.draw(ui);
+        }
+    }
+
+    fn draw_layout_editor(&self, ui: &mut egui::Ui) {
+        let (items, title, apply_label, cancel_label) = {
+            let state = self.lock();
+            (
+                state.hud_items.clone(),
+                state.prefs.t(MessageKey::MenuHudLayout).to_string(),
+                state.prefs.t(MessageKey::HudLayoutDone).to_string(),
+                state.prefs.t(MessageKey::HudLayoutCancel).to_string(),
+            )
+        };
+        let ctx = ui.ctx().clone();
+        crate::theme::apply(&ctx, self.lock().prefs.shell.ui_theme);
+        let fill = tone::bg();
+        ui.painter()
+            .rect_filled(ui.max_rect(), CornerRadius::ZERO, fill);
+        let mut apply = false;
+        let mut cancel = false;
+        egui::Area::new("hud_layout_toolbar".into())
+            .fixed_pos(egui::pos2(16.0, 12.0))
+            .show(ui.ctx(), |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(&title)
+                            .size(18.0)
+                            .strong()
+                            .color(tone::text()),
+                    );
+                    ui.add_space(16.0);
+                    ui.label(
+                        RichText::new("主屏预览：拖动条目调整位置，滚轮调整大小")
+                            .color(tone::muted()),
+                    );
+                    ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button(&cancel_label).clicked() {
+                            cancel = true;
+                        }
+                        if ui.button(&apply_label).clicked() {
+                            apply = true;
+                        }
+                    });
+                });
+            });
+        egui::CentralPanel::default()
+            .frame(Frame::NONE.fill(Color32::TRANSPARENT))
+            .show(ui, |ui| {
+                let (rect, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
+                let painter = ui.painter_at(rect);
+                // Keep the editor surface transparent; only the safe-area guide and HUD
+                // items are painted. A full-window fill would hide the desktop beneath it.
+                let dash = Stroke::new(1.5, tone::accent());
+                for x in (rect.left() as i32..rect.right() as i32).step_by(10) {
+                    painter.line_segment(
+                        [
+                            egui::pos2(x as f32, rect.top()),
+                            egui::pos2((x + 5) as f32, rect.top()),
+                        ],
+                        dash,
+                    );
+                    painter.line_segment(
+                        [
+                            egui::pos2(x as f32, rect.bottom()),
+                            egui::pos2((x + 5) as f32, rect.bottom()),
+                        ],
+                        dash,
+                    );
+                }
+                for y in (rect.top() as i32..rect.bottom() as i32).step_by(10) {
+                    painter.line_segment(
+                        [
+                            egui::pos2(rect.left(), y as f32),
+                            egui::pos2(rect.left(), (y + 5) as f32),
+                        ],
+                        dash,
+                    );
+                    painter.line_segment(
+                        [
+                            egui::pos2(rect.right(), y as f32),
+                            egui::pos2(rect.right(), (y + 5) as f32),
+                        ],
+                        dash,
+                    );
+                }
+                let mut state = self.lock();
+                for (index, (plugin_id, contribution)) in items.iter().enumerate() {
+                    if !state.prefs.hud.is_active(
+                        plugin_id,
+                        contribution.id,
+                        contribution.default_enabled,
+                    ) {
+                        continue;
+                    }
+                    let mut layout = state
+                        .prefs
+                        .hud
+                        .slot_layout(plugin_id, contribution.id, index);
+                    let center = egui::pos2(
+                        rect.left() + layout.x * rect.width(),
+                        rect.top() + layout.y * rect.height(),
+                    );
+                    let size = Vec2::new(180.0 * layout.scale, 48.0 * layout.scale);
+                    let item_rect = egui::Rect::from_center_size(center, size);
+                    let id = ui.make_persistent_id(("hud-editor", plugin_id, contribution.id));
+                    let response = ui.interact(item_rect, id, Sense::drag());
+                    if response.clicked() {
+                        state.hud_layout_selected =
+                            Some((plugin_id.to_string(), contribution.id.to_string()));
+                    }
+                    let selected = state
+                        .hud_layout_selected
+                        .as_ref()
+                        .is_some_and(|s| s.0 == *plugin_id && s.1 == contribution.id);
+                    painter.rect_filled(
+                        item_rect,
+                        CornerRadius::same(8),
+                        if selected {
+                            tone::accent_hover()
+                        } else {
+                            tone::accent_soft()
+                        },
+                    );
+                    if selected {
+                        let reset_rect = egui::Rect::from_min_size(
+                            egui::pos2(item_rect.center().x - 12.0, item_rect.top() - 34.0),
+                            Vec2::splat(24.0),
+                        );
+                        let reset_id =
+                            ui.make_persistent_id(("hud-editor-reset", plugin_id, contribution.id));
+                        let reset = ui.interact(reset_rect, reset_id, Sense::click());
+                        painter.rect_filled(reset_rect, CornerRadius::same(5), tone::accent());
+                        painter.text(
+                            reset_rect.center(),
+                            Align2::CENTER_CENTER,
+                            "↺",
+                            FontId::proportional(16.0),
+                            Color32::WHITE,
+                        );
+                        if reset.clicked() {
+                            layout.scale = 1.0;
+                            let label_scale = layout.scale;
+                            state.prefs.hud.set_slot_layout(
+                                plugin_id,
+                                contribution.id,
+                                layout.clone(),
+                            );
+                            painter.text(
+                                item_rect.center(),
+                                Align2::CENTER_CENTER,
+                                contribution.label,
+                                FontId::proportional(16.0 * label_scale),
+                                tone::text(),
+                            );
+                            continue;
+                        }
+                    }
+                    let label_scale = layout.scale;
+                    painter.text(
+                        item_rect.center(),
+                        Align2::CENTER_CENTER,
+                        contribution.label,
+                        FontId::proportional(16.0 * label_scale),
+                        tone::text(),
+                    );
+                    if response.dragged() {
+                        if let Some(pos) = response.interact_pointer_pos() {
+                            layout.x = ((pos.x - rect.left()) / rect.width()).clamp(0.0, 1.0);
+                            layout.y = ((pos.y - rect.top()) / rect.height()).clamp(0.0, 1.0);
+                            let _ = response;
+                            state.prefs.hud.set_slot_layout(
+                                plugin_id,
+                                contribution.id,
+                                layout.clone(),
+                            );
+                            ctx.request_repaint();
+                        }
+                    }
+                    if selected {
+                        for corner in [
+                            item_rect.left_top(),
+                            item_rect.right_top(),
+                            item_rect.left_bottom(),
+                            item_rect.right_bottom(),
+                        ] {
+                            let handle = egui::Rect::from_center_size(corner, Vec2::splat(14.0));
+                            let handle_id = ui.make_persistent_id((
+                                "hud-editor-handle",
+                                plugin_id,
+                                contribution.id,
+                                corner.x.to_bits(),
+                                corner.y.to_bits(),
+                            ));
+                            let handle_response = ui.interact(handle, handle_id, Sense::drag());
+                            painter.rect_filled(handle, CornerRadius::same(3), tone::accent());
+                            if handle_response.dragged() {
+                                if let Some(pos) = handle_response.interact_pointer_pos() {
+                                    let ratio = ((pos.x - item_rect.center().x).abs() / 90.0)
+                                        .clamp(0.5, 3.0);
+                                    layout.scale = ratio;
+                                    state.prefs.hud.set_slot_layout(
+                                        plugin_id,
+                                        contribution.id,
+                                        layout.clone(),
+                                    );
+                                    ctx.request_repaint();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        if apply || cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            let mut state = self.lock();
+            state.hud_layout_editing = false;
+            state.open = false;
+            state.apply_requested = apply;
+            state.discard_draft = !apply;
+            state.pending_flush = true;
+        }
     }
 
     pub fn new(prefs: UiPreferences) -> Self {
@@ -247,8 +476,10 @@ impl SettingsHost {
                 card_settle_repaint_armed: false,
                 preview_textures: HashMap::new(),
                 hud_layout_begin: false,
+                hud_layout_request: false,
                 hud_layout_cancel: false,
                 hud_layout_editing: false,
+                hud_layout_selected: None,
             })),
         }
     }
@@ -287,6 +518,7 @@ impl SettingsHost {
         s.card_observe_since = None;
         s.card_settle_repaint_armed = false;
         s.preview_textures.clear();
+        s.hud_layout_selected = None;
     }
 
     fn draw(&self, ui: &mut egui::Ui) {
@@ -935,7 +1167,7 @@ impl SettingsHost {
             } else if !items.is_empty() {
                 ui.add_enabled_ui(master_on, |ui| {
                     if hud_layout_action_button(ui, &edit_l).clicked() {
-                        self.lock().hud_layout_begin = true;
+                        self.lock().hud_layout_request = true;
                         ui.ctx().request_repaint_of(egui::ViewportId::ROOT);
                     }
                 });
