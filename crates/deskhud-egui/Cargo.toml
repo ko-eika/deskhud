@@ -34,5 +34,11 @@ windows-sys = { workspace = true }
 windows = { workspace = true }
 windows-numerics = { workspace = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = { workspace = true }
+core-foundation = { workspace = true }
+objc2-app-kit = { workspace = true }
+objc2 = { workspace = true }
+
 [build-dependencies]
 winresource = { workspace = true }

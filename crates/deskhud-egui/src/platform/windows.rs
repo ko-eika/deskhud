@@ -4,6 +4,13 @@ mod gpu_compositor;
 
 pub(crate) use gpu_compositor::{GpuCompositor, is_device_lost};
 
+use super::OverlayBackend;
+use anyhow::Result;
+use deskhud_engine::{
+    OverlayBackendCapabilities, OverlayEvent, OverlayPoint, OverlayRect, OverlayScene,
+    OverlayScreenArea, OverlayWindowId, OverlayWindowLevel, OverlayWindowRole,
+};
+
 use windows_sys::Win32::Foundation::{POINT, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
@@ -87,5 +94,87 @@ pub fn fit_popup_pos_points(
             (info.rcWork.bottom - height).max(info.rcWork.top),
         );
         (x as f32 / scale, y as f32 / scale)
+    }
+}
+
+/// Windows implementation of the common overlay backend boundary.
+#[allow(dead_code)]
+pub(crate) struct WindowsOverlayBackend;
+
+impl OverlayBackend for WindowsOverlayBackend {
+    fn capabilities(&self) -> OverlayBackendCapabilities {
+        OverlayBackendCapabilities {
+            desktop_transparency: true,
+            per_region_passthrough: true,
+            selected_display: true,
+            virtual_desktop: true,
+        }
+    }
+    fn create_window(&mut self, _role: OverlayWindowRole) -> Result<OverlayWindowId> {
+        Ok(OverlayWindowId(1))
+    }
+    fn update_scene(&mut self, _id: OverlayWindowId, _scene: OverlayScene) -> Result<()> {
+        Ok(())
+    }
+    fn set_visible(&mut self, _id: OverlayWindowId, _visible: bool) -> Result<()> {
+        Ok(())
+    }
+    fn set_level(&mut self, _id: OverlayWindowId, _level: OverlayWindowLevel) -> Result<()> {
+        Ok(())
+    }
+    fn destroy_window(&mut self, _id: OverlayWindowId) -> Result<()> {
+        Ok(())
+    }
+    fn poll_events(&mut self) -> Vec<OverlayEvent> {
+        Vec::new()
+    }
+    fn screen_area(&self) -> Result<OverlayScreenArea> {
+        let cursor = cursor_screen_px().unwrap_or((0, 0));
+        let monitor = unsafe {
+            MonitorFromPoint(
+                POINT {
+                    x: cursor.0,
+                    y: cursor.1,
+                },
+                MONITOR_DEFAULTTONEAREST,
+            )
+        };
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            rcMonitor: RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            },
+            rcWork: RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            },
+            dwFlags: 0,
+        };
+        unsafe {
+            GetMonitorInfoW(monitor, &mut info);
+        }
+        let display = rect(info.rcMonitor);
+        let active = rect(info.rcWork);
+        Ok(OverlayScreenArea {
+            display,
+            active,
+            excluded: Vec::new(),
+        })
+    }
+}
+
+fn rect(value: RECT) -> OverlayRect {
+    OverlayRect {
+        origin: OverlayPoint {
+            x: value.left as f32,
+            y: value.top as f32,
+        },
+        width: (value.right - value.left) as f32,
+        height: (value.bottom - value.top) as f32,
     }
 }

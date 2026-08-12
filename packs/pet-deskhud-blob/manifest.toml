@@ -1,7 +1,7 @@
 id = "pet.deskhud.blob"
 kind = "pet"
-version = "0.5.5"
-engine = "0.5"
+version = "0.6.0"
+engine = "0.6"
 api_version = 1
 display_name = "Blue Dot"
 description = "Simple blob; reacts to drag and docking"

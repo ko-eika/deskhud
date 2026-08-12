@@ -2,7 +2,7 @@
 <h4 align="center">An extensible desktop pet engine</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.5.5-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.6.0-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -13,7 +13,7 @@
 
 [简体中文](./README.md) | English
 
-DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui / eframe**, with multi-language support and local community pack loading (a store comes later).
+DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release line: `0.6.0`.
 
 ## Features
 
@@ -60,7 +60,7 @@ Preferences are persisted (locale, theme, font, active pet, HUD switches, window
 
 | Area | Choice |
 |------|--------|
-| UI | egui / eframe (Glow), sole UI toolkit; no system tray |
+| UI | egui + winit / egui_glow, sole UI toolkit; platform overlays handle transparent composition; no system tray |
 | Built-in extensions | Native Rust `PetKind` / `Plugin` |
 | Community extensions | WASM (wasmtime) + `deskhud-sdk` (planned) |
 | Pack format | `.deskhud` + `manifest.toml` |
@@ -95,7 +95,7 @@ docs/            Architecture, extension guide, roadmap
 ## Requirements
 
 - Rust **1.85+** (`rust-version` in `Cargo.toml`)
-- Full transparent window / global input experience is strongest on Windows; macOS / Linux use platform fallbacks (see CI and the `platform` module)
+- Windows uses the native GPU overlay; macOS uses native platform windows and screen safe-area APIs; Linux remains a platform fallback (see CI and the `platform` module)
 
 ## Build & run
 
@@ -134,8 +134,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud
 
 # 4. Tag, push, and attach binaries on a GitHub Release
-git tag -a v0.5.5 -m "DeskHud 0.5.5"
-git push origin v0.5.5
+git tag -a v0.6.0 -m "DeskHud 0.6.0"
+git push origin v0.6.0
 ```
 
 CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs cross-platform `check` / tests only; it does **not** publish installers yet.

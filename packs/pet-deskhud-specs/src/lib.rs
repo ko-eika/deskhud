@@ -21,14 +21,10 @@ pub struct BuiltinSpecsPet {
     mouse_tips: AtomicBool,
     hover_highlight: AtomicBool,
     dock_tint: AtomicBool,
+    click_ms: AtomicU32,
+    last_pointer: Mutex<[i8; 2]>,
+    idle_ms: AtomicU32,
     blink: Mutex<BlinkState>,
-    gaze: Mutex<GazeState>,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct GazeState {
-    last: [f32; 2],
-    idle_secs: f32,
 }
 
 /// Short, asymmetric eye-close cycle with locally generated timing jitter.
@@ -126,11 +122,10 @@ impl Default for BuiltinSpecsPet {
             mouse_tips: AtomicBool::new(true),
             hover_highlight: AtomicBool::new(true),
             dock_tint: AtomicBool::new(true),
+            click_ms: AtomicU32::new(0),
+            last_pointer: Mutex::new([0, 0]),
+            idle_ms: AtomicU32::new(0),
             blink: Mutex::new(BlinkState::new()),
-            gaze: Mutex::new(GazeState {
-                last: [0.0, 0.0],
-                idle_secs: 0.0,
-            }),
         }
     }
 }
@@ -164,6 +159,24 @@ const SPECS_OPTIONS: &[PetConfigOption] = &[
         key: "dock_tint",
         label: "贴边变色",
         description: "吸附屏幕边缘时改变身体颜色",
+        default: true,
+    },
+    PetConfigOption {
+        key: "click_blink",
+        label: "点击瞪眼",
+        description: "点击宠物时短暂瞪大眼睛",
+        default: true,
+    },
+    PetConfigOption {
+        key: "idle_return",
+        label: "空闲回正",
+        description: "鼠标停止移动一段时间后恢复正视前方",
+        default: true,
+    },
+    PetConfigOption {
+        key: "drag_tint",
+        label: "拖拽变色",
+        description: "拖拽宠物时改变身体颜色",
         default: true,
     },
 ];
@@ -286,6 +299,16 @@ impl PetKind for BuiltinSpecsPet {
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
                 Some(v.saturating_sub(dec))
             });
+        let _ = self
+            .click_ms
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                Some(v.saturating_sub(dec))
+            });
+        let _ = self
+            .idle_ms
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                Some(v.saturating_add(dec).min(10_000))
+            });
         if let Ok(mut blink) = self.blink.lock() {
             blink.tick(dt_secs);
         }
@@ -303,6 +326,9 @@ impl PetKind for BuiltinSpecsPet {
                 self.last_dock_bits.store(dock_bits(to), Ordering::Relaxed);
             }
             PetEvent::GlobalMousePressed { button, .. } => {
+                if button == PetMouseButton::Primary {
+                    self.click_ms.store(420, Ordering::Relaxed);
+                }
                 if !self.mouse_tips.load(Ordering::Relaxed) {
                     return;
                 }
@@ -312,6 +338,12 @@ impl PetKind for BuiltinSpecsPet {
                     PetMouseButton::Middle => "中键",
                 };
                 self.show_bubble(text, 1000);
+            }
+            PetEvent::MouseClicked {
+                button: PetMouseButton::Primary,
+                ..
+            } => {
+                self.click_ms.store(420, Ordering::Relaxed);
             }
             PetEvent::GlobalMouseWheel { delta, .. } => {
                 if !self.mouse_tips.load(Ordering::Relaxed) {
@@ -349,6 +381,9 @@ impl PetKind for BuiltinSpecsPet {
         let follow = ctx.config.get("follow_eyes", true);
         let hover_hl = ctx.config.get("hover_highlight", true);
         let dock_tint = ctx.config.get("dock_tint", true);
+        let click_blink = ctx.config.get("click_blink", true);
+        let idle_return = ctx.config.get("idle_return", true);
+        let drag_tint = ctx.config.get("drag_tint", true);
         let tips_on = ctx.config.get("key_tips", true) || ctx.config.get("mouse_tips", true);
 
         let _ = (
@@ -369,6 +404,24 @@ impl PetKind for BuiltinSpecsPet {
             None
         };
         let global_lmb = ctx.mouse.global_primary_down;
+        let pointer = [
+            (ctx.pointer_dir[0].clamp(-1.0, 1.0) * 8.0) as i8,
+            (ctx.pointer_dir[1].clamp(-1.0, 1.0) * 8.0) as i8,
+        ];
+        let pointer_changed = self
+            .last_pointer
+            .lock()
+            .map(|mut last| {
+                let changed = *last != pointer;
+                *last = pointer;
+                changed
+            })
+            .unwrap_or(false);
+        if pointer_changed {
+            self.idle_ms.store(0, Ordering::Relaxed);
+        }
+        let idle = self.idle_ms.load(Ordering::Relaxed);
+        let click_ms = self.click_ms.load(Ordering::Relaxed);
         let eye_open = self
             .blink
             .lock()
@@ -414,7 +467,7 @@ impl PetKind for BuiltinSpecsPet {
                 (body[2] + 0.04).min(1.0),
             ];
         }
-        if dragging {
+        if drag_tint && dragging {
             body = [
                 (body[0] * 0.55 + 0.45).min(1.0),
                 (body[1] * 0.75 + 0.20).min(1.0),
@@ -424,23 +477,24 @@ impl PetKind for BuiltinSpecsPet {
 
         let mut pupil = [0.0_f32, 0.0];
         if follow {
-            let dx = ctx.pointer_dir[0].clamp(-1.0, 1.0);
-            let dy = ctx.pointer_dir[1].clamp(-1.0, 1.0);
-            let mut gaze = self.gaze.lock().unwrap_or_else(|e| e.into_inner());
-            let moved = (dx - gaze.last[0]).abs() + (dy - gaze.last[1]).abs() > 0.015;
-            gaze.idle_secs = if moved {
-                0.0
+            let idle_factor = if idle_return {
+                ((idle.saturating_sub(1200) as f32) / 700.0).clamp(0.0, 1.0)
             } else {
-                gaze.idle_secs + 1.0 / 60.0
+                0.0
             };
-            gaze.last = [dx, dy];
-            let follow_amount =
-                (1.0 - ((gaze.idle_secs - 1.2) / 0.45).clamp(0.0, 1.0)).clamp(0.0, 1.0);
+            let dx = ctx.pointer_dir[0].clamp(-1.0, 1.0) * (1.0 - idle_factor);
+            let dy = ctx.pointer_dir[1].clamp(-1.0, 1.0) * (1.0 - idle_factor);
             let max_shift = if dragging || global_lmb { 6.0 } else { 4.5 };
-            pupil = [
-                dx * max_shift * follow_amount,
-                dy * max_shift * 0.9 * follow_amount,
-            ];
+            pupil = [dx * max_shift, dy * max_shift * 0.9];
+            if click_blink && click_ms > 0 {
+                // Click reaction: eyes briefly lunge toward the pointer, then
+                // return as the 420 ms reaction timer expires.
+                let impulse = (click_ms as f32 / 420.0).clamp(0.0, 1.0);
+                // Keep the click reaction subtle: only a small fraction of
+                // the normal pupil travel may cross the eye rim.
+                pupil[0] += ctx.pointer_dir[0].clamp(-1.0, 1.0) * 1.15 * impulse;
+                pupil[1] += ctx.pointer_dir[1].clamp(-1.0, 1.0) * 0.85 * impulse;
+            }
             if !dragging {
                 if dock.left {
                     pupil[0] = (pupil[0] - 1.8).clamp(-max_shift, max_shift);
@@ -460,7 +514,11 @@ impl PetKind for BuiltinSpecsPet {
         PetPaint {
             body_rgb: body,
             eye_rgb: [1.0, 1.0, 1.0],
-            bounce: bounce_base,
+            bounce: if click_blink && click_ms > 0 {
+                bounce_base
+            } else {
+                bounce_base
+            },
             pupil_offset: pupil,
             draw_eyes: true,
             eye_open,

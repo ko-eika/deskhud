@@ -1,11 +1,59 @@
 //! Non-Windows geometry fallback for the direct egui host.
 
+use super::OverlayBackend;
+use anyhow::Result;
+use deskhud_engine::{
+    OverlayBackendCapabilities, OverlayEvent, OverlayPoint, OverlayRect, OverlayScene,
+    OverlayScreenArea, OverlayWindowId, OverlayWindowLevel, OverlayWindowRole,
+};
+
+#[allow(dead_code)]
+pub(crate) struct FallbackOverlayBackend;
+
+impl OverlayBackend for FallbackOverlayBackend {
+    fn capabilities(&self) -> OverlayBackendCapabilities {
+        OverlayBackendCapabilities::default()
+    }
+    fn create_window(&mut self, _role: OverlayWindowRole) -> Result<OverlayWindowId> {
+        Ok(OverlayWindowId(1))
+    }
+    fn update_scene(&mut self, _id: OverlayWindowId, _scene: OverlayScene) -> Result<()> {
+        Ok(())
+    }
+    fn set_visible(&mut self, _id: OverlayWindowId, _visible: bool) -> Result<()> {
+        Ok(())
+    }
+    fn set_level(&mut self, _id: OverlayWindowId, _level: OverlayWindowLevel) -> Result<()> {
+        Ok(())
+    }
+    fn destroy_window(&mut self, _id: OverlayWindowId) -> Result<()> {
+        Ok(())
+    }
+    fn poll_events(&mut self) -> Vec<OverlayEvent> {
+        Vec::new()
+    }
+    fn screen_area(&self) -> Result<OverlayScreenArea> {
+        let display = OverlayRect {
+            origin: OverlayPoint { x: 0.0, y: 0.0 },
+            width: 1920.0,
+            height: 1080.0,
+        };
+        Ok(OverlayScreenArea {
+            display: display.clone(),
+            active: display,
+            excluded: Vec::new(),
+        })
+    }
+}
+
 /// A portable global-cursor backend has not been wired yet.
+#[allow(dead_code)]
 pub fn cursor_screen_px() -> Option<(i32, i32)> {
     None
 }
 
 /// Keep a popup inside a conservative primary-display work area.
+#[allow(dead_code)]
 pub fn fit_popup_pos_points(
     cursor_points: (f32, f32),
     menu_w: f32,

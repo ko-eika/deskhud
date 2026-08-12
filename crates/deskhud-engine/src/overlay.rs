@@ -14,6 +14,92 @@ pub enum OverlayDisplayTarget {
     VirtualDesktop,
 }
 
+/// The semantic role of a native overlay window.
+///
+/// Roles are shared by the shell and platform backends; the backend decides
+/// which native window class, compositor, and hit-test policy implement them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OverlayWindowRole {
+    /// The interactive desktop pet.
+    Pet,
+    /// A host-owned dialogue bubble.
+    Bubble,
+    /// A short-lived context menu or action surface.
+    Menu,
+    /// A per-display passive or interactive HUD composition.
+    Hud,
+}
+
+/// Platform-resolved screen regions used by pets and HUD layout.
+///
+/// `active` is the area where host-owned overlays may safely live. `excluded`
+/// describes system-reserved regions such as a menu bar or taskbar. The
+/// engine only carries neutral geometry; each platform decides how to obtain it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OverlayScreenArea {
+    /// Full display frame, including system-reserved regions.
+    pub display: OverlayRect,
+    /// Safe area for pet recovery and HUD placement.
+    pub active: OverlayRect,
+    /// System-reserved regions inside or adjacent to the display.
+    pub excluded: Vec<OverlayRect>,
+}
+
+impl OverlayScreenArea {
+    /// Returns whether a rectangle is fully contained in the active area.
+    pub fn contains(&self, rect: OverlayRect) -> bool {
+        rect.origin.x >= self.active.origin.x
+            && rect.origin.y >= self.active.origin.y
+            && rect.origin.x + rect.width <= self.active.origin.x + self.active.width
+            && rect.origin.y + rect.height <= self.active.origin.y + self.active.height
+    }
+}
+
+/// Stable identifier assigned by a platform overlay backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OverlayWindowId(pub u64);
+
+/// Window-level preference for an overlay role.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OverlayWindowLevel {
+    /// Follow the user's normal desktop stacking order.
+    #[default]
+    Normal,
+    /// Stay above ordinary application windows.
+    AlwaysOnTop,
+}
+
+/// Lifecycle and input notifications emitted by a platform backend.
+#[derive(Debug, Clone, PartialEq)]
+pub enum OverlayEvent {
+    /// A backend-created window is ready for scene updates.
+    WindowCreated {
+        /// Created window identifier.
+        id: OverlayWindowId,
+        /// Semantic role assigned to the window.
+        role: OverlayWindowRole,
+    },
+    /// A window was hidden or closed by the system or user.
+    WindowClosed {
+        /// Closed window identifier.
+        id: OverlayWindowId,
+    },
+    /// A hit region received a pointer action.
+    Hit {
+        /// Window receiving the hit.
+        id: OverlayWindowId,
+        /// Stable hit-region identifier.
+        region: String,
+    },
+    /// The user moved an overlay window in logical screen coordinates.
+    Moved {
+        /// Moved window identifier.
+        id: OverlayWindowId,
+        /// New logical screen position.
+        position: OverlayPoint,
+    },
+}
+
 /// 逻辑坐标中的二维点。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OverlayPoint {
@@ -208,7 +294,7 @@ pub struct OverlayBackendCapabilities {
 
 #[cfg(test)]
 mod tests {
-    use super::{OverlayHitShape, OverlayPoint, OverlayRect};
+    use super::{OverlayHitShape, OverlayPoint, OverlayRect, OverlayScreenArea};
 
     #[test]
     fn circle_includes_boundary_and_excludes_corner() {
@@ -229,5 +315,36 @@ mod tests {
         });
         assert!(shape.contains(OverlayPoint { x: 6.0, y: 8.0 }));
         assert!(!shape.contains(OverlayPoint { x: 6.1, y: 8.0 }));
+    }
+
+    #[test]
+    fn screen_area_distinguishes_active_and_excluded_space() {
+        let area = OverlayScreenArea {
+            display: OverlayRect {
+                origin: OverlayPoint { x: 0.0, y: 0.0 },
+                width: 100.0,
+                height: 100.0,
+            },
+            active: OverlayRect {
+                origin: OverlayPoint { x: 0.0, y: 10.0 },
+                width: 100.0,
+                height: 80.0,
+            },
+            excluded: vec![OverlayRect {
+                origin: OverlayPoint { x: 0.0, y: 0.0 },
+                width: 100.0,
+                height: 10.0,
+            }],
+        };
+        assert!(area.contains(OverlayRect {
+            origin: OverlayPoint { x: 10.0, y: 20.0 },
+            width: 20.0,
+            height: 20.0
+        }));
+        assert!(!area.contains(OverlayRect {
+            origin: OverlayPoint { x: 10.0, y: 2.0 },
+            width: 20.0,
+            height: 20.0
+        }));
     }
 }

@@ -41,7 +41,7 @@ pub(crate) fn scene_from_pet_paint(
         let eye_x = radius * 0.28;
         let eye_radius = radius * 0.16;
         let pupil_radius = eye_radius * 0.48;
-        let eye_open = finite_or_zero(paint.eye_open).clamp(0.0, 1.0);
+        let eye_open = finite_or_zero(paint.eye_open).clamp(0.0, 1.25);
         let left_eye = OverlayPoint {
             x: center.x - eye_x,
             y: center.y + eye_y,

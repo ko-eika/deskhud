@@ -7,6 +7,7 @@ mod gpu_overlay_probe;
 mod image_decode;
 mod native_host;
 mod overlay_control;
+mod overlay_surface;
 mod pet_menu;
 mod pet_scene;
 mod platform;

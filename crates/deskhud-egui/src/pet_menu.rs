@@ -29,8 +29,8 @@ pub(crate) struct PetMenuState {
     pub anchor: egui::Pos2,
     pub menu_width: f32,
     prefs: UiPreferences,
-    master_enabled: bool,
-    pet_topmost: bool,
+    pub(crate) master_enabled: bool,
+    pub(crate) pet_topmost: bool,
     pub open_settings: bool,
     pub begin_hud_layout: bool,
     pub toggle_master: Option<bool>,
@@ -118,7 +118,6 @@ impl PetMenuHost {
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 let mut state = self.lock();
-                let max_width = (ui.available_width() - TEXT_INSET).max(24.0);
                 let settings = state.prefs.t(MessageKey::MenuSettings).to_owned();
                 let topmost = state.prefs.t(MessageKey::SettingsTopmost).to_owned();
                 let plugins = state.prefs.t(MessageKey::SettingsNavHud).to_owned();
@@ -127,41 +126,27 @@ impl PetMenuHost {
                 let master_enabled = state.master_enabled;
                 let pet_topmost = state.pet_topmost;
 
-                if action_row(ui, &ellipsize(&context, &settings, max_width), dark).clicked() {
+                if action_row(ui, &settings, dark).clicked() {
                     state.open_settings = true;
                     close = true;
                 }
-                if check_row(
-                    ui,
-                    &ellipsize(&context, &topmost, max_width),
-                    pet_topmost,
-                    dark,
-                )
-                .clicked()
-                {
+                if check_row(ui, &topmost, pet_topmost, dark).clicked() {
                     state.toggle_topmost = Some(!pet_topmost);
                     close = true;
                 }
                 separator(ui, dark);
-                if check_row(
-                    ui,
-                    &ellipsize(&context, &plugins, max_width),
-                    master_enabled,
-                    dark,
-                )
-                .clicked()
-                {
+                if check_row(ui, &plugins, master_enabled, dark).clicked() {
                     state.toggle_master = Some(!master_enabled);
                     close = true;
                 }
                 ui.add_enabled_ui(master_enabled, |ui| {
-                    if action_row(ui, &ellipsize(&context, &layout, max_width), dark).clicked() {
+                    if action_row(ui, &layout, dark).clicked() {
                         state.begin_hud_layout = true;
                         close = true;
                     }
                 });
                 separator(ui, dark);
-                if action_row(ui, &ellipsize(&context, &quit, max_width), dark).clicked() {
+                if action_row(ui, &quit, dark).clicked() {
                     state.quit = true;
                     close = true;
                 }
@@ -186,34 +171,6 @@ fn hover_color(dark: bool) -> Color32 {
     } else {
         Color32::from_rgb(232, 236, 244)
     }
-}
-
-fn measure_text(context: &egui::Context, text: &str) -> f32 {
-    context.fonts_mut(|fonts| {
-        fonts
-            .layout_no_wrap(
-                text.to_owned(),
-                FontId::proportional(LABEL_FONT),
-                Color32::WHITE,
-            )
-            .size()
-            .x
-    })
-}
-
-fn ellipsize(context: &egui::Context, text: &str, max_width: f32) -> String {
-    if measure_text(context, text) <= max_width {
-        return text.to_owned();
-    }
-    let mut value = text.to_owned();
-    while value.chars().count() > 1 {
-        value.pop();
-        let candidate = format!("{value}…");
-        if measure_text(context, &candidate) <= max_width {
-            return candidate;
-        }
-    }
-    "…".to_owned()
 }
 
 fn action_row(ui: &mut egui::Ui, label: &str, dark: bool) -> egui::Response {
