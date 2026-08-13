@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context as _, Result};
 #[cfg(not(target_os = "macos"))]
 use egui::Color32;
+use glow::HasContext as _;
 use glutin::context::{NotCurrentGlContext as _, PossiblyCurrentGlContext as _};
 use glutin::display::{GetGlDisplay as _, GlDisplay as _};
 use glutin::prelude::GlSurface as _;
@@ -141,15 +142,8 @@ impl NativeHost {
     ) -> Self {
         let boot = deskhud_runtime::bootstrap_registry();
         let catalogs = deskhud_runtime::build_catalog_store(&boot.discovered, prefs.locale);
-        #[cfg(target_os = "macos")]
-        let overlay_backend: Box<dyn OverlayBackend> =
-            Box::new(crate::platform::MacosOverlayBackend::default());
-        #[cfg(windows)]
-        let overlay_backend: Box<dyn OverlayBackend> =
-            Box::new(crate::platform::WindowsOverlayBackend);
-        #[cfg(all(not(windows), not(target_os = "macos")))]
-        let overlay_backend: Box<dyn OverlayBackend> =
-            Box::new(crate::platform::FallbackOverlayBackend);
+        let overlay_backend = crate::platform::create_backend()
+            .expect("platform overlay backend construction must be infallible");
         Self {
             proxy,
             controls,

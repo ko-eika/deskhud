@@ -6,11 +6,11 @@
 
 迁移不改变以下边界：`deskhud-engine`、宠物包、HUD 插件与 SDK 只表达场景和输入语义，不得依赖 HWND、Cocoa、Wayland 或渲染器；`deskhud-egui` 仍是唯一设置与菜单 UI。
 
-Windows 默认路径使用原生 GPU 宠物窗与直接托管的 egui 控制窗；旧的双路径运行方案已经移除，避免维护两套窗口生命周期。非 Windows 当前只保留可编译的控制宿主骨架，透明宠物/HUD 必须由对应平台后端接管后才算可用。HUD 原生合成尚未接管，因此当前 `0.6.x` 是迁移版本线，而不是全部后端完成。当前产品版本为 `0.6.0`。
+Windows 默认路径使用原生 GPU 宠物窗与直接托管的 egui 控制窗；旧的双路径运行方案已经移除，避免维护两套窗口生命周期。非 Windows 当前只保留可编译的控制宿主骨架，透明宠物/HUD 必须由对应平台后端接管后才算可用。HUD 原生合成尚未接管，因此当前 `0.6.x` 是迁移版本线，而不是全部后端完成。当前产品版本为 `0.6.4`。
 
-## 0.6.0 已知问题
+## 0.6.4 macOS 待验收问题
 
-macOS 独立菜单窗口仍存在文字错位与字形渲染异常。该问题已单独记录在 [`docs/issues/macos-menu-text-offset.md`](issues/macos-menu-text-offset.md)，目前不能视为已修复。后续重点检查菜单 GL surface 的尺寸/DPI、egui painter 生命周期、glyph atlas 纹理上传及重绘时序。
+macOS 独立菜单窗口的 context 切换、重绘回调和坐标单位代码修复已完成，但尚无 macOS 实机验收结论；右键菜单、打开设置、返回菜单的文字、hover、动画与窗口生命周期仍需验收。问题记录见 [`docs/issues/macos-menu-text-offset.md`](issues/macos-menu-text-offset.md) 与 [`docs/issues/macos-multi-window-repaint.md`](issues/macos-multi-window-repaint.md)。
 
 ## 统一契约
 

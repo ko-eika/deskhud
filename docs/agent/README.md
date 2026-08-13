@@ -27,7 +27,7 @@
 
 | 任务文件 | 状态 | 说明 |
 |----------|------|------|
-| [`tasks/macos-gl-lifetime-fix.md`](./tasks/macos-gl-lifetime-fix.md) | 待执行 | macOS 菜单文字错位 + 多窗口重绘冻结（3 个 GL/重绘/坐标 bug），须 mac 实机验收 |
+| [`tasks/macos-gl-lifetime-fix.md`](./tasks/macos-gl-lifetime-fix.md) | 代码完成·待验收 | macOS 菜单文字错位 + 多窗口重绘冻结（3 个 GL/重绘/坐标 bug），须 mac 实机验收 |
 | [`tasks/windows-hud-runtime-compositing.md`](./tasks/windows-hud-runtime-compositing.md) | 已实现·待验收 | 计划 1：Windows 运行态 HUD 合成窗（0.6.3 已接入 GPU 覆盖层） |
 | [`tasks/windows-native-context-menu-pilot.md`](./tasks/windows-native-context-menu-pilot.md) | 待执行 | 计划 2 第一步：Windows 原生右击菜单试点（含 CONSTRAINTS 变更前提） |
 | [`../window-layers.md`](../window-layers.md) | 定稿 | 四类独立窗口（宠物/气泡/HUD信息/HUD布局）的分层交互说明 |

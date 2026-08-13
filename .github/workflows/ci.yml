@@ -33,6 +33,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: cargo fmt (workspace)
+        run: cargo fmt --all -- --check
+
       - name: cargo check (workspace)
         run: cargo check --workspace --all-targets
 
