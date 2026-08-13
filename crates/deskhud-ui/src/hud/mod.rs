@@ -18,6 +18,8 @@ pub enum HudConfigValue {
     Int(i64),
     /// 浮点（`.x` / `.y` / `.scale`）。
     Float(f64),
+    /// 位置元组（`.position = [x, y]`）。
+    Position([f64; 2]),
     /// 字符串（`.display` 等）。
     String(String),
 }
@@ -34,7 +36,7 @@ impl HudConfigValue {
         match self {
             Self::Float(v) => Some(*v as f32),
             Self::Int(v) => Some(*v as f32),
-            Self::Bool(_) | Self::String(_) => None,
+            Self::Bool(_) | Self::String(_) | Self::Position(_) => None,
         }
     }
 
@@ -93,6 +95,13 @@ impl HudPrefs {
     /// 布局属性键：`{plugin_id}.{contribution_id}.{attr}`。
     pub fn layout_attr_key(plugin_id: &str, contribution_id: &str, attr: &str) -> String {
         format!("{plugin_id}.{contribution_id}.{attr}")
+    }
+
+    fn get_position(&self, key: &str) -> Option<[f32; 2]> {
+        match self.config.get(key) {
+            Some(HudConfigValue::Position(v)) => Some([v[0] as f32, v[1] as f32]),
+            _ => None,
+        }
     }
 
     fn get_bool(&self, key: &str) -> Option<bool> {
@@ -265,6 +274,7 @@ impl HudPrefs {
     ) -> HudSlotLayout {
         let base = Self::layout_key(plugin_id, contribution_id);
         let has_flat = self.get_str(&format!("{base}.display")).is_some()
+            || self.get_position(&format!("{base}.position")).is_some()
             || self.get_f32(&format!("{base}.x")).is_some()
             || self.get_f32(&format!("{base}.y")).is_some()
             || self.get_f32(&format!("{base}.scale")).is_some()
@@ -280,6 +290,10 @@ impl HudPrefs {
                 slot.x = x;
             }
             if let Some(y) = self.get_f32(&format!("{base}.y")) {
+                slot.y = y;
+            }
+            if let Some([x, y]) = self.get_position(&format!("{base}.position")) {
+                slot.x = x;
                 slot.y = y;
             }
             if let Some(s) = self.get_f32(&format!("{base}.scale")) {
@@ -314,16 +328,18 @@ impl HudPrefs {
             format!("{base}.display"),
             HudConfigValue::String(layout.display.clone()),
         );
-        self.config
-            .insert(format!("{base}.x"), HudConfigValue::Float(layout.x as f64));
-        self.config
-            .insert(format!("{base}.y"), HudConfigValue::Float(layout.y as f64));
+        self.config.insert(
+            format!("{base}.position"),
+            HudConfigValue::Position([layout.x as f64, layout.y as f64]),
+        );
         self.config.insert(
             format!("{base}.scale"),
             HudConfigValue::Float(layout.scale as f64),
         );
         // 清旧嵌套表与遗留 w/h 扁平键
         self.layout.remove(&base);
+        self.config.remove(&format!("{base}.x"));
+        self.config.remove(&format!("{base}.y"));
         self.config.remove(&format!("{base}.w"));
         self.config.remove(&format!("{base}.h"));
     }
@@ -427,8 +443,8 @@ mod tests {
         hud.set_slot_layout("hud.deskhud.demo", "tip", slot);
         let text = toml::to_string_pretty(&hud).expect("ser");
         assert!(
-            text.contains("hud.deskhud.demo.tip.x"),
-            "flat x missing in:\n{text}"
+            text.contains("hud.deskhud.demo.tip.position"),
+            "position tuple missing in:\n{text}"
         );
         assert!(
             text.contains("hud.deskhud.demo.tip.scale"),

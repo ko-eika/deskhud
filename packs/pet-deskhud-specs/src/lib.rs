@@ -130,6 +130,7 @@ impl Default for BuiltinSpecsPet {
     }
 }
 
+#[allow(dead_code)]
 const SPECS_OPTIONS: &[PetConfigOption] = &[
     PetConfigOption {
         key: "follow_eyes",
@@ -138,45 +139,84 @@ const SPECS_OPTIONS: &[PetConfigOption] = &[
         default: true,
     },
     PetConfigOption {
-        key: "key_tips",
+        key: "hover_highlight",
         label: "按键提示",
         description: "键盘按下时显示短气泡（如 Ctrl+C）",
         default: true,
     },
     PetConfigOption {
-        key: "mouse_tips",
+        key: "drag_tint",
         label: "鼠标提示",
         description: "全局鼠标按键 / 滚轮时显示短气泡",
         default: true,
     },
     PetConfigOption {
-        key: "hover_highlight",
+        key: "dock_tint",
         label: "悬停高亮",
         description: "指针停在宠上时身体略提亮",
         default: true,
     },
     PetConfigOption {
-        key: "dock_tint",
+        key: "key_tips",
         label: "贴边变色",
         description: "吸附屏幕边缘时改变身体颜色",
         default: true,
     },
     PetConfigOption {
-        key: "click_blink",
+        key: "mouse_tips",
         label: "点击瞪眼",
         description: "点击宠物时短暂瞪大眼睛",
         default: true,
     },
     PetConfigOption {
-        key: "idle_return",
+        key: "drag_tint",
         label: "空闲回正",
         description: "鼠标停止移动一段时间后恢复正视前方",
         default: true,
     },
     PetConfigOption {
-        key: "drag_tint",
+        key: "mouse_tips",
         label: "拖拽变色",
         description: "拖拽宠物时改变身体颜色",
+        default: true,
+    },
+];
+
+const SPECS_OPTIONS_ORDERED: &[PetConfigOption] = &[
+    PetConfigOption {
+        key: "follow_eyes",
+        label: "鼠标跟随",
+        description: "鼠标移动时跟随，空闲后回正，点击时短暂朝鼠标方向瞪眼",
+        default: true,
+    },
+    PetConfigOption {
+        key: "hover_highlight",
+        label: "悬停高亮",
+        description: "指针停在宠物上时身体略微提亮",
+        default: true,
+    },
+    PetConfigOption {
+        key: "drag_tint",
+        label: "拖拽效果",
+        description: "拖拽宠物时提供视觉反馈",
+        default: true,
+    },
+    PetConfigOption {
+        key: "dock_tint",
+        label: "贴边效果",
+        description: "吸附屏幕边缘时提供视觉反馈",
+        default: true,
+    },
+    PetConfigOption {
+        key: "key_tips",
+        label: "按键提示",
+        description: "键盘按下时显示短气泡",
+        default: true,
+    },
+    PetConfigOption {
+        key: "mouse_tips",
+        label: "鼠标提示",
+        description: "鼠标按键或滚轮时显示短气泡",
         default: true,
     },
 ];
@@ -276,7 +316,7 @@ impl PetKind for BuiltinSpecsPet {
     }
 
     fn config_options(&self) -> &'static [PetConfigOption] {
-        SPECS_OPTIONS
+        SPECS_OPTIONS_ORDERED
     }
 
     fn apply_config(&self, config: PetConfigBag<'_>) {
@@ -328,6 +368,7 @@ impl PetKind for BuiltinSpecsPet {
             PetEvent::GlobalMousePressed { button, .. } => {
                 if button == PetMouseButton::Primary {
                     self.click_ms.store(420, Ordering::Relaxed);
+                    self.idle_ms.store(0, Ordering::Relaxed);
                 }
                 if !self.mouse_tips.load(Ordering::Relaxed) {
                     return;
@@ -344,6 +385,7 @@ impl PetKind for BuiltinSpecsPet {
                 ..
             } => {
                 self.click_ms.store(420, Ordering::Relaxed);
+                self.idle_ms.store(0, Ordering::Relaxed);
             }
             PetEvent::GlobalMouseWheel { delta, .. } => {
                 if !self.mouse_tips.load(Ordering::Relaxed) {
@@ -381,8 +423,6 @@ impl PetKind for BuiltinSpecsPet {
         let follow = ctx.config.get("follow_eyes", true);
         let hover_hl = ctx.config.get("hover_highlight", true);
         let dock_tint = ctx.config.get("dock_tint", true);
-        let click_blink = ctx.config.get("click_blink", true);
-        let idle_return = ctx.config.get("idle_return", true);
         let drag_tint = ctx.config.get("drag_tint", true);
         let tips_on = ctx.config.get("key_tips", true) || ctx.config.get("mouse_tips", true);
 
@@ -477,21 +517,23 @@ impl PetKind for BuiltinSpecsPet {
 
         let mut pupil = [0.0_f32, 0.0];
         if follow {
-            let idle_factor = if idle_return {
-                ((idle.saturating_sub(1200) as f32) / 700.0).clamp(0.0, 1.0)
+            let idle_factor = ((idle.saturating_sub(1200) as f32) / 700.0).clamp(0.0, 1.0);
+            let click_elapsed = 420_u32.saturating_sub(click_ms);
+            let click_look = if click_ms > 0 {
+                smooth_step(click_elapsed as f32 / 110.0)
             } else {
                 0.0
             };
-            let dx = ctx.pointer_dir[0].clamp(-1.0, 1.0) * (1.0 - idle_factor);
-            let dy = ctx.pointer_dir[1].clamp(-1.0, 1.0) * (1.0 - idle_factor);
+            let attention = (1.0 - idle_factor).max(click_look);
+            let dx = ctx.pointer_dir[0].clamp(-1.0, 1.0) * attention;
+            let dy = ctx.pointer_dir[1].clamp(-1.0, 1.0) * attention;
             let max_shift = if dragging || global_lmb { 6.0 } else { 4.5 };
             pupil = [dx * max_shift, dy * max_shift * 0.9];
-            if click_blink && click_ms > 0 {
-                // Click reaction: eyes briefly lunge toward the pointer, then
-                // return as the 420 ms reaction timer expires.
-                let impulse = (click_ms as f32 / 420.0).clamp(0.0, 1.0);
-                // Keep the click reaction subtle: only a small fraction of
-                // the normal pupil travel may cross the eye rim.
+            if click_ms > 0 && (ctx.pointer_dir[0].abs() + ctx.pointer_dir[1].abs()) > 0.01 {
+                // First reacquire the pointer direction, then add a short,
+                // subtle outward impulse after the look phase.
+                let impulse = smooth_step((click_elapsed.saturating_sub(110)) as f32 / 170.0)
+                    * (1.0 - smooth_step((click_elapsed.saturating_sub(280)) as f32 / 140.0));
                 pupil[0] += ctx.pointer_dir[0].clamp(-1.0, 1.0) * 1.15 * impulse;
                 pupil[1] += ctx.pointer_dir[1].clamp(-1.0, 1.0) * 0.85 * impulse;
             }
@@ -514,11 +556,7 @@ impl PetKind for BuiltinSpecsPet {
         PetPaint {
             body_rgb: body,
             eye_rgb: [1.0, 1.0, 1.0],
-            bounce: if click_blink && click_ms > 0 {
-                bounce_base
-            } else {
-                bounce_base
-            },
+            bounce: bounce_base,
             pupil_offset: pupil,
             draw_eyes: true,
             eye_open,

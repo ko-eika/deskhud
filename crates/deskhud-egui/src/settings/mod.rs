@@ -204,36 +204,18 @@ pub struct SettingsState {
     /// 已为当前 settle 预约过一次重绘，避免每帧 request_repaint。
     card_settle_repaint_armed: bool,
     preview_textures: HashMap<String, TextureHandle>,
-    /// 请求开始 HUD 布局编辑。
-    pub hud_layout_begin: bool,
     /// Request the host to open the native layout window.
     pub hud_layout_request: bool,
-    /// 请求完成并写回草稿布局。
-    /// 请求取消布局编辑。
-    pub hud_layout_cancel: bool,
-    /// 当前是否在布局编辑（UI 显示用）。
-    pub hud_layout_editing: bool,
-    pub hud_layout_selected: Option<(String, String)>,
 }
 
 impl SettingsHost {
     /// Draw the existing settings surface inside a directly hosted egui root
     /// window. Window creation/visibility is owned by the native host.
     pub(crate) fn draw_native(&self, ui: &mut egui::Ui) {
-        {
-            let mut state = self.lock();
-            if state.hud_layout_begin {
-                state.hud_layout_begin = false;
-                state.hud_layout_editing = true;
-            }
-        }
-        if self.lock().hud_layout_editing {
-            self.draw_layout_editor(ui);
-        } else {
-            self.draw(ui);
-        }
+        self.draw(ui);
     }
 
+    #[cfg(any())]
     fn draw_layout_editor(&self, ui: &mut egui::Ui) {
         let (items, title, apply_label, cancel_label) = {
             let state = self.lock();
@@ -444,7 +426,7 @@ impl SettingsHost {
                 }
             });
         if apply || cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            let mut state = self.lock();
+            let state = self.lock();
             state.hud_layout_editing = false;
             state.open = false;
             state.apply_requested = apply;
@@ -475,11 +457,7 @@ impl SettingsHost {
                 card_observe_since: None,
                 card_settle_repaint_armed: false,
                 preview_textures: HashMap::new(),
-                hud_layout_begin: false,
                 hud_layout_request: false,
-                hud_layout_cancel: false,
-                hud_layout_editing: false,
-                hud_layout_selected: None,
             })),
         }
     }
@@ -518,17 +496,9 @@ impl SettingsHost {
         s.card_observe_since = None;
         s.card_settle_repaint_armed = false;
         s.preview_textures.clear();
-        s.hud_layout_selected = None;
     }
 
     fn draw(&self, ui: &mut egui::Ui) {
-        {
-            let mut state = self.lock();
-            if state.hud_layout_begin {
-                state.hud_layout_begin = false;
-                state.hud_layout_editing = true;
-            }
-        }
         // 草稿主题即时预览（取消时主壳会恢复已应用偏好）
         let draft_theme = self.lock().prefs.shell.ui_theme;
         crate::theme::apply(ui.ctx(), draft_theme);
@@ -550,15 +520,8 @@ impl SettingsHost {
         let ctx = ui.ctx().clone();
 
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            let editing = self.lock().hud_layout_editing;
-            if editing {
-                self.lock().hud_layout_cancel = true;
-                self.lock().hud_layout_editing = false;
-                ctx.request_repaint_of(egui::ViewportId::ROOT);
-            } else {
-                close = true;
-                discard_on_close = true;
-            }
+            close = true;
+            discard_on_close = true;
         }
 
         egui::CentralPanel::default()
@@ -1120,12 +1083,10 @@ impl SettingsHost {
             )
         };
         {
-            let (editing, edit_l, editing_hint, mut master_on) = {
+            let (edit_l, mut master_on) = {
                 let s = self.lock();
                 (
-                    s.hud_layout_editing,
                     s.prefs.t(MessageKey::HudLayoutEdit).to_string(),
-                    s.prefs.t(MessageKey::HudLayoutEditingHint).to_string(),
                     s.prefs.hud.is_master_enabled(),
                 )
             };
@@ -1162,9 +1123,7 @@ impl SettingsHost {
                 });
             });
             ui.add_space(10.0);
-            if editing {
-                ui.label(RichText::new(editing_hint).size(12.5).color(tone::muted()));
-            } else if !items.is_empty() {
+            if !items.is_empty() {
                 ui.add_enabled_ui(master_on, |ui| {
                     if hud_layout_action_button(ui, &edit_l).clicked() {
                         self.lock().hud_layout_request = true;

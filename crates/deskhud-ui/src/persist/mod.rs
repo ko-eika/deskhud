@@ -651,6 +651,12 @@ fn toml_to_hud_value(v: &toml::Value) -> Option<HudConfigValue> {
     if let Some(f) = v.as_float() {
         return Some(HudConfigValue::Float(f));
     }
+    if let Some(array) = v.as_array() {
+        let [x, y] = array.as_slice() else {
+            return None;
+        };
+        return Some(HudConfigValue::Position([toml_f64(x)?, toml_f64(y)?]));
+    }
     None
 }
 
@@ -750,9 +756,16 @@ fn pet_option_sort_key(key: &str, order: &PrefsWriteOrder) -> (u32, u32, String)
     (1 + pet_rank, opt_rank, key.to_string())
 }
 
-fn hud_key_sort_key(key: &str, order: &PrefsWriteOrder) -> (u32, u32, u32, u32, String) {
+fn hud_key_sort_key(key: &str, order: &PrefsWriteOrder) -> (u32, u32, u32, String, u32, String) {
     if key.contains(".global.") {
-        return (0, 0, 0, attr_priority_from_key(key) as u32, key.to_string());
+        return (
+            0,
+            0,
+            0,
+            String::new(),
+            attr_priority_from_key(key) as u32,
+            key.to_string(),
+        );
     }
     let plugin_id = match_prefix(key, &order.plugin_ids).unwrap_or_else(|| default_package_id(key));
     let plugin_rank = index_or_tail(&order.plugin_ids, &plugin_id);
@@ -763,6 +776,7 @@ fn hud_key_sort_key(key: &str, order: &PrefsWriteOrder) -> (u32, u32, u32, u32, 
             1 + plugin_rank,
             0,
             0,
+            String::new(),
             attr_priority(rest) as u32,
             key.to_string(),
         );
@@ -782,6 +796,7 @@ fn hud_key_sort_key(key: &str, order: &PrefsWriteOrder) -> (u32, u32, u32, u32, 
         1 + plugin_rank,
         1,
         contrib_rank,
+        contrib.to_string(),
         attr_priority(attr) as u32,
         key.to_string(),
     )
@@ -843,6 +858,7 @@ fn format_hud_value(v: &HudConfigValue) -> String {
             }
         }
         HudConfigValue::String(s) => format!("\"{}\"", escape(s)),
+        HudConfigValue::Position([x, y]) => format!("[{x}, {y}]"),
     }
 }
 
@@ -892,11 +908,11 @@ mod tests {
         assert!(!text.contains("pet.global.topmost"));
         assert!(!text.contains("\nkind = "));
         assert!(text.contains("id = \""));
-        assert!(text.contains("\"hud.deskhud.demo.tip.x\""));
+        assert!(text.contains("\"hud.deskhud.demo.tip.position\""));
         // enable 应排在同条目 layout 属性前
         if let (Some(e), Some(x)) = (
             text.find("\"hud.deskhud.demo.clock.enable\""),
-            text.find("\"hud.deskhud.demo.tip.x\""),
+            text.find("\"hud.deskhud.demo.tip.position\""),
         ) {
             assert!(e < x);
         }

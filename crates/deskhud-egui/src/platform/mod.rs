@@ -22,5 +22,6 @@ pub(crate) use macos::{
 };
 #[cfg(windows)]
 pub(crate) use windows::{
-    GpuCompositor, cursor_screen_px, fit_popup_pos_points, is_device_lost, primary_monitor_geometry,
+    GpuCompositor, WindowsOverlayBackend, cursor_screen_px, fit_popup_pos_points, is_device_lost,
+    primary_monitor_geometry,
 };

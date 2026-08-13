@@ -9,7 +9,6 @@ use std::time::{Duration, Instant};
 use anyhow::{Context as _, Result};
 #[cfg(not(target_os = "macos"))]
 use egui::Color32;
-use glow::HasContext as _;
 use glutin::context::NotCurrentGlContext as _;
 use glutin::display::{GetGlDisplay as _, GlDisplay as _};
 use glutin::prelude::GlSurface as _;
@@ -18,8 +17,11 @@ use winit::application::ApplicationHandler;
 #[cfg(windows)]
 use winit::dpi::PhysicalPosition;
 use winit::dpi::{LogicalPosition, LogicalSize};
-use winit::event::{ElementState, StartCause, WindowEvent};
+#[cfg(not(windows))]
+use winit::event::ElementState;
+use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
+#[cfg(not(windows))]
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowAttributes, WindowId, WindowLevel};
 
@@ -93,6 +95,7 @@ struct NativeHost {
     catalogs: deskhud_ui::CatalogStore,
     settings: SettingsHost,
     menu: PetMenuHost,
+    #[allow(dead_code)]
     overlay_backend: Box<dyn OverlayBackend>,
     control_surface: ControlSurface,
     gl_window: Option<GlutinWindow>,
@@ -193,7 +196,7 @@ impl NativeHost {
         }
     }
 
-    fn show_menu(&mut self, event_loop: &ActiveEventLoop) {
+    fn show_menu(&mut self, _event_loop: &ActiveEventLoop) {
         if self.control_surface == ControlSurface::Settings {
             if let Some(window) = self.window() {
                 window.focus_window();
@@ -202,7 +205,7 @@ impl NativeHost {
             return;
         }
         #[cfg(windows)]
-        let (window, ppp, cursor) = {
+        let ppp = {
             let window = self.window().ok_or(()).ok();
             let Some(window) = window else { return };
             let ppp = window.scale_factor() as f32;
@@ -219,12 +222,12 @@ impl NativeHost {
                 state.pet_topmost = self.prefs.shell.topmost;
                 state.master_enabled = self.prefs.hud.is_master_enabled();
             }
-            (window, ppp, cursor)
+            ppp
         };
         #[cfg(target_os = "macos")]
         {
             if self.menu_surface.is_none() {
-                let surface = match unsafe { OverlaySurface::new(event_loop) } {
+                let surface = match unsafe { OverlaySurface::new(_event_loop) } {
                     Ok(surface) => surface,
                     Err(error) => {
                         tracing::error!(%error, "create macOS menu surface failed");
@@ -314,7 +317,7 @@ impl NativeHost {
         self.show_settings_tab(event_loop, SettingsTab::General);
     }
 
-    fn show_settings_tab(&mut self, event_loop: &ActiveEventLoop, tab: SettingsTab) {
+    fn show_settings_tab(&mut self, _event_loop: &ActiveEventLoop, tab: SettingsTab) {
         #[cfg(target_os = "macos")]
         self.close_menu_surface();
         #[cfg(target_os = "macos")]
@@ -338,7 +341,7 @@ impl NativeHost {
         );
         #[cfg(target_os = "macos")]
         if self.settings_surface.is_none() {
-            let surface = match unsafe { OverlaySurface::new(event_loop) } {
+            let surface = match unsafe { OverlaySurface::new(_event_loop) } {
                 Ok(surface) => surface,
                 Err(error) => {
                     tracing::error!(%error, "create macOS settings surface failed");
@@ -721,7 +724,9 @@ impl NativeHost {
         } else if open_settings {
             self.show_settings(event_loop);
         } else if open_hud_settings {
-            self.show_settings_tab(event_loop, SettingsTab::Hud);
+            #[cfg(windows)]
+            crate::gpu_overlay_probe::open_layout_editor();
+            self.hide_control_window();
         } else if !open && self.control_surface == ControlSurface::Menu {
             self.hide_control_window();
         }
@@ -742,6 +747,18 @@ impl NativeHost {
             state.discard_draft = false;
             values
         };
+        let layout_request = {
+            let mut state = self.settings.lock();
+            let request = state.hud_layout_request;
+            state.hud_layout_request = false;
+            request
+        };
+        if layout_request {
+            self.settings.lock().open = false;
+            self.hide_control_window();
+            #[cfg(windows)]
+            crate::gpu_overlay_probe::open_layout_editor();
+        }
         if apply {
             #[cfg(windows)]
             let topmost_changed = self.prefs.shell.topmost != draft.shell.topmost;

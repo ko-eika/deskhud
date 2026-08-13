@@ -787,6 +787,7 @@ pub fn request_prefs_reload() {
 }
 
 /// Open the native Windows DirectComposition layout editor.
+#[allow(dead_code)]
 pub fn open_layout_editor() {
     let hwnd = OVERLAY_HWND.load(Ordering::Acquire) as HWND;
     if !hwnd.is_null() {
