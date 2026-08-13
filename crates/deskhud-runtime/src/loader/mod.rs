@@ -4,8 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use deskhud_package::{
-    PackCatalog, PackManifest, PackageError, engine_family_of_product, open_pack,
-    pack_engine_matches, read_catalog_dir, read_manifest_dir,
+    PackCatalog, PackManifest, engine_family_of_product, open_pack, pack_engine_matches,
+    read_catalog_dir, read_manifest_dir,
 };
 use tracing::{info, warn};
 
@@ -122,7 +122,7 @@ impl PackageLoader {
         pack_root: &Path,
         locale: &str,
     ) -> Result<Option<PackCatalog>, RuntimeError> {
-        Ok(read_catalog_dir(pack_root, locale).map_err(PackageError::from)?)
+        Ok(read_catalog_dir(pack_root, locale)?)
     }
 }
 

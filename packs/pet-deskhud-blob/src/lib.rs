@@ -90,11 +90,17 @@ impl PetKind for BuiltinBlobPet {
         };
         let mut body = [0.25, 0.55, 0.95];
         if dock_tint {
-            if dock.bottom {
-                body = [0.20, 0.48, 0.88];
-            } else if !dock.is_free() {
-                body = [0.30, 0.62, 0.92];
-            }
+            body = match (dock.left, dock.right, dock.top, dock.bottom) {
+                (true, false, true, false) => [1.0, 0.78, 0.05],
+                (false, true, true, false) => [1.0, 0.18, 0.52],
+                (true, false, false, true) => [0.05, 0.88, 0.72],
+                (false, true, false, true) => [0.68, 0.12, 1.0],
+                (_, _, true, false) => [1.0, 0.48, 0.04],
+                (_, _, false, true) => [0.05, 0.82, 0.32],
+                (true, false, false, false) => [0.95, 0.08, 0.18],
+                (false, true, false, false) => [0.82, 0.08, 0.72],
+                _ => body,
+            };
         }
         if dragging && drag_react {
             body = [0.45, 0.70, 1.0];

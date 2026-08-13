@@ -26,6 +26,8 @@ pub(crate) enum OverlayControlCommand {
         x_points: f32,
         y_points: f32,
     },
+    PetDragStarted,
+    PetDragEnded,
     /// 请求 DeskHud 正常退出。
     Quit,
 }

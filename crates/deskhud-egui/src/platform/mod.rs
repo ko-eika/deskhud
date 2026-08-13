@@ -18,8 +18,11 @@ pub use fallback::{cursor_screen_px, fit_popup_pos_points};
 pub(crate) use macos::MacosOverlayBackend;
 #[cfg(target_os = "macos")]
 pub(crate) use macos::{
-    cursor_screen_px, fit_popup_pos_points, main_display_bounds_px, main_display_work_area_px,
-    start_global_mouse_listener,
+    NativePetView, configure_pet_window, create_native_pet_window, cursor_screen_px,
+    fit_popup_pos_points, main_display_bounds_px, main_display_work_area_px,
+    position_native_pet_window, request_native_pet_redraw, resize_native_pet_window,
+    set_native_pet_control_bus, set_native_pet_topmost, start_global_mouse_listener,
+    update_native_pet_paint,
 };
 #[cfg(windows)]
 pub(crate) use windows::{
@@ -34,7 +37,7 @@ pub(crate) use windows::{
 pub(crate) fn create_backend() -> Result<Box<dyn OverlayBackend>> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(Box::new(MacosOverlayBackend::default()));
+        Ok(Box::new(MacosOverlayBackend::default()))
     }
     #[cfg(windows)]
     {

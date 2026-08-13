@@ -12,7 +12,7 @@ use deskhud_engine::{
     OverlayScene, PetConfigBag, PetEvent, PetKey, PetModifiers, PetMouseButton, PetPaintCtx,
     PetTheme,
 };
-use deskhud_ui::{AnimationQuality, FpsLimit, PowerMode, UiPreferences};
+use deskhud_ui::{FpsLimit, PowerMode, UiPreferences};
 use windows::Win32::Foundation::POINT;
 use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, WS_EX_NOREDIRECTIONBITMAP};
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
@@ -158,7 +158,6 @@ struct GpuPetRuntime {
     prefs: UiPreferences,
     started: Instant,
     last_tick: Instant,
-    pupil_smooth: [f32; 2],
     mouse: MouseState,
     dock: DockState,
     global_keys_down: HashSet<PetKey>,
@@ -266,7 +265,6 @@ fn initialize_pet_runtime() -> GpuPetRuntime {
         prefs,
         started: now,
         last_tick: now,
-        pupil_smooth: [0.0, 0.0],
         mouse: MouseState::IDLE,
         dock: DockState::FREE,
         global_keys_down: HashSet::new(),
@@ -542,13 +540,6 @@ impl GpuOverlayRenderer {
             config,
             theme: pet_theme(),
         });
-        let smoothing = match self.pet.prefs.graphics.animation_quality {
-            AnimationQuality::Low => 0.12,
-            AnimationQuality::Standard => 0.28,
-            AnimationQuality::High => 0.42,
-        };
-        self.pet.pupil_smooth[0] += (paint.pupil_offset[0] - self.pet.pupil_smooth[0]) * smoothing;
-        self.pet.pupil_smooth[1] += (paint.pupil_offset[1] - self.pet.pupil_smooth[1]) * smoothing;
         let target = OverlayDisplayTarget::Display("primary".into());
         let scene = crate::pet_scene::scene_from_pet_paint(
             target.clone(),
@@ -558,7 +549,7 @@ impl GpuOverlayRenderer {
             },
             64.0,
             &paint,
-            self.pet.pupil_smooth,
+            paint.pupil_offset,
         );
         let dialogue = crate::pet_scene::dialogue_scene_from_pet_paint(
             target,

@@ -51,10 +51,7 @@ pub fn prefs_path() -> Option<PathBuf> {
 
 /// 从磁盘加载；文件不存在或损坏时返回 `Default`。
 pub fn load_or_default() -> UiPreferences {
-    match load() {
-        Ok(p) => p,
-        Err(_) => UiPreferences::default(),
-    }
+    load().unwrap_or_default()
 }
 
 /// 从磁盘加载（含旧格式迁移）。
@@ -869,8 +866,10 @@ mod tests {
 
     #[test]
     fn format_and_reload_new_shape() {
-        let mut prefs = UiPreferences::default();
-        prefs.locale = Locale::En;
+        let mut prefs = UiPreferences {
+            locale: Locale::En,
+            ..UiPreferences::default()
+        };
         prefs.pet.kind = "pet.deskhud.blob".into();
         prefs.pet.width = 96.0;
         prefs.pet.height = 96.0;

@@ -27,10 +27,11 @@ pub enum UiTheme {
 }
 
 /// Frame-rate pacing options.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum FpsLimit {
     /// Backend-selected pacing.
+    #[default]
     Auto,
     /// 30 frames per second.
     Fps30,
@@ -39,46 +40,30 @@ pub enum FpsLimit {
     /// 120 frames per second.
     Fps120,
 }
-impl Default for FpsLimit {
-    fn default() -> Self {
-        Self::Auto
-    }
-}
-
 /// Animation detail options.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum AnimationQuality {
     /// Reduced animation work.
     Low,
     /// Default animation quality.
+    #[default]
     Standard,
     /// Full animation quality.
     High,
 }
-impl Default for AnimationQuality {
-    fn default() -> Self {
-        Self::Standard
-    }
-}
-
 /// Power and smoothness trade-off options.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum PowerMode {
     /// Prefer lower power use.
     Saving,
     /// Balance power and smoothness.
+    #[default]
     Balanced,
     /// Prefer smooth motion.
     Smooth,
 }
-impl Default for PowerMode {
-    fn default() -> Self {
-        Self::Balanced
-    }
-}
-
 /// Backend-neutral graphics preferences.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphicsPreferences {

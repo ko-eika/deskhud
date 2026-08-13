@@ -1,5 +1,7 @@
 //! 统一设置窗：侧栏（常规 / 宠物 / 插件）+ 右侧内容。
 
+#![allow(clippy::too_many_arguments, clippy::clone_on_copy)]
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -3342,7 +3344,7 @@ fn pet_card_layout(available_w: f32) -> (usize, f32, f32, f32) {
     }
     let raw_w = (avail - CARD_GAP * (cols - 1) as f32) / cols as f32;
     let card_w = if cols == 1 {
-        raw_w.min(CARD_MAX_W).max(CARD_MIN_W)
+        raw_w.clamp(CARD_MIN_W, CARD_MAX_W)
     } else {
         raw_w.max(CARD_MIN_W)
     };

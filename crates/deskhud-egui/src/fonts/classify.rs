@@ -157,9 +157,10 @@ fn humanize_style(raw: &str) -> String {
     for (i, &ch) in chars.iter().enumerate() {
         if i > 0 && ch.is_uppercase() {
             let prev = chars[i - 1];
-            if prev.is_lowercase() || prev.is_ascii_digit() {
-                out.push(' ');
-            } else if chars.get(i + 1).is_some_and(|c| c.is_lowercase()) {
+            if prev.is_lowercase()
+                || prev.is_ascii_digit()
+                || chars.get(i + 1).is_some_and(|c| c.is_lowercase())
+            {
                 out.push(' ');
             }
         }

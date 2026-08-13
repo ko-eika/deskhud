@@ -39,7 +39,7 @@ impl OverlayBackend for FallbackOverlayBackend {
             height: 1080.0,
         };
         Ok(OverlayScreenArea {
-            display: display.clone(),
+            display,
             active: display,
             excluded: Vec::new(),
         })

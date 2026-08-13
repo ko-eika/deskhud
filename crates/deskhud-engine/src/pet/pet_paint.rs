@@ -1,9 +1,10 @@
 //! 框架无关的一帧宠物外观。
 
 /// 宠物请求的对话气泡外观。
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum PetBubbleStyle {
     /// 交由宿主按 [`crate::PetTheme`] 选择高对比度的默认配色。
+    #[default]
     FollowTheme,
     /// 使用宠物包提供的颜色与圆角；每个颜色分量均为 `0.0..=1.0`。
     Custom {
@@ -14,12 +15,6 @@ pub enum PetBubbleStyle {
         /// 气泡圆角半径（逻辑像素）。
         corner_radius: f32,
     },
-}
-
-impl Default for PetBubbleStyle {
-    fn default() -> Self {
-        Self::FollowTheme
-    }
 }
 
 /// UI 壳负责落到具体渲染器。

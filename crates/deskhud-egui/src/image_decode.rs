@@ -48,9 +48,11 @@ fn looks_like_svg(bytes: &[u8]) -> bool {
 
 fn rasterize_svg(bytes: &[u8], max_edge: u32) -> Option<ColorImage> {
     let max_edge = max_edge.max(1);
-    let mut opt = usvg::Options::default();
+    let opt = usvg::Options {
+        shape_rendering: usvg::ShapeRendering::GeometricPrecision,
+        ..usvg::Options::default()
+    };
     // 几何优先，避免 CrispEdges 把曲线切成阶梯
-    opt.shape_rendering = usvg::ShapeRendering::GeometricPrecision;
     let tree = usvg::Tree::from_data(bytes, &opt).ok()?;
     let size = tree.size();
     let sw = size.width().max(1.0);

@@ -139,7 +139,7 @@ impl PetMenuHost {
                     state.toggle_master = Some(!master_enabled);
                     close = true;
                 }
-                ui.add_enabled_ui(master_enabled, |ui| {
+                ui.add_enabled_ui(master_enabled && !cfg!(target_os = "macos"), |ui| {
                     if action_row(ui, &layout, dark).clicked() {
                         state.begin_hud_layout = true;
                         close = true;

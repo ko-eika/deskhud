@@ -62,7 +62,7 @@ impl FontFamilyEntry {
 
     pub fn style_names(&self) -> Vec<String> {
         let mut styles: Vec<String> = self.faces.iter().map(|f| f.style.clone()).collect();
-        styles.sort_by(|a, b| style_sort_key(a).cmp(&style_sort_key(b)));
+        styles.sort_by_key(|a| style_sort_key(a));
         styles.dedup();
         styles
     }
@@ -107,10 +107,9 @@ pub fn list_font_families() -> Vec<FontFamilyEntry> {
 
     let mut out: Vec<FontFamilyEntry> = by_key.into_values().collect();
     for fam in &mut out {
-        fam.faces
-            .sort_by(|a, b| style_sort_key(&a.style).cmp(&style_sort_key(&b.style)));
+        fam.faces.sort_by_key(|a| style_sort_key(&a.style));
     }
-    out.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+    out.sort_by_key(|a| a.label.to_lowercase());
     out
 }
 

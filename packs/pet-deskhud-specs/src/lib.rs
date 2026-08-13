@@ -478,27 +478,19 @@ impl PetKind for BuiltinSpecsPet {
             1.0 + (ctx.time_secs * 2.0).sin() as f32 * 0.025
         };
 
-        let mut body = [0.20, 0.58, 0.96];
+        let mut body: [f32; 3] = [0.20, 0.58, 0.96];
         if dock_tint {
-            if dock.left {
-                body = [0.18, 0.72, 0.78];
-            }
-            if dock.right {
-                body = [0.42, 0.48, 0.95];
-            }
-            if dock.top {
-                body = [0.55, 0.42, 0.92];
-            }
-            if dock.bottom {
-                body = [0.16, 0.50, 0.82];
-            }
-            if dock.is_corner() {
-                body = [
-                    (body[0] * 0.7 + 0.35_f32).min(1.0),
-                    (body[1] * 0.85_f32).min(1.0),
-                    (body[2] * 0.9 + 0.05_f32).min(1.0),
-                ];
-            }
+            body = match (dock.left, dock.right, dock.top, dock.bottom) {
+                (true, false, true, false) => [1.0, 0.78, 0.05],
+                (false, true, true, false) => [1.0, 0.18, 0.52],
+                (true, false, false, true) => [0.05, 0.88, 0.72],
+                (false, true, false, true) => [0.68, 0.12, 1.0],
+                (_, _, true, false) => [1.0, 0.48, 0.04],
+                (_, _, false, true) => [0.05, 0.82, 0.32],
+                (true, false, false, false) => [0.95, 0.08, 0.18],
+                (false, true, false, false) => [0.82, 0.08, 0.72],
+                _ => body,
+            };
         }
         if hover_hl && hovering && !dragging {
             body = [

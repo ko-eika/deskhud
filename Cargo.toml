@@ -25,7 +25,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.6.5"
+version = "0.6.6"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -64,7 +64,20 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 core-graphics = "0.23.2"
 core-foundation = "0.9.4"
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSScreen"] }
+objc2-foundation = "0.3.2"
+objc2-core-foundation = "0.3.2"
+objc2-core-graphics = "0.3.2"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "NSScreen",
+    "NSWindow",
+    "NSView",
+    "NSResponder",
+    "NSEvent",
+    "NSGraphics",
+    "NSGraphicsContext",
+    "NSColor",
+    "objc2-core-graphics",
+] }
 # 设置页图标/预览：SVG 栅格化（图标类无需系统字体）
 resvg = { version = "0.45", default-features = false }
 
