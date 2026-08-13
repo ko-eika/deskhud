@@ -47,8 +47,8 @@
 - [ ] HUD 真实帧数据与每屏原生合成
 - [x] 主屏 HUD 布局编辑：安全区、选中边框、移动、右下角缩放、持久化
 - [ ] HUD 运行态布局与可读性打磨
-- [ ] macOS 菜单文字错位与字形渲染异常（见 `docs/issues/macos-menu-text-offset.md`）
-- [ ] macOS 多窗口重绘生命周期与 GL 资源释放（见 `docs/issues/macos-multi-window-repaint.md`）
+- [x] macOS 菜单文字错位与字形渲染异常：已修复（绘制前切换上下文、坐标单位），待 macOS 实机验收（见 `docs/issues/macos-menu-text-offset.md`）
+- [x] macOS 多窗口重绘生命周期与 GL 资源释放：已修复（补 repaint 回调接线），待 macOS 实机验收（见 `docs/issues/macos-multi-window-repaint.md`）
 
 ## 明确后置
 

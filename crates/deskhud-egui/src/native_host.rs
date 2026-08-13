@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context as _, Result};
 #[cfg(not(target_os = "macos"))]
 use egui::Color32;
-use glutin::context::NotCurrentGlContext as _;
+use glutin::context::{NotCurrentGlContext as _, PossiblyCurrentGlContext as _};
 use glutin::display::{GetGlDisplay as _, GlDisplay as _};
 use glutin::prelude::GlSurface as _;
 use raw_window_handle::HasWindowHandle as _;
@@ -63,6 +63,17 @@ pub(crate) enum UserEvent {
         key: deskhud_engine::PetKey,
         pressed: bool,
     },
+}
+
+#[cfg(target_os = "macos")]
+fn setup_surface_repaint(surface: &OverlaySurface, proxy: &EventLoopProxy<UserEvent>) {
+    let proxy = proxy.clone();
+    surface
+        .egui
+        .egui_ctx
+        .set_request_repaint_callback(move |info| {
+            let _ = proxy.send_event(UserEvent::Repaint(info.delay));
+        });
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -239,6 +250,7 @@ impl NativeHost {
                     &self.prefs.shell.ui_font_id,
                     self.prefs.shell.ui_font_size,
                 );
+                setup_surface_repaint(&surface, &self.proxy);
                 self.menu_surface = Some(surface);
             }
             let Some(surface) = self.menu_surface.as_ref() else {
@@ -353,6 +365,7 @@ impl NativeHost {
                 &self.prefs.shell.ui_font_id,
                 self.prefs.shell.ui_font_size,
             );
+            setup_surface_repaint(&surface, &self.proxy);
             self.settings_surface = Some(surface);
         }
         #[cfg(target_os = "macos")]
@@ -795,9 +808,13 @@ impl NativeHost {
     fn draw(&mut self, event_loop: &ActiveEventLoop) {
         #[cfg(target_os = "macos")]
         let paint = self.mac_paint();
-        let Some(gl_window) = self.gl_window.as_ref() else {
+        let Some(gl_window) = self.gl_window.as_mut() else {
             return;
         };
+        if let Err(error) = gl_window.make_current() {
+            tracing::error!(%error, "activate native UI GL context failed");
+            return;
+        }
         let Some(egui) = self.egui.as_mut() else {
             return;
         };
@@ -870,17 +887,17 @@ impl NativeHost {
             return;
         };
         let menu = self.menu.clone();
+        if let Err(error) = surface.native.make_current() {
+            tracing::error!(%error, "activate macOS menu GL context failed");
+            return;
+        }
         let (native, egui) = (&surface.native, &mut surface.egui);
         let window = native.window();
         let theme = self.prefs.shell.ui_theme;
         if let (Some((cursor_x, cursor_y)), Ok(origin)) =
             (crate::platform::cursor_screen_px(), window.outer_position())
         {
-            let scale = window.scale_factor().max(0.01) as f32;
-            let local = egui::pos2(
-                (cursor_x - origin.x) as f32 / scale,
-                (cursor_y - origin.y) as f32 / scale,
-            );
+            let local = egui::pos2((cursor_x - origin.x) as f32, (cursor_y - origin.y) as f32);
             egui.egui_ctx.input_mut(|input| {
                 input.events.push(egui::Event::PointerMoved(local));
             });
@@ -913,6 +930,10 @@ impl NativeHost {
             return;
         };
         let settings = self.settings.clone();
+        if let Err(error) = surface.native.make_current() {
+            tracing::error!(%error, "activate macOS settings GL context failed");
+            return;
+        }
         let (native, egui) = (&surface.native, &mut surface.egui);
         let window = native.window();
         egui.run(window, |ui| settings.draw_native(ui));
@@ -1549,6 +1570,10 @@ impl GlutinWindow {
 
     pub(crate) fn window(&self) -> &Window {
         &self.window
+    }
+
+    pub(crate) fn make_current(&mut self) -> glutin::error::Result<()> {
+        self.context.make_current(&self.surface)
     }
 
     fn resize(&self, size: winit::dpi::PhysicalSize<u32>) {

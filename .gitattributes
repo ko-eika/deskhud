@@ -1,0 +1,27 @@
+# 统一文本编码与换行：所有文本以 UTF-8 与 LF 存入仓库，避免平台/编辑器产生乱码或 CRLF 混排。
+* text=auto
+
+# 文本类型统一 UTF-8 + LF
+*.rs       text eol=lf
+*.toml     text eol=lf
+*.md       text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.json     text eol=lf
+*.lock     text eol=lf
+.gitignore    text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+
+# 二进制资产，禁止换行/编码转换
+*.ico     binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ttf     binary
+*.otf     binary
+*.woff    binary
+*.woff2   binary
+*.deskhud binary

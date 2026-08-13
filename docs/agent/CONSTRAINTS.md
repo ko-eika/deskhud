@@ -10,6 +10,7 @@
 - 一能力一目录；职责变多时拆分模块。薄 `lib.rs`、短 `error.rs` 可例外。
 - Rust `edition = "2024"`；公共 API 写明「为什么」；生产路径避免 `unwrap`；依赖 `{ workspace = true }`。
 - 第三方版本只在根 `[workspace.dependencies]`；变更后 `cargo fmt`，尽量 `clippy --workspace --all-targets -- -D warnings`。
+- **文本文件统一 UTF-8**：源码、文档与配置一律使用 UTF-8（配合根目录 `.gitattributes` / `.editorconfig`），禁止以 ANSI/GBK 等其它编码写入，避免乱码；二进制资产在 `.gitattributes` 声明为 `binary`。
 - 产品版本见根 `Cargo.toml`；内置包 `manifest.toml` 的 `version` **跟程序**；`engine` 跟兼容族（[`docs/versioning.md`](../versioning.md)）。
 - 改架构、窗口行为或包契约前，先读近期提交说明（`git log --oneline`）及相关文件历史（`git log -- <path>`）；提交记录仅供追溯，和本文或现行代码冲突时以后两者为准。
 
