@@ -4,13 +4,13 @@
 
 目标是让宠物和可交互 HUD 消费指针输入，而被动 HUD 与空白区域把输入交给其他应用。这个效果依赖窗口系统，不能由单个全屏 UI 窗口可靠表达。
 
-迁移不改变以下边界：`deskhud-engine`、宠物包、HUD 插件与 SDK 只表达场景和输入语义，不得依赖 HWND、Cocoa、Wayland 或渲染器；`deskhud-egui` 仍是唯一设置与菜单 UI。
+迁移不改变以下边界：`deskhud-engine`、宠物包、HUD 插件与 SDK 只表达场景和输入语义，不得依赖 HWND、Cocoa、Wayland 或渲染器。平台后端负责宠物、气泡、HUD、布局编辑器和菜单；设置窗暂由 `winit + egui_glow` 承载。
 
-Windows 默认路径使用原生 GPU 宠物窗与直接托管的 egui 控制窗；旧的双路径运行方案已经移除，避免维护两套窗口生命周期。非 Windows 当前只保留可编译的控制宿主骨架，透明宠物/HUD 必须由对应平台后端接管后才算可用。HUD 原生合成尚未接管，因此当前 `0.6.x` 是迁移版本线，而不是全部后端完成。当前产品版本为 `0.6.4`。
+Windows 默认路径使用原生 GPU 宠物、菜单、气泡和 HUD 窗口；设置页暂由 `winit + egui_glow` 托管。旧的双路径运行方案已经移除，避免维护两套窗口生命周期。macOS/Linux 的正式原生窗口后端按里程碑推进，fallback 仅表示明确降级，不代表正式平台适配完成。当前产品版本为 `0.6.5`。
 
-## 0.6.4 macOS 待验收问题
+## macOS 待验收问题（0.6.5）
 
-macOS 独立菜单窗口的 context 切换、重绘回调和坐标单位代码修复已完成，但尚无 macOS 实机验收结论；右键菜单、打开设置、返回菜单的文字、hover、动画与窗口生命周期仍需验收。问题记录见 [`docs/issues/macos-menu-text-offset.md`](issues/macos-menu-text-offset.md) 与 [`docs/issues/macos-multi-window-repaint.md`](issues/macos-multi-window-repaint.md)。
+macOS 菜单迁移已有代码接入，但尚无完整功能验收结论；宠物、气泡、HUD 和布局窗口原生迁移尚未开始。状态记录见 [`docs/agent/roadmap/02-macos-native.md`](agent/roadmap/02-macos-native.md)。
 
 ## 统一契约
 
@@ -36,7 +36,7 @@ macOS 独立菜单窗口的 context 切换、重绘回调和坐标单位代码�
 - 以能力协商而非 `cfg` 分支决定产品行为：不支持局部穿透的平台仍能显示宠物/HUD，但须采用不遮挡或用户可关闭的降级模式。
 - 坐标在领域层使用目标显示器的逻辑坐标；后端独自处理物理像素、DPI、负坐标、显示器热插拔与工作区。
 - `VirtualDesktop` 只有后端明确报告支持，且混合 DPI、屏幕空洞和热插拔测试完成后才能启用。
-- 原生后端可使用系统窗口/合成 API，但不得成为第二套产品 UI；设置与菜单继续由 egui 提供。
+- 原生后端可使用系统窗口/合成 API；设置页暂由 egui 提供，菜单和透明覆盖层不得再创建 egui 产品 UI。
 
 ## Windows 覆盖层验收记录
 

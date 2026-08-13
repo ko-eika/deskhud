@@ -42,8 +42,8 @@ cargo build -p deskhud-egui --release
 
 - Windows 会通过 `winresource` 嵌入 `assets/icon.ico`；release 构建无控制台窗口。
 - 内置 JetBrains Mono + Noto Sans SC 全字重会使体积明显变大，属预期。
-- 设置与菜单控制窗使用 **Glow（OpenGL）**；Windows 宠物覆盖层和 HUD 原生合成使用 D3D11 + Direct2D + DirectComposition。控制窗不承担透明覆盖层职责。
-- 体验最完整的目标平台仍是 **Windows**；macOS / Linux 为回退实现。
+- 设置窗口暂使用 **Glow（OpenGL）**；Windows 宠物、菜单、气泡和 HUD 原生合成使用 D3D11 + Direct2D + DirectComposition。设置窗不承担透明覆盖层职责。
+- 当前体验最完整的目标平台是 **Windows**；macOS/Linux 的原生窗口后端按迁移里程碑推进，fallback 仅作为能力不足时的明确降级。
 
 ### 可选：体积与符号
 

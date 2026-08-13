@@ -1,6 +1,6 @@
-# DeskHud 0.6.x 路线图
+# DeskHud 0.6.x 路线图（当前版本 0.6.5）
 
-当前产品状态：Windows 宠物覆盖层已可用；HUD 真实帧数据与每屏原生合成仍是 0.6.x 的主要缺口。
+当前产品状态：引擎约定与迁移底座已建立；Windows 原生窗口迁移已在实机验证主要功能，仍有 HUD 生命周期、重绘、穿透和功能补齐事项。平台计划详见 [`docs/agent/roadmap/README.md`](agent/roadmap/README.md)。
 
 ## Phase 0 — 底座规划
 
@@ -19,10 +19,10 @@
 
 ## Phase 1b — 跨平台 MVP（与 Phase 1 并行，基础完成）
 
-- [x] `deskhud-egui`：统一 `OverlayBackend` 抽象（Windows GPU + macOS 原生窗口 + Linux 回退）
+- [x] `deskhud-egui`：统一 `OverlayBackend` 抽象（Windows 原生 GPU + macOS 基础接入 + Linux 能力降级）
 - [x] `OverlayScreenArea`：活动区/系统禁区契约，Windows 使用 `MONITORINFO`，macOS 使用 `NSScreen.visibleFrame`
 - [x] 宠物行为归属宠物包；宿主只转发中性 `PetEvent` / `PetPaintCtx`
-- [x] macOS：独立宠物、菜单/设置窗口与全局键鼠接线
+- [~] macOS：右键菜单已迁移但功能待验证；宠物、气泡、HUD 和布局窗口原生迁移待推进
 - [x] 非 Win：视口拖移；全局键鼠降级；CJK 字体候选扩展
 - [x] CI：`windows` / `ubuntu` / `macos` `cargo check`
 - 后续：非 Win 透明 / 贴边像素级对齐（非本阶段硬目标）
@@ -44,11 +44,10 @@
 
 - [x] prefs 持久化
 - 更多内置宠
-- [x] HUD 真实帧数据与每屏原生合成：Windows 运行态 HUD 合成窗已接入（独立 HUD 窗、HTNOWHERE 穿透、按 slot 定位缩放），待 Windows 实机验收
-- [x] 主屏 HUD 布局编辑：安全区、选中边框、移动、右下角缩放、持久化
+- [~] HUD 真实帧数据与每屏原生合成：Windows 已验证可渲染并随插件更新；布局模式生命周期、退出重绘、鼠标穿透和功能补齐待完成；其它平台按各自 native 计划推进
+- [~] 主屏 HUD 布局编辑：基本功能可用；退出后的 HUD 刷新、选中 HUD 重置大小待完善
 - [ ] HUD 运行态布局与可读性打磨
-- [~] macOS 菜单文字错位与字形渲染异常：代码修复完成，待 macOS 实机验收（见 `docs/issues/macos-menu-text-offset.md`）
-- [~] macOS 多窗口重绘生命周期与 GL 资源释放：代码修复完成，待 macOS 实机验收；重点覆盖右键菜单→设置→返回菜单（见 `docs/issues/macos-multi-window-repaint.md`）
+- [~] macOS 菜单迁移：代码已接入，功能待验收；宠物、气泡、HUD 和布局窗口原生迁移尚未开始（见 `docs/agent/roadmap/02-macos-native.md`）
 
 ## 明确后置
 

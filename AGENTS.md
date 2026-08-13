@@ -7,7 +7,7 @@
 
 - 唯一 UI 是 `deskhud-egui`；禁止第二套 UI、托盘和 UI 依赖 `git2`。
 - `deskhud-engine` 只放契约，不能依赖 `deskhud-sdk`；社区扩展只能是 WASM + SDK，不能分发原生 DLL。
-- egui 仅负责菜单和设置，由 `winit + egui_glow` 直接托管不透明控制窗；宠物/HUD 透明合成属于平台覆盖层，禁止恢复 eframe/deferred 双路径。
+- 设置页暂由 `winit + egui_glow` 托管；菜单迁移到平台原生菜单。宠物、气泡、HUD、布局编辑与菜单由平台覆盖层负责，禁止恢复 eframe/deferred 双路径。
 - 透明命中不能靠全屏 UI 窗或窗口 RGN 模拟；平台覆盖层只消费中性场景/命中契约，OS 类型不得进入包和引擎契约。
 - UI 组件风格必须统一；所有用户可见文案（包括关于页的版本、作者、许可证、技术栈等真实信息）必须国际化，新增文案同步补齐各语言目录，禁止页面硬编码。
 - 宠物置顶只跟 prefs，设置窗始终不置顶；菜单打开时可临时位于宠物之上，禁止用 owner / 临时取消宠物置顶形成层级循环。
@@ -47,7 +47,7 @@
 
 | 领域 | 选择 | 说明 |
 |------|------|------|
-| UI | egui + winit / egui_glow | 唯一 UI；平台覆盖层负责透明合成，无 eframe、无托盘、无第二套框架 |
+| UI | 原生平台窗口 + 设置页 egui | 设置页暂用 `winit + egui_glow`；菜单、宠物、气泡、HUD、布局编辑由平台后端实现；无 eframe、无托盘 |
 | 内置扩展 | 原生 Rust `PetKind` / `Plugin` | 性能好、调试方便 |
 | 社区扩展 | **WASM**（wasmtime）+ `deskhud-sdk` | 可带行为逻辑且可沙箱，适合下载分发 |
 | 包格式 | `.deskhud`（目录或 zip）+ `manifest.toml` | 宠物包 / HUD 插件同构，靠 `kind` 区分 |
@@ -59,7 +59,7 @@
 ## 架构与 crate
 
 ```
-deskhud-egui        UI 壳（透明宠窗 / 菜单 / 设置：常规·宠物·插件·关于）
+deskhud-egui        UI 壳（平台窗口编排 + 设置页：常规·宠物·插件·关于）
        │
        ▼
 deskhud-runtime     本地发现包 → 加载（packs 原生 / WASM）→ 注册

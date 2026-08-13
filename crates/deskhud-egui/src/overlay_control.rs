@@ -1,6 +1,6 @@
 //! 原生覆盖层到 egui 控制层的中性命令桥。
 //!
-//! Windows 覆盖层只产生用户意图，不创建第二套菜单或设置 UI；直接 egui 宿主
+//! 原生覆盖层只产生用户意图；设置仍由 egui 宿主承载，菜单由平台原生后端承载。
 #![cfg_attr(not(windows), allow(dead_code))]
 //! 消费命令并显示控制窗口。该队列不携带 HWND 或渲染器类型，供后续其它平台复用。
 
@@ -15,10 +15,17 @@ type CommandWaker = Arc<dyn Fn() + Send + Sync>;
 pub(crate) enum OverlayControlCommand {
     /// Wake the existing pet overlay without opening a menu.
     ActivateExisting,
-    /// 打开现有 egui 宠物菜单。
+    /// 请求平台原生菜单。
     OpenMenu,
+    OpenSettings,
+    OpenHudLayout,
+    SetTopmost(bool),
+    SetHudMaster(bool),
     /// Persist the pet's snapped logical-screen position.
-    PetMoved { x_points: f32, y_points: f32 },
+    PetMoved {
+        x_points: f32,
+        y_points: f32,
+    },
     /// 请求 DeskHud 正常退出。
     Quit,
 }

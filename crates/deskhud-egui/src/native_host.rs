@@ -188,6 +188,23 @@ impl NativeHost {
             match command {
                 OverlayControlCommand::ActivateExisting => {}
                 OverlayControlCommand::OpenMenu => self.show_menu(event_loop),
+                OverlayControlCommand::OpenSettings => self.show_settings(event_loop),
+                OverlayControlCommand::OpenHudLayout => {
+                    #[cfg(windows)]
+                    crate::gpu_overlay_probe::open_layout_editor();
+                }
+                OverlayControlCommand::SetTopmost(enabled) => {
+                    self.prefs.shell.topmost = enabled;
+                    self.menu.lock().pet_topmost = enabled;
+                    self.save_prefs();
+                    #[cfg(windows)]
+                    crate::gpu_overlay_probe::set_topmost(enabled);
+                }
+                OverlayControlCommand::SetHudMaster(enabled) => {
+                    self.prefs.hud.set_master_enabled(enabled);
+                    self.menu.lock().master_enabled = enabled;
+                    self.save_prefs();
+                }
                 OverlayControlCommand::PetMoved { x_points, y_points } => {
                     self.prefs.pet.set_pos(x_points, y_points);
                     let mut settings = self.settings.lock();

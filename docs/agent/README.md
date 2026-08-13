@@ -23,13 +23,15 @@
 | Cursor 自动注入摘要 | `.cursor/rules/*.mdc` | 薄指针 → AGENTS / CONSTRAINTS |
 | Cursor 旧记忆路径 | `.cursor/MEMORY.md` | 仅跳转到 `MEMORY.md` |
 
-## 待办任务索引
+## 迁移路线图与验收状态
+
+窗口迁移计划、里程碑状态和验收记录统一放在 [`roadmap/`](./roadmap/README.md)。不要在 `tasks/` 下新增计划文件。
+
+## 历史任务索引
 
 | 任务文件 | 状态 | 说明 |
 |----------|------|------|
-| [`tasks/macos-gl-lifetime-fix.md`](./tasks/macos-gl-lifetime-fix.md) | 代码完成·待验收 | macOS 菜单文字错位 + 多窗口重绘冻结（3 个 GL/重绘/坐标 bug），须 mac 实机验收 |
-| [`tasks/windows-hud-runtime-compositing.md`](./tasks/windows-hud-runtime-compositing.md) | 已实现·待验收 | 计划 1：Windows 运行态 HUD 合成窗（0.6.3 已接入 GPU 覆盖层） |
-| [`tasks/windows-native-context-menu-pilot.md`](./tasks/windows-native-context-menu-pilot.md) | 待执行 | 计划 2 第一步：Windows 原生右击菜单试点（含 CONSTRAINTS 变更前提） |
+旧任务内容已迁移至 [`roadmap/`](./roadmap/README.md)，`tasks/` 不再作为计划入口。
 | [`../window-layers.md`](../window-layers.md) | 定稿 | 四类独立窗口（宠物/气泡/HUD信息/HUD布局）的分层交互说明 |
 
 ## 变更约定

@@ -6,6 +6,8 @@ mod fonts;
 mod gpu_overlay_probe;
 mod image_decode;
 mod native_host;
+#[cfg(windows)]
+mod native_menu;
 mod overlay_control;
 mod overlay_surface;
 mod pet_menu;

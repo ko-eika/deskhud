@@ -1,4 +1,4 @@
-﻿//! Windows D3D11 + Direct2D + DirectComposition 宠物覆盖层后端。
+//! Windows D3D11 + Direct2D + DirectComposition 宠物覆盖层后端。
 //!
 //! 它复用引擎契约与 prefs，承载正式 Windows 宠物运行态。
 
@@ -36,6 +36,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WNDCLASSW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
 };
 
+use crate::native_menu;
 use crate::overlay_control::{OverlayControlBus, OverlayControlCommand};
 use crate::platform::{GpuCompositor, is_device_lost};
 
@@ -1898,7 +1899,12 @@ unsafe extern "system" fn window_proc(
             0x0205 => {
                 CONTROLS.with(|slot| {
                     if let Some(bus) = slot.borrow().as_ref() {
-                        bus.request(OverlayControlCommand::OpenMenu);
+                        native_menu::show(
+                            bus.clone(),
+                            WINDOW_LEFT.load(Ordering::Relaxed),
+                            WINDOW_TOP.load(Ordering::Relaxed),
+                            SIZE,
+                        );
                     }
                 });
                 0
