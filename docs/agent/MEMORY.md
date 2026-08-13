@@ -62,6 +62,7 @@
 | 2026-08-13 | 产品及内置包恢复升至 `0.6.0` / `engine = "0.6"`，并记录 macOS 独立菜单文字错位与字形渲染异常 | 统一窗口后端与安全区契约属于包可感知的 MINOR 变更；菜单文字问题仍未解决，后续优先检查 surface 尺寸/DPI、egui painter 生命周期、glyph atlas 纹理上传和重绘时序 |
 | 2026-08-13 | 约定：文本文件统一 UTF-8 编码，新增 `.gitattributes` / `.editorconfig` 强制 | 防止 ANSI/GBK 写入导致乱码及跨平台换行混乱 |
 | 2026-08-13 | 尝试修复 macOS 菜单文字错位与多窗重绘冻结（GL context 切换 + repaint 接线 + 坐标单位）；产品至 `0.6.2` | 按 `macos-gl-lifetime-fix.md` 定位；因无 macOS 实机，代码已提交、验收待定，不影响 engine 族 |
+| 2026-08-13 | Windows 运行态 HUD 合成窗接入 GPU 覆盖层（独立 HUD 窗、`HTNOWHERE`/`WS_EX_NOACTIVATE` 穿透、按 `slot_layout` 定位缩放）；产品至 `0.6.3` | 消费既有 `hud_frame`/`HudVisual` 契约，engine 族不变 |
 
 ## 已知上游限制（勿当「本仓库可修」）
 

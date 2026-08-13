@@ -14,7 +14,7 @@
 - [x] 本地扫描 `packages/`（目录 + `.deskhud`）并引导注册（清单 + 原生内置映射；WASM 后接）
 - [~] 引擎化 / 版本契约 / 内置 crate 化 / HUD 全屏布局（0.3）
 - 扩展 `PetKind`：更多 `PetEvent` / 中性 `PetFrame`
-- [x] HUD 全屏 overlay + 布局 prefs + Windows 主屏原生布局编辑器（帧数据仍待）
+- [x] HUD 全屏 overlay + 布局 prefs + Windows 主屏原生布局编辑器（运行态帧合成见 Phase 4）
 - 扩展 `Plugin`：`HudFrame` 真实帧数据
 
 ## Phase 1b — 跨平台 MVP（与 Phase 1 并行，基础完成）
@@ -44,7 +44,7 @@
 
 - [x] prefs 持久化
 - 更多内置宠
-- [ ] HUD 真实帧数据与每屏原生合成
+- [x] HUD 真实帧数据与每屏原生合成：Windows 运行态 HUD 合成窗已接入（独立 HUD 窗、HTNOWHERE 穿透、按 slot 定位缩放），待 Windows 实机验收
 - [x] 主屏 HUD 布局编辑：安全区、选中边框、移动、右下角缩放、持久化
 - [ ] HUD 运行态布局与可读性打磨
 - [x] macOS 菜单文字错位与字形渲染异常：已修复（绘制前切换上下文、坐标单位），待 macOS 实机验收（见 `docs/issues/macos-menu-text-offset.md`）

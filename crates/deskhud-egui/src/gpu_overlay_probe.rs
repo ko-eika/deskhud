@@ -1,4 +1,4 @@
-//! Windows D3D11 + Direct2D + DirectComposition 宠物覆盖层后端。
+﻿//! Windows D3D11 + Direct2D + DirectComposition 宠物覆盖层后端。
 //!
 //! 它复用引擎契约与 prefs，承载正式 Windows 宠物运行态。
 
@@ -24,22 +24,24 @@ use windows_sys::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_ESCAPE, VK_LBUTTON};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_VREDRAW, CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow,
-    DispatchMessageW, GetMessageW, GetSystemMetrics, HC_ACTION, HTTRANSPARENT, HWND_NOTOPMOST,
-    HWND_TOPMOST, IDC_ARROW, IDC_SIZENWSE, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, LoadCursorW, MSG,
-    MSLLHOOKSTRUCT, PostMessageW, PostQuitMessage, RegisterClassW, SM_CXSCREEN, SM_CYSCREEN,
-    SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-    SWP_SHOWWINDOW, SetCursor, SetTimer, SetWindowPos, SetWindowsHookExW, ShowWindow,
-    TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_DESTROY,
-    WM_DISPLAYCHANGE, WM_DPICHANGED, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP,
-    WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCHITTEST, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SETCURSOR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WNDCLASSW, WS_EX_TOOLWINDOW,
-    WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
+    DispatchMessageW, GetMessageW, GetSystemMetrics, HC_ACTION, HTNOWHERE, HTTRANSPARENT,
+    HWND_NOTOPMOST, HWND_TOPMOST, IDC_ARROW, IDC_SIZENWSE, KBDLLHOOKSTRUCT, LLKHF_EXTENDED,
+    LoadCursorW, MSG, MSLLHOOKSTRUCT, PostMessageW, PostQuitMessage, RegisterClassW, SM_CXSCREEN,
+    SM_CYSCREEN, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SWP_SHOWWINDOW, SetCursor, SetLayeredWindowAttributes, SetTimer, SetWindowPos,
+    SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL,
+    WH_MOUSE_LL, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
+    WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL,
+    WM_NCHITTEST, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETCURSOR, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER,
+    WNDCLASSW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
 };
 
 use crate::overlay_control::{OverlayControlBus, OverlayControlCommand};
 use crate::platform::{GpuCompositor, is_device_lost};
 
 const TIMER_ID: usize = 1;
+const WS_EX_NOACTIVATE_VALUE: u32 = 0x0800_0000;
+const MA_NOACTIVATE_VALUE: LRESULT = 3;
 const WM_SYNC_TOPMOST: u32 = 0x8000 + 17;
 const WM_ACTIVATE_EXISTING: u32 = 0x8000 + 1;
 const WM_OPEN_LAYOUT_EDITOR: u32 = 0x8000 + 2;
@@ -128,6 +130,11 @@ static WORK_TOP: AtomicI32 = AtomicI32::new(0);
 static WORK_WIDTH: AtomicI32 = AtomicI32::new(1);
 static WORK_HEIGHT: AtomicI32 = AtomicI32::new(1);
 static OVERLAY_HWND: AtomicIsize = AtomicIsize::new(0);
+static HUD_HWND: AtomicIsize = AtomicIsize::new(0);
+static HUD_LEFT: AtomicI32 = AtomicI32::new(0);
+static HUD_TOP: AtomicI32 = AtomicI32::new(0);
+static HUD_WIDTH: AtomicI32 = AtomicI32::new(1);
+static HUD_HEIGHT: AtomicI32 = AtomicI32::new(1);
 static DIALOGUE_HWND: AtomicIsize = AtomicIsize::new(0);
 static RELOAD_PREFS: AtomicBool = AtomicBool::new(false);
 static PET_THEME: AtomicU8 = AtomicU8::new(1);
@@ -136,9 +143,11 @@ static DESIRED_TOPMOST: AtomicBool = AtomicBool::new(true);
 
 struct GpuOverlayRenderer {
     compositor: GpuCompositor,
+    hud_compositor: GpuCompositor,
     dialogue_compositor: GpuCompositor,
     dialogue_hwnd: HWND,
     dialogue_visible: bool,
+    hud_visible: bool,
     pet: GpuPetRuntime,
 }
 
@@ -169,6 +178,11 @@ impl GpuOverlayRenderer {
         unsafe {
             Ok(Self {
                 compositor: GpuCompositor::create(hwnd as isize, SIZE, SIZE)?,
+                hud_compositor: GpuCompositor::create(
+                    HUD_HWND.load(Ordering::Acquire),
+                    WORK_WIDTH.load(Ordering::Relaxed),
+                    WORK_HEIGHT.load(Ordering::Relaxed),
+                )?,
                 dialogue_compositor: GpuCompositor::create(
                     dialogue_hwnd as isize,
                     DIALOGUE_WIDTH,
@@ -176,6 +190,7 @@ impl GpuOverlayRenderer {
                 )?,
                 dialogue_hwnd,
                 dialogue_visible: false,
+                hud_visible: false,
                 pet: initialize_pet_runtime(),
             })
         }
@@ -183,8 +198,28 @@ impl GpuOverlayRenderer {
 
     unsafe fn render(&mut self) -> windows::core::Result<()> {
         unsafe {
-            let (pet_scene, dialogue_scene) = self.pet_scenes();
+            let (pet_scene, dialogue_scene, hud_scene) = self.pet_scenes();
             self.compositor.render(&pet_scene)?;
+            let hud_hwnd = HUD_HWND.load(Ordering::Acquire) as HWND;
+            if let Some(hud_scene) = hud_scene {
+                let _ = SetWindowPos(
+                    hud_hwnd,
+                    std::ptr::null_mut(),
+                    HUD_LEFT.load(Ordering::Relaxed),
+                    HUD_TOP.load(Ordering::Relaxed),
+                    HUD_WIDTH.load(Ordering::Relaxed),
+                    HUD_HEIGHT.load(Ordering::Relaxed),
+                    SWP_NOACTIVATE | SWP_NOZORDER | SWP_SHOWWINDOW,
+                );
+                self.hud_compositor.render(&hud_scene)?;
+                if !self.hud_visible {
+                    let _ = ShowWindow(hud_hwnd, SW_SHOWNOACTIVATE);
+                    self.hud_visible = true;
+                }
+            } else if self.hud_visible {
+                let _ = ShowWindow(hud_hwnd, SW_HIDE);
+                self.hud_visible = false;
+            }
             if let Some(dialogue_scene) = dialogue_scene {
                 self.dialogue_compositor.render(&dialogue_scene)?;
                 position_dialogue_window(self.dialogue_hwnd);
@@ -198,6 +233,7 @@ impl GpuOverlayRenderer {
                         DESIRED_TOPMOST.load(Ordering::Acquire),
                         pet_hwnd,
                         self.dialogue_hwnd,
+                        HUD_HWND.load(Ordering::Acquire) as HWND,
                     );
                 }
             } else if self.dialogue_visible {
@@ -473,7 +509,7 @@ fn read_diagnostics_setting() -> bool {
 }
 
 impl GpuOverlayRenderer {
-    fn pet_scenes(&mut self) -> (OverlayScene, Option<OverlayScene>) {
+    fn pet_scenes(&mut self) -> (OverlayScene, Option<OverlayScene>, Option<OverlayScene>) {
         let now = Instant::now();
         let dt = now
             .duration_since(self.pet.last_tick)
@@ -530,7 +566,8 @@ impl GpuOverlayRenderer {
             pet_theme(),
             self.pet.prefs.graphics,
         );
-        (scene, dialogue)
+        let hud = hud_scene(&self.pet.host, &self.pet.prefs);
+        (scene, dialogue, hud)
     }
 }
 
@@ -545,6 +582,126 @@ fn pointer_direction() -> [f32; 2] {
         let length = ((dx * dx + dy * dy) as f32).sqrt().max(1.0);
         [dx as f32 / length, dy as f32 / length]
     }
+}
+
+fn hud_scene(registry: &EngineRegistry, prefs: &UiPreferences) -> Option<OverlayScene> {
+    let mut scene = OverlayScene {
+        target: OverlayDisplayTarget::Display("primary".into()),
+        visuals: Vec::new(),
+        hit_regions: Vec::new(),
+    };
+    let mut active = false;
+    let mut index = 0;
+    for (plugin, contribution) in registry.all_hud_contributions() {
+        if !prefs
+            .hud
+            .is_active(plugin, contribution.id, contribution.default_enabled)
+        {
+            continue;
+        }
+        let frame = registry.hud_frame(plugin, contribution.id, 0.0);
+        if frame.is_empty() {
+            continue;
+        }
+        active = true;
+        let layout = prefs.hud.slot_layout(plugin, contribution.id, index);
+        let origin = OverlayPoint {
+            x: layout.x * WORK_WIDTH.load(Ordering::Relaxed).max(1) as f32,
+            y: layout.y * WORK_HEIGHT.load(Ordering::Relaxed).max(1) as f32,
+        };
+        let mut panel = deskhud_engine::OverlayRect {
+            origin,
+            width: 180.0 * layout.scale,
+            height: 48.0 * layout.scale,
+        };
+        for (visual_index, visual) in frame.visuals.into_iter().enumerate() {
+            match visual {
+                deskhud_engine::HudVisual::Panel {
+                    width,
+                    height,
+                    radius,
+                    color,
+                } => {
+                    panel.width = width * layout.scale;
+                    panel.height = height * layout.scale;
+                    scene
+                        .visuals
+                        .push(deskhud_engine::OverlayVisual::RoundedRect(
+                            deskhud_engine::OverlayRoundedRect {
+                                id: format!(
+                                    "hud.{plugin}.{}.panel.{visual_index}",
+                                    contribution.id
+                                ),
+                                rect: panel,
+                                corner_radius: radius * layout.scale,
+                                color: deskhud_engine::OverlayColor {
+                                    red: color[0],
+                                    green: color[1],
+                                    blue: color[2],
+                                    alpha: color[3],
+                                },
+                            },
+                        ));
+                }
+                deskhud_engine::HudVisual::Text {
+                    text,
+                    font_size,
+                    color,
+                } => {
+                    scene.visuals.push(deskhud_engine::OverlayVisual::Text(
+                        deskhud_engine::OverlayText {
+                            id: format!("hud.{plugin}.{}.text.{visual_index}", contribution.id),
+                            rect: panel,
+                            text,
+                            font_size: font_size * layout.scale,
+                            color: deskhud_engine::OverlayColor {
+                                red: color[0],
+                                green: color[1],
+                                blue: color[2],
+                                alpha: color[3],
+                            },
+                        },
+                    ));
+                }
+            }
+        }
+        index += 1;
+    }
+    if !active {
+        return None;
+    }
+    let (mut min_x, mut min_y, mut max_x, mut max_y): (f32, f32, f32, f32) =
+        (f32::MAX, f32::MAX, 0.0, 0.0);
+    for visual in &scene.visuals {
+        let rect = match visual {
+            deskhud_engine::OverlayVisual::RoundedRect(v) => v.rect,
+            deskhud_engine::OverlayVisual::Text(v) => v.rect,
+            _ => continue,
+        };
+        min_x = min_x.min(rect.origin.x);
+        min_y = min_y.min(rect.origin.y);
+        max_x = max_x.max(rect.origin.x + rect.width);
+        max_y = max_y.max(rect.origin.y + rect.height);
+    }
+    let pad = 8.0;
+    let left = (WORK_LEFT.load(Ordering::Relaxed) as f32 + min_x - pad).floor() as i32;
+    let top = (WORK_TOP.load(Ordering::Relaxed) as f32 + min_y - pad).floor() as i32;
+    let width = (max_x - min_x + pad * 2.0).ceil().max(1.0) as i32;
+    let height = (max_y - min_y + pad * 2.0).ceil().max(1.0) as i32;
+    HUD_LEFT.store(left, Ordering::Relaxed);
+    HUD_TOP.store(top, Ordering::Relaxed);
+    HUD_WIDTH.store(width, Ordering::Relaxed);
+    HUD_HEIGHT.store(height, Ordering::Relaxed);
+    for visual in &mut scene.visuals {
+        let rect = match visual {
+            deskhud_engine::OverlayVisual::RoundedRect(v) => &mut v.rect,
+            deskhud_engine::OverlayVisual::Text(v) => &mut v.rect,
+            _ => continue,
+        };
+        rect.origin.x -= min_x - pad;
+        rect.origin.y -= min_y - pad;
+    }
+    Some(scene)
 }
 
 #[derive(Clone, Copy)]
@@ -832,7 +989,7 @@ fn open_layout_editor_window() {
             if hwnd.is_null() {
                 return;
             }
-            apply_topmost(true, hwnd, std::ptr::null_mut());
+            apply_topmost(true, hwnd, std::ptr::null_mut(), std::ptr::null_mut());
             if let Ok(mut compositor) = GpuCompositor::create(hwnd as isize, monitor.2, monitor.3) {
                 let prefs = deskhud_ui::persist::load().unwrap_or_default();
                 let registry = deskhud_runtime::bootstrap_registry().registry;
@@ -1404,7 +1561,7 @@ pub fn set_topmost(enabled: bool) {
     }
 }
 
-fn apply_topmost(enabled: bool, hwnd: HWND, dialogue_hwnd: HWND) {
+fn apply_topmost(enabled: bool, hwnd: HWND, dialogue_hwnd: HWND, hud_hwnd: HWND) {
     unsafe {
         let insert_after = if enabled {
             HWND_TOPMOST
@@ -1413,7 +1570,7 @@ fn apply_topmost(enabled: bool, hwnd: HWND, dialogue_hwnd: HWND) {
         };
         // 将两个窗口作为一次层级事务处理：先处理气泡，再处理宠物，
         // 让最终层级锚定在宠物窗口，避免气泡更新后宠物仍停留在旧层级。
-        for window in [dialogue_hwnd, hwnd] {
+        for window in [dialogue_hwnd, hud_hwnd, hwnd] {
             if !window.is_null() {
                 let _ = SetWindowPos(
                     window,
@@ -1482,7 +1639,11 @@ fn run_with_controls_and_level(
         }
         OVERLAY_HWND.store(hwnd as isize, Ordering::Release);
         let dialogue_hwnd = CreateWindowExW(
-            WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_NOREDIRECTIONBITMAP.0,
+            WS_EX_TOOLWINDOW
+                | WS_EX_TRANSPARENT
+                | WS_EX_NOACTIVATE_VALUE
+                | WS_EX_LAYERED
+                | WS_EX_NOREDIRECTIONBITMAP.0,
             CLASS_NAME.as_ptr(),
             CLASS_NAME.as_ptr(),
             WS_POPUP,
@@ -1501,8 +1662,32 @@ fn run_with_controls_and_level(
             return Ok(());
         }
         DIALOGUE_HWND.store(dialogue_hwnd as isize, Ordering::Release);
+        let hud_hwnd = CreateWindowExW(
+            WS_EX_TOOLWINDOW
+                | WS_EX_TRANSPARENT
+                | WS_EX_NOACTIVATE_VALUE
+                | WS_EX_NOREDIRECTIONBITMAP.0,
+            CLASS_NAME.as_ptr(),
+            CLASS_NAME.as_ptr(),
+            WS_POPUP,
+            work_area.left,
+            work_area.top,
+            work_area.width,
+            work_area.height,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            instance,
+            std::ptr::null(),
+        );
+        if hud_hwnd.is_null() {
+            let _ = DestroyWindow(dialogue_hwnd);
+            let _ = DestroyWindow(hwnd);
+            return Ok(());
+        }
+        HUD_HWND.store(hud_hwnd as isize, Ordering::Release);
+        let _ = SetLayeredWindowAttributes(hud_hwnd, 0, 255, 2);
         // 探针只在创建时设一次层级，避免每帧改变窗口层级；正式运行态仍由 prefs 决定。
-        apply_topmost(topmost, hwnd, dialogue_hwnd);
+        apply_topmost(topmost, hwnd, dialogue_hwnd, hud_hwnd);
         match GpuOverlayRenderer::create(hwnd, dialogue_hwnd) {
             Ok(renderer) => {
                 RENDERER.with(|slot| *slot.borrow_mut() = Some(renderer));
@@ -1511,11 +1696,12 @@ fn run_with_controls_and_level(
                     WINDOW_LEFT.load(Ordering::Relaxed),
                     WINDOW_TOP.load(Ordering::Relaxed),
                 ));
-                apply_topmost(topmost, hwnd, dialogue_hwnd);
+                apply_topmost(topmost, hwnd, dialogue_hwnd, hud_hwnd);
             }
             Err(error) => {
                 eprintln!("DeskHud GPU overlay probe initialization failed: {error}");
                 let _ = DestroyWindow(dialogue_hwnd);
+                let _ = DestroyWindow(hud_hwnd);
                 let _ = DestroyWindow(hwnd);
                 return Ok(());
             }
@@ -1630,17 +1816,37 @@ unsafe extern "system" fn window_proc(
                     }
                 });
                 let dialogue = DIALOGUE_HWND.load(Ordering::Acquire) as HWND;
-                apply_topmost(DESIRED_TOPMOST.load(Ordering::Acquire), hwnd, dialogue);
+                apply_topmost(
+                    DESIRED_TOPMOST.load(Ordering::Acquire),
+                    hwnd,
+                    dialogue,
+                    HUD_HWND.load(Ordering::Acquire) as HWND,
+                );
                 0
             }
             WM_SYNC_TOPMOST => {
                 let enabled = DESIRED_TOPMOST.load(Ordering::Acquire);
                 let dialogue = DIALOGUE_HWND.load(Ordering::Acquire) as HWND;
-                apply_topmost(enabled, hwnd, dialogue);
+                apply_topmost(
+                    enabled,
+                    hwnd,
+                    dialogue,
+                    HUD_HWND.load(Ordering::Acquire) as HWND,
+                );
                 0
             }
             WM_NCHITTEST if hwnd as isize == DIALOGUE_HWND.load(Ordering::Acquire) => {
                 HTTRANSPARENT as LRESULT
+            }
+            WM_NCHITTEST if hwnd as isize == HUD_HWND.load(Ordering::Acquire) => {
+                // HTTRANSPARENT only delegates reliably within the current
+                // GUI thread. HUD is display-only, so report no hit at all;
+                // Windows then resolves the point against the window below,
+                // including a different process.
+                HTNOWHERE as LRESULT
+            }
+            WM_MOUSEACTIVATE if hwnd as isize == HUD_HWND.load(Ordering::Acquire) => {
+                MA_NOACTIVATE_VALUE
             }
             WM_TIMER => {
                 if RELOAD_PREFS.swap(false, Ordering::AcqRel) {
@@ -1710,6 +1916,11 @@ unsafe extern "system" fn window_proc(
                 if !dialogue.is_null() {
                     let _ = DestroyWindow(dialogue);
                 }
+                let hud = HUD_HWND.load(Ordering::Acquire) as HWND;
+                if !hud.is_null() {
+                    let _ = DestroyWindow(hud);
+                }
+                HUD_HWND.store(0, Ordering::Release);
                 OVERLAY_HWND.store(0, Ordering::Release);
                 RENDERER.with(|slot| slot.borrow_mut().take());
                 PostQuitMessage(0);
