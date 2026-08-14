@@ -4,30 +4,36 @@ mod backend;
 use anyhow::Result;
 pub(crate) use backend::OverlayBackend;
 
-#[cfg(not(windows))]
-mod fallback;
+#[cfg(all(not(windows), not(target_os = "macos")))]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(windows)]
 mod windows;
 
 #[cfg(all(not(windows), not(target_os = "macos")))]
-pub use fallback::{cursor_screen_px, fit_popup_pos_points};
+pub(crate) use linux::PetHost;
+#[cfg(all(not(windows), not(target_os = "macos")))]
+pub(crate) use linux::{
+    FallbackOverlayBackend, cursor_screen_px, fit_popup_pos_points, main_display_bounds_px,
+    main_display_work_area_px,
+};
 #[cfg(target_os = "macos")]
 #[allow(unused_imports)]
 pub(crate) use macos::MacosOverlayBackend;
 #[cfg(target_os = "macos")]
+pub(crate) use macos::PetHost;
+#[cfg(target_os = "macos")]
 pub(crate) use macos::{
-    NativePetView, configure_pet_window, create_native_pet_window, cursor_screen_px,
-    fit_popup_pos_points, main_display_bounds_px, main_display_work_area_px,
-    position_native_pet_window, request_native_pet_redraw, resize_native_pet_window,
-    set_native_pet_control_bus, set_native_pet_topmost, start_global_mouse_listener,
-    update_native_pet_paint,
+    NativePetView, create_native_pet_window, cursor_screen_px, fit_popup_pos_points,
+    main_display_bounds_px, main_display_work_area_px, position_native_pet_window,
+    request_native_pet_redraw, set_native_pet_control_bus, set_native_pet_topmost,
+    start_global_mouse_listener, update_native_pet_paint,
 };
 #[cfg(windows)]
 pub(crate) use windows::{
-    GpuCompositor, WindowsOverlayBackend, cursor_screen_px, fit_popup_pos_points, is_device_lost,
-    primary_monitor_geometry,
+    GpuCompositor, PetHost, WindowsOverlayBackend, cursor_screen_px, fit_popup_pos_points,
+    is_device_lost, primary_monitor_geometry,
 };
 
 /// Construct the platform backend behind one shell-facing boundary.

@@ -39,6 +39,7 @@
 - 键鼠经 `PetEvent`/`MouseState`；非 Win 可降级；平台码在 `platform/`。
 - 对话气泡使用**宿主管理的独立透明工具窗**（逻辑子窗，不是受父客户区裁剪的 `WS_CHILD`）；包只通过后续 `PetFrame` 中性契约描述位置、皮肤、透明度、尾巴与文字，禁止接触 HWND。壳负责屏幕避让、层级、穿透和生命周期，不以频繁扩缩宠物窗代替。
 - i18n：`shell.*` / `pet.<id>.*` / `plugin.<id>.*`；ID：`pet|hud.<组织>.<标识>`。
+- 跨平台编码铁律：平台专属符号必须用**正确且互补**的 cfg 门。macOS 专属项唯一正确的泛化目标是 `#[cfg(not(windows))]`（macOS ⊆ not(windows)，其调用点多在 not(windows) 分支内）；新增平台几何等边界符号（如 `main_display_bounds_px`/`main_display_work_area_px`）时必须为 `platform/fallback.rs`（或对应平台）补齐同签名实现并在 `platform/mod.rs` 按平台 re-export，保证任一平台 `cargo check --workspace --all-targets` 通过、不被其它平台写的代码打破。禁止只加 `#[cfg(target_os = "macos")]` / `#[cfg(windows)]` 而遗漏互补平台的调用点。
 - 原生桌面覆盖层迁移以 `deskhud-engine::overlay` 的平台无关契约为边界；包、插件和引擎契约不得出现 HWND 或任一 OS 专有类型。正式能力以平台后端报告为准，见 [`docs/overlay-migration.md`](../overlay-migration.md)。
 
 ## 透明合成边界

@@ -7,6 +7,9 @@ use deskhud_engine::{
     OverlayScreenArea, OverlayWindowId, OverlayWindowLevel, OverlayWindowRole,
 };
 
+mod pet;
+pub(crate) use pet::PetHost;
+
 #[allow(dead_code)]
 pub(crate) struct FallbackOverlayBackend;
 
@@ -50,6 +53,19 @@ impl OverlayBackend for FallbackOverlayBackend {
 #[allow(dead_code)]
 pub fn cursor_screen_px() -> Option<(i32, i32)> {
     None
+}
+
+/// Conservative primary-display bounds in pixels. The real geometry backend is not
+/// wired for Linux yet, so report a fixed 1080p desktop.
+#[allow(dead_code)]
+pub fn main_display_bounds_px() -> (f32, f32, f32, f32) {
+    (0.0, 0.0, 1920.0, 1080.0)
+}
+
+/// Conservative primary-display work area in pixels (same fixed desktop as the bounds).
+#[allow(dead_code)]
+pub fn main_display_work_area_px() -> (f32, f32, f32, f32) {
+    (0.0, 0.0, 1920.0, 1080.0)
 }
 
 /// Keep a popup inside a conservative primary-display work area.

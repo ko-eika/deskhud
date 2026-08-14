@@ -1,7 +1,5 @@
 //! Direct `winit` + `egui_glow` host for opaque control surfaces.
 
-#[cfg(not(windows))]
-use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -9,6 +7,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context as _, Result};
 #[cfg(not(target_os = "macos"))]
 use egui::Color32;
+#[cfg(target_os = "macos")]
 use glow::HasContext as _;
 use glutin::context::{NotCurrentGlContext as _, PossiblyCurrentGlContext as _};
 use glutin::display::{GetGlDisplay as _, GlDisplay as _};
@@ -18,12 +17,8 @@ use winit::application::ApplicationHandler;
 #[cfg(windows)]
 use winit::dpi::PhysicalPosition;
 use winit::dpi::{LogicalPosition, LogicalSize};
-#[cfg(not(windows))]
-use winit::event::ElementState;
 use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
-#[cfg(not(windows))]
-use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowAttributes, WindowId, WindowLevel};
 
 #[cfg(windows)]
@@ -33,13 +28,8 @@ use crate::overlay_control::{OverlayControlBus, OverlayControlCommand};
 #[cfg(target_os = "macos")]
 use crate::overlay_surface::OverlaySurface;
 use crate::pet_menu::PetMenuHost;
-use crate::platform::OverlayBackend;
+use crate::platform::{OverlayBackend, PetHost};
 use crate::settings::{SettingsHost, SettingsTab};
-#[cfg(not(windows))]
-use deskhud_engine::{
-    DockState, DragState, MouseState, PetConfigBag, PetEvent, PetModifiers, PetMouseButton,
-    PetPaintCtx, PetTheme,
-};
 
 const MENU_INITIAL_WIDTH: f64 = 180.0;
 const SETTINGS_WIDTH: f64 = 920.0;
@@ -48,10 +38,6 @@ const SETTINGS_HEIGHT: f64 = 680.0;
 const MENU_FOCUS_GRACE: Duration = Duration::from_millis(220);
 #[cfg(windows)]
 const MENU_FOCUS_GRACE: Duration = Duration::from_millis(180);
-#[cfg(not(windows))]
-const FALLBACK_PET_SIZE: f64 = 180.0;
-#[cfg(not(windows))]
-const PET_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
 #[derive(Debug)]
 pub(crate) enum UserEvent {
@@ -109,12 +95,7 @@ struct NativeHost {
     menu: PetMenuHost,
     #[allow(dead_code)]
     overlay_backend: Box<dyn OverlayBackend>,
-    #[cfg(target_os = "macos")]
-    pet_overlay_id: Option<deskhud_engine::OverlayWindowId>,
-    #[cfg(target_os = "macos")]
-    native_pet_window: Option<objc2::rc::Retained<objc2_app_kit::NSWindow>>,
-    #[cfg(target_os = "macos")]
-    native_pet_view: Option<objc2::rc::Retained<crate::platform::NativePetView>>,
+    desk_pet: PetHost,
     control_surface: ControlSurface,
     gl_window: Option<GlutinWindow>,
     gl: Option<Arc<glow::Context>>,
@@ -126,33 +107,9 @@ struct NativeHost {
     #[cfg(target_os = "macos")]
     settings_surface: Option<OverlaySurface>,
     repaint_at: Option<Instant>,
-    #[cfg(not(windows))]
-    pet_started: Instant,
-    #[cfg(not(windows))]
-    mac_mouse: MouseState,
-    #[cfg(not(windows))]
-    mac_dock: DockState,
-    #[cfg(not(windows))]
-    mac_dragging: bool,
-    #[cfg(target_os = "macos")]
-    mac_press_cursor: Option<(i32, i32)>,
-    #[cfg(target_os = "macos")]
-    mac_press_window: Option<winit::dpi::PhysicalPosition<i32>>,
-    #[cfg(target_os = "macos")]
-    mac_last_tick: Instant,
 }
 
 impl NativeHost {
-    #[cfg(target_os = "macos")]
-    fn mac_pet_interval(&self) -> Duration {
-        let fps = match self.prefs.graphics.fps_limit {
-            deskhud_ui::FpsLimit::Fps30 => 30,
-            deskhud_ui::FpsLimit::Fps120 => 120,
-            deskhud_ui::FpsLimit::Auto | deskhud_ui::FpsLimit::Fps60 => 60,
-        };
-        Duration::from_secs_f64(1.0 / fps as f64)
-    }
-
     fn new(
         proxy: EventLoopProxy<UserEvent>,
         prefs: deskhud_ui::UiPreferences,
@@ -172,12 +129,7 @@ impl NativeHost {
             settings: SettingsHost::new(prefs.clone()),
             menu: PetMenuHost::new(prefs.clone()),
             overlay_backend,
-            #[cfg(target_os = "macos")]
-            pet_overlay_id: None,
-            #[cfg(target_os = "macos")]
-            native_pet_window: None,
-            #[cfg(target_os = "macos")]
-            native_pet_view: None,
+            desk_pet: PetHost::new(),
             prefs,
             control_surface: ControlSurface::Hidden,
             gl_window: None,
@@ -190,20 +142,6 @@ impl NativeHost {
             #[cfg(target_os = "macos")]
             settings_surface: None,
             repaint_at: None,
-            #[cfg(not(windows))]
-            pet_started: Instant::now(),
-            #[cfg(not(windows))]
-            mac_mouse: MouseState::IDLE,
-            #[cfg(not(windows))]
-            mac_dock: DockState::FREE,
-            #[cfg(not(windows))]
-            mac_dragging: false,
-            #[cfg(target_os = "macos")]
-            mac_press_cursor: None,
-            #[cfg(target_os = "macos")]
-            mac_press_window: None,
-            #[cfg(target_os = "macos")]
-            mac_last_tick: Instant::now(),
         }
     }
 
@@ -252,14 +190,10 @@ impl NativeHost {
                     self.save_prefs();
                 }
                 OverlayControlCommand::PetDragStarted => {
-                    self.mac_dragging = true;
-                    self.engine.active_pet().on_event(PetEvent::DragStarted);
+                    self.desk_pet.command(command, &mut self.engine);
                 }
                 OverlayControlCommand::PetDragEnded => {
-                    self.mac_dragging = false;
-                    self.engine.active_pet().on_event(PetEvent::DragEnded {
-                        drag: DragState::ACTIVE,
-                    });
+                    self.desk_pet.command(command, &mut self.engine);
                 }
                 OverlayControlCommand::Quit => event_loop.exit(),
             }
@@ -468,14 +402,18 @@ impl NativeHost {
 
     fn hide_control_window(&mut self) {
         self.control_surface = ControlSurface::Hidden;
+        #[cfg(windows)]
+        if let Some(window) = self.window() {
+            window.set_visible(false);
+        }
         #[cfg(target_os = "macos")]
         self.close_menu_surface();
         #[allow(unused_variables)]
-        if let Some(window) = self.window() {
-            #[cfg(windows)]
-            window.set_visible(false);
-            #[cfg(all(not(windows), not(target_os = "macos")))]
-            self.show_macos_pet_window(window);
+        #[cfg(all(not(windows), not(target_os = "macos")))]
+        {
+            let window = self.gl_window.as_ref().map(GlutinWindow::window);
+            self.desk_pet
+                .resume(&self.prefs, &mut self.overlay_backend, window);
         }
     }
 
@@ -497,42 +435,6 @@ impl NativeHost {
         self.menu_surface_dispose_pending = false;
     }
 
-    #[cfg(not(windows))]
-    #[allow(clippy::needless_return)]
-    #[allow(dead_code)]
-    fn show_macos_pet_window(&self, window: &Window) {
-        #[cfg(target_os = "macos")]
-        {
-            crate::platform::configure_pet_window(window, &self.prefs, FALLBACK_PET_SIZE);
-            return;
-        }
-        #[cfg(all(not(windows), not(target_os = "macos")))]
-        {
-            window.set_title("DeskHud 宠物");
-            window.set_decorations(false);
-            window.set_resizable(false);
-            window.set_window_level(if self.prefs.shell.topmost {
-                WindowLevel::AlwaysOnTop
-            } else {
-                WindowLevel::Normal
-            });
-            let _ =
-                window.request_inner_size(LogicalSize::new(FALLBACK_PET_SIZE, FALLBACK_PET_SIZE));
-            let ppp = window.scale_factor() as f32;
-            let pos = self
-                .prefs
-                .pet
-                .pos()
-                .unwrap_or([FALLBACK_PET_SIZE as f32, FALLBACK_PET_SIZE as f32]);
-            window.set_outer_position(LogicalPosition::new(
-                pos[0] as f64 - FALLBACK_PET_SIZE / (2.0 * ppp as f64),
-                pos[1] as f64 - FALLBACK_PET_SIZE / (2.0 * ppp as f64),
-            ));
-            window.set_visible(true);
-            window.request_redraw();
-        }
-    }
-
     #[allow(clippy::needless_return)]
     fn save_prefs(&self) {
         if let Err(error) = deskhud_ui::persist::save(&self.prefs) {
@@ -541,228 +443,6 @@ impl NativeHost {
         }
         #[cfg(windows)]
         crate::gpu_overlay_probe::request_prefs_reload();
-    }
-
-    #[cfg(not(windows))]
-    fn mac_paint(&self) -> deskhud_engine::PetPaint {
-        let pet = self.engine.active_pet();
-        let info = pet.info();
-        let options = pet
-            .config_options()
-            .iter()
-            .map(|option| {
-                (
-                    option.key.to_string(),
-                    self.prefs
-                        .pet
-                        .get_option(info.id, option.key, option.default),
-                )
-            })
-            .collect::<HashMap<_, _>>();
-        let config = PetConfigBag::new(&options);
-        pet.apply_config(config);
-        let elapsed = self.pet_started.elapsed().as_secs_f64();
-        let (pointer_dir, mouse, dock) = self.mac_pet_context();
-        pet.paint(PetPaintCtx {
-            time_secs: elapsed,
-            pointer_dir,
-            status_line: "",
-            dock,
-            drag: if self.mac_dragging {
-                DragState::ACTIVE
-            } else {
-                DragState::IDLE
-            },
-            mouse,
-            config,
-            theme: PetTheme::Dark,
-        })
-    }
-
-    #[cfg(not(windows))]
-    fn mac_pet_context(&self) -> ([f32; 2], MouseState, DockState) {
-        #[cfg(target_os = "macos")]
-        if let Some(native) = self.native_pet_window.as_ref() {
-            let frame = native.frame();
-            let cursor = objc2_app_kit::NSEvent::mouseLocation();
-            let cursor = (cursor.x as f32, cursor.y as f32);
-            let center = (
-                (frame.origin.x + frame.size.width * 0.5) as f32,
-                (frame.origin.y + frame.size.height * 0.5) as f32,
-            );
-            let dx = (cursor.0 - center.0) / (frame.size.width as f32 * 1.8).max(1.0);
-            let dy = (cursor.1 - center.1) / (frame.size.height as f32 * 1.8).max(1.0);
-            let local_x = cursor.0 - frame.origin.x as f32;
-            let local_y = cursor.1 - frame.origin.y as f32;
-            let radius = frame.size.width.min(frame.size.height) as f32 * 0.42;
-            let hovering = ((local_x - frame.size.width as f32 * 0.5).powi(2)
-                + (local_y - frame.size.height as f32 * 0.5).powi(2))
-                <= radius.powi(2);
-            let screen = native
-                .screen()
-                .or_else(|| objc2_app_kit::NSScreen::mainScreen(objc2::MainThreadMarker::new()?));
-            let visible = screen
-                .as_ref()
-                .map(|screen| screen.visibleFrame())
-                .unwrap_or(frame);
-            let tolerance = 16.0;
-            return (
-                [dx.clamp(-1.0, 1.0), dy.clamp(-1.0, 1.0)],
-                MouseState {
-                    hovering,
-                    ..self.mac_mouse
-                },
-                DockState {
-                    left: (frame.origin.x - visible.origin.x).abs() <= tolerance,
-                    right: (visible.origin.x + visible.size.width
-                        - (frame.origin.x + frame.size.width))
-                        .abs()
-                        <= tolerance,
-                    top: (visible.origin.y + visible.size.height
-                        - (frame.origin.y + frame.size.height))
-                        .abs()
-                        <= tolerance,
-                    bottom: (frame.origin.y - visible.origin.y).abs() <= tolerance,
-                },
-            );
-        }
-        let Some(window) = self.window() else {
-            return ([0.0, 0.0], MouseState::IDLE, DockState::FREE);
-        };
-        let scale = window.scale_factor().max(0.01) as f32;
-        let Ok(position) = window.outer_position() else {
-            return ([0.0, 0.0], MouseState::IDLE, DockState::FREE);
-        };
-        let size = window.inner_size();
-        let center = (
-            position.x as f32 + size.width as f32 / 2.0,
-            position.y as f32 + size.height as f32 / 2.0,
-        );
-        let cursor = crate::platform::cursor_screen_px()
-            .map(|(x, y)| (x as f32, y as f32))
-            .unwrap_or(center);
-        let dx = (cursor.0 - center.0) / (size.width as f32 * 1.8).max(1.0);
-        let dy = (cursor.1 - center.1) / (size.height as f32 * 1.8).max(1.0);
-        let local_x = (cursor.0 - position.x as f32) / scale;
-        let local_y = (cursor.1 - position.y as f32) / scale;
-        let radius = size.width.min(size.height) as f32 / scale * 0.42;
-        let local_center = (
-            size.width as f32 / scale / 2.0,
-            size.height as f32 / scale / 2.0,
-        );
-        let hovering = ((local_x - local_center.0).powi(2) + (local_y - local_center.1).powi(2))
-            <= radius.powi(2);
-        let monitor = window.current_monitor();
-        let bounds = monitor
-            .as_ref()
-            .map(|monitor| {
-                let origin = monitor.position();
-                let size = monitor.size();
-                (
-                    origin.x as f32,
-                    origin.y as f32,
-                    (origin.x + size.width as i32) as f32,
-                    (origin.y + size.height as i32) as f32,
-                )
-            })
-            .unwrap_or_else(crate::platform::main_display_bounds_px);
-        let work_area = crate::platform::main_display_work_area_px();
-        let tolerance = (16.0 * scale).max(8.0);
-        let dock = DockState {
-            left: (position.x as f32 - bounds.0).abs() <= tolerance,
-            right: (bounds.2 - (position.x as f32 + size.width as f32)).abs() <= tolerance,
-            top: (position.y as f32 - work_area.1).abs() <= tolerance,
-            bottom: (work_area.3 - (position.y as f32 + size.height as f32)).abs() <= tolerance,
-        };
-        (
-            [dx.clamp(-1.0, 1.0), dy.clamp(-1.0, 1.0)],
-            MouseState {
-                hovering,
-                ..self.mac_mouse
-            },
-            dock,
-        )
-    }
-
-    #[cfg(not(windows))]
-    fn update_mac_behavior(&mut self) {
-        let (_, mouse, dock) = self.mac_pet_context();
-        let pet = self.engine.active_pet();
-        if mouse.hovering != self.mac_mouse.hovering {
-            pet.on_event(PetEvent::MouseHover {
-                inside: mouse.hovering,
-            });
-            self.mac_mouse.hovering = mouse.hovering;
-        }
-        if dock != self.mac_dock {
-            let from = self.mac_dock;
-            self.mac_dock = dock;
-            pet.on_event(PetEvent::DockChanged { from, to: dock });
-        }
-    }
-
-    #[cfg(not(windows))]
-    fn save_pet_window_position(&mut self) {
-        let Some(window) = self.window() else { return };
-        let Ok(position) = window.outer_position() else {
-            return;
-        };
-        let scale = window.scale_factor().max(0.01) as f32;
-        let size = window.inner_size();
-        let center_x = position.x as f32 / scale + size.width as f32 / scale / 2.0;
-        let center_y = position.y as f32 / scale + size.height as f32 / scale / 2.0;
-        self.prefs.pet.set_pos(center_x, center_y);
-        self.save_prefs();
-    }
-
-    #[cfg(target_os = "macos")]
-    fn mac_screen_area(&self) -> Option<deskhud_engine::OverlayScreenArea> {
-        self.overlay_backend.screen_area().ok()
-    }
-
-    #[cfg(target_os = "macos")]
-    fn snap_mac_pet_window(&mut self) {
-        let Some(window) = self.window() else { return };
-        let Ok(mut position) = window.outer_position() else {
-            return;
-        };
-        let size = window.outer_size();
-        let work = self
-            .mac_screen_area()
-            .map(|area| {
-                (
-                    area.active.origin.x,
-                    area.active.origin.y,
-                    area.active.origin.x + area.active.width,
-                    area.active.origin.y + area.active.height,
-                )
-            })
-            .unwrap_or_else(crate::platform::main_display_work_area_px);
-        // `visibleFrame` changes automatically when Dock auto-hide changes.
-        // Use it as the recovery area so a pet dropped into Dock/menu-bar
-        // space is brought back into the currently active desktop area.
-        let left = work.0.round() as i32;
-        let top = work.1.round() as i32;
-        let right = work.2.round() as i32;
-        let bottom = work.3.round() as i32;
-        let tolerance = 16;
-        if (position.x - left).abs() <= tolerance {
-            position.x = left;
-        }
-        if (position.y - top).abs() <= tolerance {
-            position.y = top;
-        }
-        // A desktop pet must remain fully visible; never leave half the window
-        // outside the screen after a manual drag.
-        position.x = position.x.clamp(left, right - size.width as i32);
-        position.y = position.y.clamp(top, bottom - size.height as i32);
-        if (right - (position.x + size.width as i32)).abs() <= tolerance {
-            position.x = right - size.width as i32;
-        }
-        if (bottom - (position.y + size.height as i32)).abs() <= tolerance {
-            position.y = bottom - size.height as i32;
-        }
-        window.set_outer_position(position);
     }
 
     #[cfg(target_os = "macos")]
@@ -822,16 +502,10 @@ impl NativeHost {
             }
             self.save_prefs();
             #[cfg(target_os = "macos")]
-            if let Some(window) = self.window() {
-                window.set_window_level(if enabled {
-                    WindowLevel::AlwaysOnTop
-                } else {
-                    WindowLevel::Normal
-                });
-            }
-            #[cfg(target_os = "macos")]
-            if let Some(window) = self.native_pet_window.as_ref() {
-                crate::platform::set_native_pet_topmost(window, enabled);
+            {
+                let window = self.gl_window.as_ref().map(GlutinWindow::window);
+                self.desk_pet
+                    .apply_topmost(window, &self.prefs, &mut self.overlay_backend);
             }
             #[cfg(windows)]
             crate::gpu_overlay_probe::set_topmost(enabled);
@@ -912,21 +586,10 @@ impl NativeHost {
                 window.request_redraw();
             }
             #[cfg(target_os = "macos")]
-            if let Some(window) = self.window() {
-                window.set_window_level(if self.prefs.shell.topmost {
-                    WindowLevel::AlwaysOnTop
-                } else {
-                    WindowLevel::Normal
-                });
-            }
-            #[cfg(target_os = "macos")]
-            if let Some(id) = self.pet_overlay_id {
-                let level = if self.prefs.shell.topmost {
-                    deskhud_engine::OverlayWindowLevel::AlwaysOnTop
-                } else {
-                    deskhud_engine::OverlayWindowLevel::Normal
-                };
-                let _ = self.overlay_backend.set_level(id, level);
+            {
+                let window = self.gl_window.as_ref().map(GlutinWindow::window);
+                self.desk_pet
+                    .apply_topmost(window, &self.prefs, &mut self.overlay_backend);
             }
         } else if pending_flush && !discard {
             self.prefs = draft;
@@ -938,19 +601,11 @@ impl NativeHost {
     }
 
     fn draw(&mut self, event_loop: &ActiveEventLoop) {
-        #[cfg(target_os = "macos")]
-        if let Some(window) = self.native_pet_window.as_ref() {
-            let width = self.prefs.pet.width.max(48.0) as f64;
-            let height = self.prefs.pet.height.max(48.0) as f64;
-            let frame = window.frame();
-            if (frame.size.width - width).abs() > 0.5 || (frame.size.height - height).abs() > 0.5 {
-                crate::platform::resize_native_pet_window(window, width, height);
-            }
-        }
-        #[cfg(target_os = "macos")]
-        let paint = self.mac_paint();
-        #[cfg(target_os = "macos")]
-        crate::platform::update_native_pet_paint(paint.clone());
+        #[cfg(not(windows))]
+        let paint = {
+            let window = self.gl_window.as_ref().map(GlutinWindow::window);
+            self.desk_pet.frame(window, &mut self.engine, &self.prefs)
+        };
         let Some(gl_window) = self.gl_window.as_mut() else {
             return;
         };
@@ -978,7 +633,9 @@ impl NativeHost {
                 ControlSurface::Settings => settings.draw_native(ui),
             }
             #[cfg(target_os = "macos")]
-            draw_pet_paint(ui, paint.clone());
+            if let Some(paint) = &paint {
+                draw_pet_paint(ui, paint.clone());
+            }
         });
 
         unsafe {
@@ -1015,13 +672,6 @@ impl NativeHost {
         }
         self.pull_menu(event_loop);
         self.pull_settings();
-        #[cfg(not(windows))]
-        {
-            if let Some(window) = self.window() {
-                window.request_redraw();
-            }
-            self.repaint_at = Some(Instant::now() + self.mac_pet_interval());
-        }
     }
 
     #[cfg(target_os = "macos")]
@@ -1127,47 +777,17 @@ impl ApplicationHandler<UserEvent> for NativeHost {
         self.gl = Some(gl);
         self.egui = Some(egui);
         self.sync_pet_theme();
-        #[cfg(all(not(windows), not(target_os = "macos")))]
-        self.show_macos_pet_window(self.window().expect("native window initialized"));
+        #[cfg(not(windows))]
+        {
+            let window = self.gl_window.as_ref().map(GlutinWindow::window);
+            self.desk_pet
+                .resume(&self.prefs, &mut self.overlay_backend, window);
+        }
         #[cfg(target_os = "macos")]
         {
             crate::platform::set_native_pet_control_bus(self.controls.clone());
             if let Some(window) = self.window() {
                 window.set_visible(false);
-            }
-            if let Some(mtm) = objc2::MainThreadMarker::new() {
-                let (window, view) = crate::platform::create_native_pet_window(
-                    mtm,
-                    self.prefs.pet.width.max(48.0) as f64,
-                    self.prefs.shell.topmost,
-                );
-                self.native_pet_window = Some(window);
-                self.native_pet_view = Some(view);
-                if let Some(window) = self.native_pet_window.as_ref() {
-                    crate::platform::position_native_pet_window(
-                        window,
-                        &self.prefs,
-                        self.prefs.pet.width.max(48.0) as f64,
-                    );
-                }
-            } else {
-                tracing::error!("macOS native pet window requires the AppKit main thread");
-            }
-            match self
-                .overlay_backend
-                .create_window(deskhud_engine::OverlayWindowRole::Pet)
-            {
-                Ok(id) => {
-                    self.pet_overlay_id = Some(id);
-                    let level = if self.prefs.shell.topmost {
-                        deskhud_engine::OverlayWindowLevel::AlwaysOnTop
-                    } else {
-                        deskhud_engine::OverlayWindowLevel::Normal
-                    };
-                    let _ = self.overlay_backend.set_level(id, level);
-                    let _ = self.overlay_backend.set_visible(id, true);
-                }
-                Err(error) => tracing::error!(%error, "create macOS pet overlay failed"),
             }
         }
         #[cfg(target_os = "macos")]
@@ -1296,102 +916,17 @@ impl ApplicationHandler<UserEvent> for NativeHost {
             }
         }
         #[cfg(not(windows))]
-        if let WindowEvent::KeyboardInput { event, .. } = &event {
-            if let Some(key) = mac_key_from_physical(event.physical_key) {
-                let pet_event = if event.state == ElementState::Pressed {
-                    PetEvent::KeyPressed {
-                        key,
-                        modifiers: PetModifiers::NONE,
-                    }
-                } else {
-                    PetEvent::KeyReleased {
-                        key,
-                        modifiers: PetModifiers::NONE,
-                    }
-                };
-                self.engine.active_pet().on_event(pet_event);
-                if let Some(window) = self.window() {
-                    window.request_redraw();
-                }
-            }
-        }
-        #[cfg(not(windows))]
-        if self.control_surface == ControlSurface::Hidden {
-            match &event {
-                #[cfg(target_os = "macos")]
-                WindowEvent::CursorMoved { .. } if self.mac_mouse.primary_down => {
-                    let Some((cursor_x, cursor_y)) = crate::platform::cursor_screen_px() else {
-                        return;
-                    };
-                    let Some((press_x, press_y)) = self.mac_press_cursor else {
-                        return;
-                    };
-                    let dx = cursor_x - press_x;
-                    let dy = cursor_y - press_y;
-                    let threshold = 4.0 * self.window().map(|w| w.scale_factor()).unwrap_or(1.0);
-                    if !self.mac_dragging && ((dx as f64).hypot(dy as f64)) >= threshold {
-                        self.mac_dragging = true;
-                        self.engine.active_pet().on_event(PetEvent::DragStarted);
-                    }
-                    if self.mac_dragging {
-                        if let Some(window) = self.window() {
-                            if let Some(origin) = self.mac_press_window {
-                                window.set_outer_position(winit::dpi::PhysicalPosition::new(
-                                    origin.x + dx,
-                                    origin.y + dy,
-                                ));
-                            }
-                        }
-                    }
-                }
-                WindowEvent::MouseInput {
-                    state: winit::event::ElementState::Pressed,
-                    button: winit::event::MouseButton::Right,
-                    ..
-                } => self.show_menu(event_loop),
-                WindowEvent::MouseInput {
-                    state: winit::event::ElementState::Pressed,
-                    button: winit::event::MouseButton::Left,
-                    ..
-                } => {
-                    self.mac_mouse.primary_down = true;
-                    self.mac_press_cursor = crate::platform::cursor_screen_px();
-                    self.mac_press_window = self.window().and_then(|w| w.outer_position().ok());
-                    self.engine.active_pet().on_event(PetEvent::MousePressed {
-                        button: PetMouseButton::Primary,
-                        modifiers: PetModifiers::NONE,
-                    });
-                    if let Some(window) = self.window() {
-                        window.request_redraw();
-                    }
-                }
-                WindowEvent::MouseInput {
-                    state: winit::event::ElementState::Released,
-                    button: winit::event::MouseButton::Left,
-                    ..
-                } => {
-                    self.mac_mouse.primary_down = false;
-                    if self.mac_dragging {
-                        self.mac_dragging = false;
-                        self.engine.active_pet().on_event(PetEvent::DragEnded {
-                            drag: DragState::ACTIVE,
-                        });
-                        self.snap_mac_pet_window();
-                    } else {
-                        self.engine.active_pet().on_event(PetEvent::MouseClicked {
-                            button: PetMouseButton::Primary,
-                            modifiers: PetModifiers::NONE,
-                        });
-                    }
-                    self.engine.active_pet().on_event(PetEvent::MouseReleased {
-                        button: PetMouseButton::Primary,
-                        modifiers: PetModifiers::NONE,
-                    });
-                    self.mac_press_cursor = None;
-                    self.mac_press_window = None;
-                    self.save_pet_window_position();
-                }
-                _ => {}
+        {
+            let window = self.gl_window.as_ref().map(GlutinWindow::window);
+            if self.desk_pet.window_event(
+                window,
+                self.control_surface == ControlSurface::Hidden,
+                &event,
+                &mut self.engine,
+                &mut self.prefs,
+                &mut self.overlay_backend,
+            ) {
+                self.show_menu(event_loop);
             }
         }
         if let (Some(egui), Some(window)) = (self.egui.as_mut(), self.gl_window.as_ref()) {
@@ -1405,6 +940,7 @@ impl ApplicationHandler<UserEvent> for NativeHost {
         match event {
             #[cfg(target_os = "macos")]
             UserEvent::GlobalMouse(button) => {
+                use deskhud_engine::{PetEvent, PetModifiers};
                 self.engine
                     .active_pet()
                     .on_event(PetEvent::GlobalMousePressed {
@@ -1417,6 +953,7 @@ impl ApplicationHandler<UserEvent> for NativeHost {
             }
             #[cfg(target_os = "macos")]
             UserEvent::GlobalKey { key, pressed } => {
+                use deskhud_engine::{PetEvent, PetModifiers};
                 self.engine.active_pet().on_event(if pressed {
                     PetEvent::GlobalKeyPressed {
                         key,
@@ -1460,67 +997,16 @@ impl ApplicationHandler<UserEvent> for NativeHost {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.process_commands(event_loop);
-        #[cfg(not(windows))]
-        self.update_mac_behavior();
         #[cfg(target_os = "macos")]
         self.dispose_menu_surface_if_pending();
-        #[cfg(target_os = "macos")]
-        if self.native_pet_window.is_some() {
-            if let Some(view) = self.native_pet_view.as_ref() {
-                let now = Instant::now();
-                let dt = now
-                    .saturating_duration_since(self.mac_last_tick)
-                    .min(PET_FRAME_INTERVAL * 2);
-                let interval = self.mac_pet_interval();
-                if dt < interval {
-                    crate::platform::request_native_pet_redraw(view);
-                    self.repaint_at = Some(now + interval.saturating_sub(dt));
-                    return;
-                }
-                self.mac_last_tick = now;
-                self.engine
-                    .active_pet()
-                    .tick(dt.as_secs_f32().clamp(0.0, 0.05));
-                let paint = self.mac_paint();
-                crate::platform::update_native_pet_paint(paint);
-                crate::platform::request_native_pet_redraw(view);
-            }
-            self.repaint_at = Some(Instant::now() + self.mac_pet_interval());
-        }
-        #[cfg(target_os = "macos")]
-        if self
-            .menu_surface
-            .as_ref()
-            .is_some_and(|surface| surface.window().is_visible().unwrap_or(false))
-            || self
-                .settings_surface
-                .as_ref()
-                .is_some_and(|surface| surface.window().is_visible().unwrap_or(false))
-        {
-            // The settings surface owns the focused event stream, but the
-            // transparent pet must keep receiving animation frames.
-            if let Some(window) = self.window() {
-                window.request_redraw();
-            }
-            #[cfg(target_os = "macos")]
-            let interval = self.mac_pet_interval();
-            #[cfg(not(target_os = "macos"))]
-            let interval = PET_FRAME_INTERVAL;
-            self.repaint_at = Some(Instant::now() + interval);
-        }
-        #[cfg(not(windows))]
-        if matches!(
-            self.control_surface,
-            ControlSurface::Menu | ControlSurface::Settings
+        let window = self.gl_window.as_ref().map(GlutinWindow::window);
+        if let Some(wake) = self.desk_pet.about_to_wait(
+            window,
+            self.control_surface == ControlSurface::Hidden,
+            &mut self.engine,
+            &self.prefs,
         ) {
-            if let Some(window) = self.window() {
-                window.request_redraw();
-            }
-            #[cfg(target_os = "macos")]
-            let interval = self.mac_pet_interval();
-            #[cfg(not(target_os = "macos"))]
-            let interval = PET_FRAME_INTERVAL;
-            self.repaint_at = Some(Instant::now() + interval);
+            self.repaint_at = Some(self.repaint_at.map_or(wake, |current| current.min(wake)));
         }
         if let Some(wake_at) = self.repaint_at {
             event_loop.set_control_flow(ControlFlow::WaitUntil(wake_at));
@@ -1531,19 +1017,8 @@ impl ApplicationHandler<UserEvent> for NativeHost {
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         self.controls.request_shutdown();
-        #[cfg(target_os = "macos")]
-        if let Some(id) = self.pet_overlay_id.take() {
-            let _ = self.overlay_backend.set_visible(id, false);
-            let _ = self.overlay_backend.destroy_window(id);
-        }
-        #[cfg(target_os = "macos")]
-        if let Some(window) = self.native_pet_window.take() {
-            window.orderOut(None);
-        }
-        #[cfg(target_os = "macos")]
-        {
-            self.native_pet_view = None;
-        }
+        #[cfg(not(windows))]
+        self.desk_pet.exiting(&mut self.overlay_backend);
         if let Some(egui) = self.egui.as_mut() {
             egui.destroy();
         }
@@ -1556,76 +1031,6 @@ impl ApplicationHandler<UserEvent> for NativeHost {
             surface.egui.destroy();
         }
     }
-}
-
-#[cfg(not(windows))]
-fn mac_key_from_physical(key: PhysicalKey) -> Option<deskhud_engine::PetKey> {
-    use deskhud_engine::PetKey;
-    let PhysicalKey::Code(code) = key else {
-        return None;
-    };
-    Some(match code {
-        KeyCode::Escape => PetKey::Escape,
-        KeyCode::Tab => PetKey::Tab,
-        KeyCode::Enter => PetKey::Enter,
-        KeyCode::Space => PetKey::Space,
-        KeyCode::Backspace => PetKey::Backspace,
-        KeyCode::Delete => PetKey::Delete,
-        KeyCode::ArrowUp => PetKey::ArrowUp,
-        KeyCode::ArrowDown => PetKey::ArrowDown,
-        KeyCode::ArrowLeft => PetKey::ArrowLeft,
-        KeyCode::ArrowRight => PetKey::ArrowRight,
-        KeyCode::ShiftLeft | KeyCode::ShiftRight => PetKey::Shift,
-        KeyCode::ControlLeft | KeyCode::ControlRight => PetKey::Ctrl,
-        KeyCode::AltLeft | KeyCode::AltRight => PetKey::Alt,
-        KeyCode::SuperLeft | KeyCode::SuperRight => PetKey::Super,
-        KeyCode::F1 => PetKey::Function(1),
-        KeyCode::F2 => PetKey::Function(2),
-        KeyCode::F3 => PetKey::Function(3),
-        KeyCode::F4 => PetKey::Function(4),
-        KeyCode::F5 => PetKey::Function(5),
-        KeyCode::F6 => PetKey::Function(6),
-        KeyCode::F7 => PetKey::Function(7),
-        KeyCode::F8 => PetKey::Function(8),
-        KeyCode::F9 => PetKey::Function(9),
-        KeyCode::F10 => PetKey::Function(10),
-        KeyCode::F11 => PetKey::Function(11),
-        KeyCode::F12 => PetKey::Function(12),
-        _ => return None,
-    })
-}
-
-#[cfg(target_os = "macos")]
-pub(crate) fn mac_key_from_keycode(code: u16) -> Option<deskhud_engine::PetKey> {
-    use deskhud_engine::PetKey;
-    Some(match code {
-        36 => PetKey::Enter,
-        48 => PetKey::Tab,
-        49 => PetKey::Space,
-        51 => PetKey::Backspace,
-        53 => PetKey::Escape,
-        123 => PetKey::ArrowLeft,
-        124 => PetKey::ArrowRight,
-        125 => PetKey::ArrowDown,
-        126 => PetKey::ArrowUp,
-        122 => PetKey::Function(1),
-        120 => PetKey::Function(2),
-        99 => PetKey::Function(3),
-        118 => PetKey::Function(4),
-        96 => PetKey::Function(5),
-        97 => PetKey::Function(6),
-        98 => PetKey::Function(7),
-        100 => PetKey::Function(8),
-        101 => PetKey::Function(9),
-        109 => PetKey::Function(10),
-        103 => PetKey::Function(11),
-        111 => PetKey::Function(12),
-        56 | 60 => PetKey::Shift,
-        59 | 62 => PetKey::Ctrl,
-        58 | 61 => PetKey::Alt,
-        55 | 54 => PetKey::Super,
-        _ => return None,
-    })
 }
 
 #[cfg(not(windows))]

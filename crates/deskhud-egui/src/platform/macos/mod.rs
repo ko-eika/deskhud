@@ -28,6 +28,9 @@ use winit::window::{Window, WindowLevel};
 use super::OverlayBackend;
 use crate::overlay_control::{OverlayControlBus, OverlayControlCommand};
 
+mod pet;
+pub(crate) use pet::PetHost;
+
 static PET_CONTROL_BUS: std::sync::OnceLock<OverlayControlBus> = std::sync::OnceLock::new();
 static PET_DRAG: OnceLock<Mutex<Option<NativeDrag>>> = OnceLock::new();
 
@@ -296,6 +299,7 @@ pub(crate) fn set_native_pet_topmost(window: &NSWindow, enabled: bool) {
     window.orderFrontRegardless();
 }
 
+#[allow(dead_code)]
 pub(crate) fn resize_native_pet_window(window: &NSWindow, width: f64, height: f64) {
     let frame = window.frame();
     window.setContentSize(CGSize { width, height });
@@ -485,7 +489,7 @@ pub(crate) fn start_global_mouse_listener(
                 if matches!(kind, CGEventType::KeyDown | CGEventType::KeyUp) {
                     let code =
                         event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE) as u16;
-                    if let Some(key) = crate::native_host::mac_key_from_keycode(code) {
+                    if let Some(key) = mac_key_from_keycode(code) {
                         let _ = proxy.send_event(crate::native_host::UserEvent::GlobalKey {
                             key,
                             pressed: matches!(kind, CGEventType::KeyDown),
@@ -556,6 +560,39 @@ pub(crate) fn main_display_work_area_px() -> (f32, f32, f32, f32) {
         (full.origin.x + (frame.origin.x + frame.size.width) * scale_x) as f32,
         bottom as f32,
     )
+}
+
+/// Translate a macOS virtual keycode to the neutral pet key contract.
+pub(crate) fn mac_key_from_keycode(code: u16) -> Option<deskhud_engine::PetKey> {
+    use deskhud_engine::PetKey;
+    Some(match code {
+        36 => PetKey::Enter,
+        48 => PetKey::Tab,
+        49 => PetKey::Space,
+        51 => PetKey::Backspace,
+        53 => PetKey::Escape,
+        123 => PetKey::ArrowLeft,
+        124 => PetKey::ArrowRight,
+        125 => PetKey::ArrowDown,
+        126 => PetKey::ArrowUp,
+        122 => PetKey::Function(1),
+        120 => PetKey::Function(2),
+        99 => PetKey::Function(3),
+        118 => PetKey::Function(4),
+        96 => PetKey::Function(5),
+        97 => PetKey::Function(6),
+        98 => PetKey::Function(7),
+        100 => PetKey::Function(8),
+        101 => PetKey::Function(9),
+        109 => PetKey::Function(10),
+        103 => PetKey::Function(11),
+        111 => PetKey::Function(12),
+        56 | 60 => PetKey::Shift,
+        59 | 62 => PetKey::Ctrl,
+        58 | 61 => PetKey::Alt,
+        55 | 54 => PetKey::Super,
+        _ => return None,
+    })
 }
 
 /// Keep a popup inside the main display's global bounds.

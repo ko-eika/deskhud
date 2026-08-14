@@ -1,8 +1,10 @@
 //! Windows helpers kept outside product and extension contracts.
 
 mod gpu_compositor;
+mod pet;
 
 pub(crate) use gpu_compositor::{GpuCompositor, is_device_lost};
+pub(crate) use pet::PetHost;
 
 use super::OverlayBackend;
 use anyhow::Result;
