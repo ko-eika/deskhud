@@ -17,7 +17,8 @@ use windows::Win32::Foundation::POINT;
 use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, WS_EX_NOREDIRECTIONBITMAP};
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromPoint,
+    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY, MONITORINFO,
+    MonitorFromPoint,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
@@ -63,7 +64,11 @@ const LAYOUT_CLASS: &[u16] = &[
     b'\0' as u16,
 ];
 // DwmFlush 会把实际提交节奏限制在桌面合成器刷新率；短计时器仅用于尽快开始下一帧。
-const TIMER_INTERVAL_MS: u32 = 1;
+// The render path already applies the user's FPS limit. A 1 ms timer keeps the
+// overlay thread runnable almost continuously, however, and makes the desktop
+// feel sluggish even when the renderer skips most frames. 16 ms provides a
+// normal 60 Hz wakeup while preserving the configured lower FPS limits.
+const TIMER_INTERVAL_MS: u32 = 16;
 const FRAME_STATS_WINDOW_SECS: f32 = 5.0;
 const SIZE: i32 = 160;
 const DIALOGUE_WIDTH: i32 = 190;
@@ -745,6 +750,30 @@ fn primary_work_area() -> WorkArea {
     }
 }
 
+fn work_area_for_window(left: i32, top: i32) -> WorkArea {
+    unsafe {
+        let monitor = MonitorFromPoint(
+            windows_sys::Win32::Foundation::POINT {
+                x: left + SIZE / 2,
+                y: top + SIZE / 2,
+            },
+            MONITOR_DEFAULTTONEAREST,
+        );
+        let mut info: MONITORINFO = std::mem::zeroed();
+        info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if !monitor.is_null() && GetMonitorInfoW(monitor, &mut info) != 0 {
+            let work = info.rcWork;
+            return WorkArea {
+                left: work.left,
+                top: work.top,
+                width: (work.right - work.left).max(1),
+                height: (work.bottom - work.top).max(1),
+            };
+        }
+    }
+    primary_work_area()
+}
+
 fn apply_work_area(work_area: WorkArea) {
     WORK_LEFT.store(work_area.left, Ordering::Relaxed);
     WORK_TOP.store(work_area.top, Ordering::Relaxed);
@@ -896,7 +925,10 @@ fn persist_pet_position(hwnd: HWND) {
 
 unsafe fn refresh_primary_bounds(hwnd: HWND) {
     unsafe {
-        apply_work_area(primary_work_area());
+        apply_work_area(work_area_for_window(
+            WINDOW_LEFT.load(Ordering::Relaxed),
+            WINDOW_TOP.load(Ordering::Relaxed),
+        ));
         if DRAGGING.swap(false, Ordering::Relaxed) {
             finish_pet_drag(hwnd);
         } else {
@@ -2080,6 +2112,13 @@ fn finish_pet_drag(hwnd: HWND) {
                 drag: DragState::IDLE,
             });
     });
+    // The window may have crossed a monitor without producing a display-change
+    // message. Resolve the work area from its final center before snapping, so
+    // release on a secondary monitor stays on that monitor.
+    apply_work_area(work_area_for_window(
+        WINDOW_LEFT.load(Ordering::Relaxed),
+        WINDOW_TOP.load(Ordering::Relaxed),
+    ));
     let dock = unsafe { snap_window_after_drag(hwnd) };
     update_pet_dock(dock);
     persist_pet_position(hwnd);

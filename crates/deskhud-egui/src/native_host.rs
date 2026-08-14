@@ -34,7 +34,7 @@ use crate::settings::{SettingsHost, SettingsTab};
 const MENU_INITIAL_WIDTH: f64 = 180.0;
 const SETTINGS_WIDTH: f64 = 920.0;
 const SETTINGS_HEIGHT: f64 = 680.0;
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 const MENU_FOCUS_GRACE: Duration = Duration::from_millis(220);
 #[cfg(windows)]
 const MENU_FOCUS_GRACE: Duration = Duration::from_millis(180);
@@ -107,6 +107,7 @@ struct NativeHost {
     #[cfg(target_os = "macos")]
     settings_surface: Option<OverlaySurface>,
     repaint_at: Option<Instant>,
+    last_gl_context_error: Option<Instant>,
 }
 
 impl NativeHost {
@@ -142,6 +143,7 @@ impl NativeHost {
             #[cfg(target_os = "macos")]
             settings_surface: None,
             repaint_at: None,
+            last_gl_context_error: None,
         }
     }
 
@@ -601,18 +603,39 @@ impl NativeHost {
     }
 
     fn draw(&mut self, event_loop: &ActiveEventLoop) {
-        #[cfg(not(windows))]
+        #[cfg(windows)]
+        if self.control_surface == ControlSurface::Hidden
+            || self.window().and_then(Window::is_visible) != Some(true)
+        {
+            // Windows can deliver one queued RedrawRequested after the native
+            // control window has been hidden. Do not make an invalid surface
+            // current during that teardown race.
+            return;
+        }
+        #[cfg(target_os = "macos")]
         let paint = {
             let window = self.gl_window.as_ref().map(GlutinWindow::window);
             self.desk_pet.frame(window, &mut self.engine, &self.prefs)
         };
+        #[cfg(target_os = "linux")]
+        {
+            let window = self.gl_window.as_ref().map(GlutinWindow::window);
+            let _ = self.desk_pet.frame(window, &mut self.engine, &self.prefs);
+        }
         let Some(gl_window) = self.gl_window.as_mut() else {
             return;
         };
         if let Err(error) = gl_window.make_current() {
-            tracing::error!(%error, "activate native UI GL context failed");
+            let should_log = self
+                .last_gl_context_error
+                .is_none_or(|at| at.elapsed() >= Duration::from_secs(1));
+            if should_log {
+                tracing::warn!(%error, "activate native UI GL context skipped; native surface is temporarily unavailable");
+                self.last_gl_context_error = Some(Instant::now());
+            }
             return;
         }
+        self.last_gl_context_error = None;
         let Some(egui) = self.egui.as_mut() else {
             return;
         };
@@ -1033,7 +1056,7 @@ impl ApplicationHandler<UserEvent> for NativeHost {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 fn draw_pet_paint(ui: &egui::Ui, paint: deskhud_engine::PetPaint) {
     let rect = ui.max_rect();
     #[cfg(windows)]

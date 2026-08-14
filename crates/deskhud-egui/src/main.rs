@@ -1,18 +1,24 @@
 //! DeskHud application entry point.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// 设置页与宠物菜单只在 Windows / macOS 走平台原生 + egui 路径接入；
+// Linux 目前为宠物运行态专用，相关 UI 模块按未启用处理。
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 mod fonts;
 #[cfg(windows)]
 mod gpu_overlay_probe;
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 mod image_decode;
 mod native_host;
 #[cfg(windows)]
 mod native_menu;
 mod overlay_control;
 mod overlay_surface;
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 mod pet_menu;
 mod pet_scene;
 mod platform;
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 mod settings;
 mod single_instance;
 mod theme;

@@ -15,7 +15,8 @@ type CommandWaker = Arc<dyn Fn() + Send + Sync>;
 pub(crate) enum OverlayControlCommand {
     /// Wake the existing pet overlay without opening a menu.
     ActivateExisting,
-    /// 请求平台原生菜单。
+    /// 请求平台原生菜单。仅在 macOS 由原生后端构造；Windows/Linux 直接处理。
+    #[cfg_attr(windows, allow(dead_code))]
     OpenMenu,
     OpenSettings,
     OpenHudLayout,
@@ -26,7 +27,9 @@ pub(crate) enum OverlayControlCommand {
         x_points: f32,
         y_points: f32,
     },
+    #[cfg_attr(windows, allow(dead_code))]
     PetDragStarted,
+    #[cfg_attr(windows, allow(dead_code))]
     PetDragEnded,
     /// 请求 DeskHud 正常退出。
     Quit,

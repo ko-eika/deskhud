@@ -8,6 +8,10 @@
 | 2026-08-13 | 产品版本 PATCH 升至 `0.6.5`，engine 兼容族保持 `0.6` | 完善引擎、宠物包、插件包协议文档与迁移路线图，不改变 ABI 或包加载契约 |
 | 2026-08-14 | 产品版本 PATCH 升至 `0.6.6`，engine 兼容族保持 `0.6` | 完成 macOS 目标 1 基础验收、统一宠物包贴边反馈与跨平台渲染契约审计 |
 | 2026-08-14 | 跨平台编译护栏：macOS 专属项泛化为 `#[cfg(not(windows))]`；Linux/fallback 补齐缺省几何符号；任一平台保证 `cargo check` 通过；产品版本 PATCH 升至 `0.6.7`，engine 族保持 `0.6` | macOS/Windows 单平台编码曾破坏 Linux CI，需互补 cfg 与 fallback 实现 |
+| 2026-08-14 | 产品版本 PATCH 升至 `0.6.8`，engine 兼容族保持 `0.6` | 完成 Windows 目标 1/2 多窗口、多显示器回归；修复 native UI GL surface 生命周期竞态日志 |
+| 2026-08-14 | 设置页/宠物菜单/图像解码与字体枚举仅 Windows/macOS 接入；Linux（宠物运行态专用）将 `settings`、`pet_menu`、`image_decode`、`fonts` 以 `#[cfg_attr(target_os="linux", allow(dead_code))]` 关闭死代码，`native_host` 相应 cfg 修正；三平台 `cargo check --workspace --all-targets -D warnings` 均通过 | Windows 死代码报错来自 `overlay_control`（`OpenMenu`/`PetDragStarted`/`PetDragEnded`），Linux 来自上述 UI 模块；非行为变更 |
+| 2026-08-14 | **缺陷（Windows 原生菜单不随应用/系统主题）**：`deskhud-egui/src/native_menu.rs` 用经典 `CreatePopupMenu`/`TrackPopupMenuEx`，Win10/11 经典菜单不自动跟随暗色；已验证 uxtheme `SetPreferredAppMode`/`AllowDarkModeForWindow` + owner `DwmSetWindowAttribute` 三套钩子在本机均不生效；owner-draw 自绘主题菜单曾试制但导致菜单异常，代码已回滚。定为缺陷待后续原生方案处理，Rest on 计划 C（C0 部分试制已回滚；C1 跨平台原生视图 trait 待做），不在本次继续调整代码 | 桌宠覆盖层已是 DirectComposition（原生）；国际化/主题契约在 `deskhud-ui`（无 egui），脱离 egui 不影响 |
+| 2026-08-14 | **修复（Windows native UI GL context 报错）**：设置/菜单窗口隐藏或销毁时，winit 仍可能投递一次排队的 `RedrawRequested`；此前 `native_host::draw` 直接对已不可用的 surface 调用 `make_current`，产生 Win32 error 6（句柄无效）或 error 2004（转换操作不支持），且会重复刷日志。现仅在控制窗可见时绘制，并对仍发生的短暂失败按 1 秒节流记录后跳过当前帧；错误不再按 ERROR 级别刷屏。 |
 
 | 2026-08-13 | 启动全平台原生窗口迁移：宠物、气泡、HUD、布局编辑器和菜单改由平台后端实现；设置窗口暂保留 `winit + egui_glow` | 先迁移窗口生命周期与合成边界，避免一次性重写设置 UI；菜单不再属于 egui 控制窗 |
 
