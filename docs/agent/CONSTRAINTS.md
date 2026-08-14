@@ -16,7 +16,7 @@
 
 ## 分层边界（不可跨越）
 
-- `deskhud-egui` 唯一 UI；禁止第二套 UI、托盘、UI 依赖 `git2`。
+- `deskhud-egui` 是当前唯一的设置页实现；迁移期间 `winit + egui_glow` 仅作为 legacy 控制 UI 保留。禁止新增第二套 egui UI、托盘、或 UI 依赖 `git2`；迁移完成后设置页改由各平台原生后端提供。
 - `deskhud-engine` 仅契约，禁止依赖 `deskhud-sdk`。
 - `deskhud-runtime` 发现/加载/注册；`deskhud-package` manifest/IO/包内 i18n；`deskhud-ui` 零 egui。
 - 内置 = 原生 crate；社区 = WASM + `deskhud-sdk`（仅 examples/社区包）。
@@ -26,7 +26,7 @@
 - UI 组件必须遵循统一的视觉与交互风格：布局、间距、字号、颜色、控件状态和反馈优先复用现有组件/样式，不为单个页面另起一套风格。
 - 所有用户可见 UI 文案必须国际化；“关于”页及版本、作者、许可证、技术栈、主页等真实信息也必须通过国际化目录提供对应语言，不得把面向用户的语言硬编码在页面逻辑中。新增 UI 文案必须同时补齐中英文（或当前支持的全部语言）目录与缺键回退。
 - 设置侧栏顺序：**常规 / 宠物 / 插件 / 关于**，默认常规；宠尺寸来自 `PetKindInfo`；设置预览用静态 `preview`/`icon`，不实时 `paint`。
-- 设置页暂由 `winit + egui_glow` 直接托管不透明控制窗；菜单迁移到平台原生菜单实现。宠物 / 气泡 / HUD / 布局编辑与菜单由平台窗口后端实现。禁止恢复 eframe、deferred viewport 或第二套 egui 菜单 UI。
+- 设置页暂由 `winit + egui_glow` 直接托管不透明控制窗，属于迁移期 legacy；菜单迁移到平台原生菜单实现。宠物 / 气泡 / HUD / 布局编辑与菜单由平台窗口后端实现。禁止恢复 eframe、deferred viewport 或第二套 egui 菜单 UI。
 - 原生菜单无边框、不可缩放、由平台负责层级与失焦关闭；设置页暂由 egui 控制窗承载，有边框、可缩放、保存几何且**始终是普通非置顶窗口**。菜单不得复用设置控制窗。
 - 透明命中不能靠全屏 UI 窗、窗口 RGN 或 `ExtendFrame(-1)` 模拟；Windows 覆盖层使用 DirectComposition，拖动和命中留在平台壳。
 - **铁律**：宠物置顶只跟 prefs；设置窗不跟随置顶，菜单显示期间可以临时处于宠物之上；勿用 owner 或临时取消宠物置顶形成循环。

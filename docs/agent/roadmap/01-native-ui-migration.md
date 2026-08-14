@@ -1,6 +1,8 @@
 # 原生 UI 架构迁移
 
-- 状态：待推进
+当前推进顺序：目标 1 已完成，下一步执行目标 2；目标 2 完成后再进入目标 3。
+
+- 状态：目标 1 已完成，目标 2 待推进
 
 ## 总目标
 
@@ -35,15 +37,15 @@ DeskHud 从现有 `deskhud-egui` 设置页逐步迁移到平台原生 UI：Windo
 
 ### 验收标准
 
-- [ ] 当前约束明确原生 UI 迁移边界。
-- [ ] 记录 Linux 选择 GTK、平台 crate 目录和 xtask 目录决策。
-- [ ] `cargo check --workspace --all-targets` 通过。
-- [ ] `cargo test --workspace` 通过。
-- [ ] `cargo fmt --check` 通过。
+- [x] 当前约束明确原生 UI 迁移边界。
+- [x] 记录 Linux 选择 GTK、平台 crate 目录和 xtask 目录决策。
+- [x] `cargo check --workspace --all-targets` 通过。
+- [x] `cargo test --workspace` 通过。
+- [x] `cargo fmt --check` 通过。
 
 ### 验证状态
 
-状态：未开始
+状态：已完成
 
 - 验证平台：当前开发环境及 CI 三平台目标。
 - 已验证：暂无。
@@ -103,7 +105,7 @@ deskhud/
 
 ### 验证状态
 
-状态：未开始
+状态：目标 1 完成后复核一致
 
 - 验证平台：当前开发环境及 CI 三平台目标。
 - 已验证：当前目录规划已确定。
@@ -141,7 +143,7 @@ deskhud/
 
 ### 验证状态
 
-状态：未开始
+状态：目标 1 完成后复核一致
 
 - 验证平台：平台无关 Rust 单元测试和 Windows egui legacy。
 - 已验证：现有 `CatalogStore` 和 prefs 作为迁移基础。
@@ -370,8 +372,32 @@ cargo pack-builtins
 | 日期 | 变更 | 状态 |
 |---|---|---|
 | 2026-08-14 | 建立原生 UI 迁移计划、状态表、问题记录和决策记录 | 待推进 |
+| 2026-08-14 | 完成目标 1：冻结现状并统一迁移边界；明确 egui 为迁移期 legacy，确认 Windows WinUI、macOS AppKit、Linux GTK 与 `platform/` / `tools/` 目录决策 | 已完成 |
+
+### 执行记录
+
+- 状态：已完成
+- 开始日期：2026-08-14
+- 完成日期：2026-08-14
+- 实际提交：工作区当前提交（文档变更待提交）
+- 实际改动：
+  - 更新 `docs/agent/CONSTRAINTS.md`，明确 egui legacy 边界。
+  - 更新 `docs/architecture.md`，补充平台原生 UI 分层与迁移规则。
+  - 更新 `docs/agent/MEMORY.md`，记录目标 1 决策。
+- 验证命令：
+  - `cargo check --workspace --all-targets`
+  - `cargo test --workspace`
+  - `cargo fmt --check`
+- 验证结果：通过（格式检查、全工作区编译与测试均通过）
+- 遗留问题：无
 
 ## 阶段完成记录模板
+
+## 当前推进顺序（2026-08-14 修订）
+
+- 目标 1：已完成。
+- 目标 2：下一步，调整 workspace 与目录结构，并完成 workspace / 构建验证。
+- 目标 3：目标 2 完成后执行，抽离平台无关的 `SettingsModel` / `SettingsCommand`，并确保 `deskhud-ui` 不依赖 egui。
 
 每个目标完成后，在对应章节末尾补充：
 

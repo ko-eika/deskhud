@@ -5,6 +5,8 @@
 
 ## 决策
 
+| 2026-08-14 | 原生 UI 迁移目标 1 完成：将 `deskhud-egui` 定义为迁移期 legacy 设置页；`deskhud-ui` 保持平台无关，正式设置页由 Windows WinUI、macOS AppKit、Linux GTK 提供 | 统一现行约束、架构说明与迁移路线图，避免把当前过渡实现误认为最终 UI 架构 |
+
 | 2026-08-13 | 产品版本 PATCH 升至 `0.6.5`，engine 兼容族保持 `0.6` | 完善引擎、宠物包、插件包协议文档与迁移路线图，不改变 ABI 或包加载契约 |
 | 2026-08-14 | 产品版本 PATCH 升至 `0.6.6`，engine 兼容族保持 `0.6` | 完成 macOS 目标 1 基础验收、统一宠物包贴边反馈与跨平台渲染契约审计 |
 | 2026-08-14 | 跨平台编译护栏：macOS 专属项泛化为 `#[cfg(not(windows))]`；Linux/fallback 补齐缺省几何符号；任一平台保证 `cargo check` 通过；产品版本 PATCH 升至 `0.6.7`，engine 族保持 `0.6` | macOS/Windows 单平台编码曾破坏 Linux CI，需互补 cfg 与 fallback 实现 |
@@ -79,7 +81,9 @@
 
 历史上曾受 Glow deferred 子窗透明限制；现行方案已迁移为平台覆盖层，当前边界以 [`CONSTRAINTS.md`](./CONSTRAINTS.md) 为准。
 
-## 下一步（产品）
+## 下一步
+
+迁移计划下一步为目标 2：调整 workspace 与目录结构，完成 `platform/`、`apps/`、`tools/` 分层及完整构建验证；目标 2 完成后再进入目标 3。产品能力事项如下：
 
 - [ ] 更多 `PetEvent` / `HudFrame`
 - [ ] WASM runtime + SDK 示例
