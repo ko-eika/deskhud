@@ -6,12 +6,13 @@
 
 | 里程碑 | 状态 | 文档 |
 |---|---|---|
-| 01 引擎约定与迁移底座 | 进行中 | [`01-engine-contracts.md`](01-engine-contracts.md) |
-| 02 Windows 原生窗口 | 进行中 | [`02-windows-native.md`](02-windows-native.md) |
-| 03 macOS 原生窗口 | 菜单已迁移；其它窗口待推进 | [`03-macos-native.md`](03-macos-native.md) |
-| 04 Linux 原生窗口 | 待推进 | [`04-linux-native.md`](04-linux-native.md) |
-| 05 宠物包协议与规范 | 进行中 | [`05-pet-package-protocol.md`](05-pet-package-protocol.md) |
-| 06 插件包协议与规范 | 进行中 | [`06-plugin-package-protocol.md`](06-plugin-package-protocol.md) |
+| 01 原生 UI 架构迁移 | 未开始 | [`01-native-ui-migration.md`](01-native-ui-migration.md) |
+| 02 引擎约定与迁移底座 | 进行中 | [`02-engine-contracts.md`](02-engine-contracts.md) |
+| 03 Windows 原生窗口 | 进行中 | [`03-windows-native.md`](03-windows-native.md) |
+| 04 macOS 原生窗口 | 菜单已迁移；其它窗口待推进 | [`04-macos-native.md`](04-macos-native.md) |
+| 05 Linux 原生窗口 | 待推进 | [`05-linux-native.md`](05-linux-native.md) |
+| 06 宠物包协议与规范 | 进行中 | [`06-pet-package-protocol.md`](06-pet-package-protocol.md) |
+| 07 插件包协议与规范 | 进行中 | [`07-plugin-package-protocol.md`](07-plugin-package-protocol.md) |
 
 ## 迁移边界
 
