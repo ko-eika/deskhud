@@ -6,7 +6,7 @@
 
 | 里程碑 | 状态 | 文档 |
 |---|---|---|
-| 01 原生 UI 架构迁移 | 未开始 | [`01-native-ui-migration.md`](01-native-ui-migration.md) |
+| 01 原生 UI 架构迁移 | 目标 1/2 已验收；目标 3 待推进 | [`01-native-ui-migration.md`](01-native-ui-migration.md) |
 | 02 引擎约定与迁移底座 | 进行中 | [`02-engine-contracts.md`](02-engine-contracts.md) |
 | 03 Windows 原生窗口 | 进行中 | [`03-windows-native.md`](03-windows-native.md) |
 | 04 macOS 原生窗口 | 菜单已迁移；其它窗口待推进 | [`04-macos-native.md`](04-macos-native.md) |

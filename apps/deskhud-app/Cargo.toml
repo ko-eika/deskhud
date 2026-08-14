@@ -1,0 +1,15 @@
+[package]
+name = "deskhud-app"
+description = "DeskHud native application entry point (migration scaffold)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "deskhud"
+path = "src/main.rs"

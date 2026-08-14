@@ -8,7 +8,7 @@ license.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "deskhud"
+name = "deskhud-egui"
 path = "src/main.rs"
 
 [dependencies]

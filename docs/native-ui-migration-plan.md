@@ -12,7 +12,7 @@ DeskHud 从当前的 `deskhud-egui` 设置页逐步迁移到平台原生 UI：
 
 ## 计划状态
 
-当前进度（2026-08-14）：阶段 0 已完成，阶段 1 尚未开始；阶段 1 是当前下一步，完成 workspace 与目录结构调整及完整构建验证后再进入阶段 2。
+当前进度（2026-08-15）：阶段 0、阶段 1 已完成验收；阶段 1 额外完成根目录 `fonts/` 与 `locales/` 资源迁移，下一步进入阶段 2。
 
 状态含义：
 
@@ -24,7 +24,7 @@ DeskHud 从当前的 `deskhud-egui` 设置页逐步迁移到平台原生 UI：
 | 阶段 | 内容 | 状态 | 开始日期 | 完成日期 | 当前提交 | 验收状态 |
 |---|---|---|---|---|---|---|
 | 0 | 冻结现状与更新约束 | 已完成 | 2026-08-14 | 2026-08-14 | 文档变更（工作区待提交） | 已验收 |
-| 1 | 调整 workspace 和目录结构 | 未开始 | — | — | — | 未验收 |
+| 1 | 调整 workspace 和目录结构 | 已完成 | 2026-08-14 | 2026-08-15 | 工作区当前变更（待提交） | 已验收 |
 | 2 | 抽离平台无关 UI 模型 | 未开始 | — | — | — | 未执行 |
 | 3 | 建立平台抽象和平台 crate | 未开始 | — | — | — | 未执行 |
 | 4 | Windows 原生设置页 | 未开始 | — | — | — | 未执行 |
@@ -96,6 +96,7 @@ DeskHud 从当前的 `deskhud-egui` 设置页逐步迁移到平台原生 UI：
 ```text
 deskhud/
 ├── crates/
+│   └── deskhud-egui/                  # 迁移期 legacy 设置页参考实现
 │   ├── deskhud-core/
 │   ├── deskhud-engine/
 │   ├── deskhud-runtime/
@@ -116,6 +117,8 @@ deskhud/
 ```
 
 ## 不变原则
+
+资源目录补充：根目录 `fonts/` 保存宿主内置字体，根目录 `locales/` 保存外壳 TOML 翻译源；扩展包翻译仍保留在各包的 `i18n/` 目录。`.po/.mo` 支持后续另行增加。
 
 1. `deskhud-engine` 只放领域契约，不依赖任何 UI toolkit 或平台 API。
 2. `deskhud-runtime` 负责包发现、加载、注册和运行协调。
@@ -160,16 +163,22 @@ docs: 确定原生 UI 迁移方向与分层边界
 - 将 `deskhud-xtask` 移到 `tools/deskhud-xtask/`。
 - 更新根目录 workspace members。
 - 更新 `.cargo/config.toml` 中的 xtask 别名。
-- 保留现有 `deskhud-egui`，不改变功能行为。
+- 成根目录 `fonts/` 与 `locales/` 资源迁移。
+- 保留现有 `deskhud-egui`，不改变功能行为，作为 legacy 参考入口，补充旧字体 prefs ID 到 Inter 的兼容映射。
+- 预留`.po/.mo` 支持后续再实现说明。
 - 修正文档、脚本和 CI 中的路径引用。
 
 ### 验收
 
 ```bash
-cargo metadata --no-deps
+cargo metadata --format-version 1 --no-deps
 cargo check --workspace --all-targets
 cargo test --workspace
 cargo pack-builtins
+
+# 运行测试，保证egui功能不受影响
+cargo run -p deskhud-egui
+cargo run -p deskhud-app
 ```
 
 ### 中文提交小结

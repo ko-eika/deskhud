@@ -283,7 +283,7 @@ mode = "system"
 locale = "zh-cn"
 
 [font]
-id = "JetBrainsMono-Regular"
+id = "Inter"
 family = "jetbrainsmono"
 style = "Regular"
 size = 13.0

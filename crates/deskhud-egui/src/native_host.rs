@@ -9,7 +9,9 @@ use anyhow::{Context as _, Result};
 use egui::Color32;
 #[cfg(target_os = "macos")]
 use glow::HasContext as _;
-use glutin::context::{NotCurrentGlContext as _, PossiblyCurrentGlContext as _};
+use glutin::context::NotCurrentGlContext as _;
+#[cfg(not(windows))]
+use glutin::context::PossiblyCurrentGlContext as _;
 use glutin::display::{GetGlDisplay as _, GlDisplay as _};
 use glutin::prelude::GlSurface as _;
 use raw_window_handle::HasWindowHandle as _;
@@ -625,6 +627,7 @@ impl NativeHost {
         let Some(gl_window) = self.gl_window.as_mut() else {
             return;
         };
+        #[cfg(not(windows))]
         if let Err(error) = gl_window.make_current() {
             let should_log = self
                 .last_gl_context_error
@@ -635,6 +638,10 @@ impl NativeHost {
             }
             return;
         }
+        // Windows owns a single UI GL context for this host. It is activated
+        // during construction and remains current on the event-loop thread;
+        // re-activating it while a just-shown/resized window surface is still
+        // settling can produce transient WGL/EGL errors such as os error 2004.
         self.last_gl_context_error = None;
         let Some(egui) = self.egui.as_mut() else {
             return;
@@ -1228,6 +1235,7 @@ impl GlutinWindow {
         &self.window
     }
 
+    #[cfg(not(windows))]
     pub(crate) fn make_current(&mut self) -> glutin::error::Result<()> {
         self.context.make_current(&self.surface)
     }

@@ -1,8 +1,8 @@
 # 原生 UI 架构迁移
 
-当前推进顺序：目标 1 已完成，下一步执行目标 2；目标 2 完成后再进入目标 3。
+当前推进顺序：目标 1、目标 2 已完成，下一步执行目标 3。
 
-- 状态：目标 1 已完成，目标 2 待推进
+- 状态：目标 1、目标 2 已完成，目标 3 待推进
 
 ## 总目标
 
@@ -74,6 +74,7 @@ deskhud/
 ├── locales/                         # 外壳翻译资源
 ├── packs/                           # 内置宠物包与 HUD 包
 ├── crates/                          # 通用业务 crate
+│   ├── deskhud-egui/                # 迁移期 legacy 设置页参考实现
 │   ├── deskhud-core/
 │   ├── deskhud-engine/
 │   ├── deskhud-runtime/
@@ -95,27 +96,35 @@ deskhud/
 
 ### 验收标准
 
-- [ ] workspace members 包含 `crates/*`、`platform/*`、`apps/*` 和 `tools/*`。
-- [ ] `deskhud-xtask` 的 Cargo alias 和文档路径更新。
-- [ ] `deskhud-egui` 暂时保留且运行行为不变。
-- [ ] `cargo metadata --no-deps` 通过。
-- [ ] `cargo check --workspace --all-targets` 通过。
-- [ ] `cargo test --workspace` 通过。
-- [ ] `cargo pack-builtins` 通过。
+- [x] workspace members 包含 `crates/*`、`platform/*`、`apps/*` 和 `tools/*`。
+- [x] 根目录 `fonts/` 与 `locales/` 资源迁移完成，内置字体统一保留 `Inter.ttc`。
+- [x] `deskhud-xtask` 的 Cargo alias 和文档路径更新。
+- [x] `deskhud-egui` 暂时保留且运行行为不变。
+- [x] `cargo metadata --format-version 1 --no-deps` 通过。
+- [x] `cargo check --workspace --all-targets` 通过。
+- [x] `cargo test --workspace` 通过。
+- [x] `cargo pack-builtins` 通过。
+- [x] `cargo run -p deskhud-egui` 启动 legacy 设置页验证通过。
+- [x] `cargo run -p deskhud-app` 启动 native app 入口验证通过。
 
 ### 验证状态
 
-状态：目标 1 完成后复核一致
+状态：已完成
 
 - 验证平台：当前开发环境及 CI 三平台目标。
 - 已验证：当前目录规划已确定。
-- 未验证：目录调整后的完整构建。
+- 已验证：目录调整后的完整构建、测试和内置包导出。
 
 ### 已知问题
 
 - 问题：目录调整可能影响 CI、Cargo alias、文档和发布脚本路径。
-- 修复状态：未开始。
-- 验证情况：待 workspace 调整后统一检查。
+- 修复状态：已处理。
+- 验证情况：metadata、workspace check、workspace test、pack-builtins 均已通过。
+- 迁移问题：旧字体 prefs ID 仍引用 JetBrainsMono，已兼容迁移到 Inter。
+- 迁移问题：Inter 不包含部分旧侧栏字体图标字形，已改为 egui 几何图标。
+- 运行时问题：Windows 设置页重复激活 GL 上下文会产生临时 `[7d4]` 告警，已移除重复激活。
+- 工具链问题：`cargo metadata --no-deps` 未指定格式会产生兼容性警告，验证命令已统一为 `--format-version 1`。
+- 遗留问题：`.po/.mo` 翻译文件支持后续实现；当前外壳翻译使用 TOML。
 
 ---
 
@@ -396,8 +405,10 @@ cargo pack-builtins
 ## 当前推进顺序（2026-08-14 修订）
 
 - 目标 1：已完成。
-- 目标 2：下一步，调整 workspace 与目录结构，并完成 workspace / 构建验证。
+- 目标 2：已完成；保留 `crates/deskhud-egui` 作为 legacy 参考，并完成目录规划、workspace 约束、资源迁移和运行验证。
 - 目标 3：目标 2 完成后执行，抽离平台无关的 `SettingsModel` / `SettingsCommand`，并确保 `deskhud-ui` 不依赖 egui。
+
+目标 2 验收结果：`cargo metadata --format-version 1 --no-deps`、`cargo check --workspace --all-targets`、`cargo test --workspace`、`cargo pack-builtins`、`cargo fmt --check` 均通过。
 
 每个目标完成后，在对应章节末尾补充：
 

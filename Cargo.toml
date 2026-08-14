@@ -11,7 +11,12 @@ members = [
     "crates/deskhud-runtime",
     "crates/deskhud-sdk",
     "crates/deskhud-egui",
-    "crates/deskhud-xtask",
+    "apps/deskhud-app",
+    "tools/deskhud-xtask",
+    "platform/deskhud-platform",
+    "platform/deskhud-platform-windows",
+    "platform/deskhud-platform-macos",
+    "platform/deskhud-platform-linux-gtk",
     "packs/pet-deskhud-specs",
     "packs/pet-deskhud-blob",
     "packs/hud-deskhud-demo",
@@ -25,7 +30,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.6.8"
+version = "0.6.9"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"

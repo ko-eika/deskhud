@@ -7,10 +7,8 @@ Copyright 2026 KO.EIKA (@KOEIKA)
 This product includes software developed for DeskHud.
 Licensed under the Apache License, Version 2.0.
 
-This product bundles the following fonts under the SIL Open Font License, Version 1.1
-(see crates/deskhud-egui/assets/fonts/ for full license texts):
+This product bundles Inter under the SIL Open Font License, Version 1.1.
+See fonts/LICENSE-Inter.txt for the full license text.
 
-- Noto Sans SC — Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.
-  Source: https://github.com/notofonts/noto-cjk
-- JetBrains Mono — Copyright 2020 The JetBrains Mono Project Authors.
-  Source: https://github.com/JetBrains/JetBrainsMono
+- Inter — Copyright 2020 The Inter Project Authors.
+  Source: https://github.com/rsms/inter

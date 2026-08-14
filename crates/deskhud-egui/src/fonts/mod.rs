@@ -1,4 +1,4 @@
-//! UI 字体：内置（build 嵌入 assets/fonts）+ 系统扫描；同名家族样式互补合并。
+//! UI 字体：内置（build 嵌入根目录 fonts）+ 系统扫描；同名家族样式互补合并。
 
 mod classify;
 mod scan;
@@ -16,12 +16,13 @@ include!(concat!(env!("OUT_DIR"), "/builtin_fonts_gen.rs"));
 
 /// 兼容旧 prefs / 默认家族键（无 `fam.` 前缀）。
 pub const BUILTIN_NOTO_SANS_SC: &str = "notosanssc";
-/// 默认 JetBrains Mono 家族键。
-pub const BUILTIN_JETBRAINS_MONO: &str = "jetbrainsmono";
+/// 默认 Inter 家族键。
+pub const BUILTIN_INTER: &str = "inter";
 
 const LEGACY_NOTO: &str = "builtin.noto_sans_sc";
 const LEGACY_JB: &str = "builtin.jetbrains_mono";
-const DEFAULT_FACE_ID: &str = "JetBrainsMono-Regular";
+const LEGACY_JB_FACE: &str = "JetBrainsMono-Regular";
+const DEFAULT_FACE_ID: &str = "Inter";
 
 /// 字重面。
 #[derive(Debug, Clone)]
@@ -174,7 +175,7 @@ fn migrate_family_key(key: &str) -> String {
     let key = key.strip_prefix("fam.").unwrap_or(key);
     match key {
         "builtin.noto_sans_sc" | "noto_sans_sc" => BUILTIN_NOTO_SANS_SC.into(),
-        "builtin.jetbrains_mono" | "jetbrains_mono" => BUILTIN_JETBRAINS_MONO.into(),
+        "builtin.jetbrains_mono" | "jetbrains_mono" => BUILTIN_INTER.into(),
         other => other.to_string(),
     }
 }
@@ -191,14 +192,14 @@ pub fn family_key_for_font_id(families: &[FontFamilyEntry], font_id: &str) -> St
     if looks_like_font_path(&id) {
         return id;
     }
-    BUILTIN_JETBRAINS_MONO.into()
+    BUILTIN_INTER.into()
 }
 
 /// 规范化历史 prefs 里的字体 id（去掉 builtin./system. 等前缀）。
 pub fn migrate_legacy_font_id(id: &str) -> String {
     match id {
         LEGACY_NOTO | "noto_sans_sc" => "NotoSansSC-Regular".into(),
-        LEGACY_JB | "jetbrains_mono" => DEFAULT_FACE_ID.into(),
+        LEGACY_JB | LEGACY_JB_FACE | "jetbrains_mono" => DEFAULT_FACE_ID.into(),
         other => {
             if let Some(rest) = other.strip_prefix("builtin.") {
                 return rest.to_string();
@@ -260,8 +261,8 @@ pub fn configure_fonts(ctx: &egui::Context, ui_font_id: &str) {
             name
         }
         None => {
-            tracing::warn!(%id, "ui font missing; fallback to JetBrains Mono");
-            "builtin_data_JetBrainsMono-Regular".into()
+            tracing::warn!(%id, "ui font missing; fallback to Inter");
+            "builtin_data_Inter".into()
         }
     };
 
@@ -286,14 +287,10 @@ pub fn configure_fonts(ctx: &egui::Context, ui_font_id: &str) {
 
     let mono = fonts.families.entry(FontFamily::Monospace).or_default();
     mono.clear();
-    let jb = "builtin_data_JetBrainsMono-Regular";
-    if fonts.font_data.contains_key(jb) {
-        mono.push(jb.into());
-    }
     if fonts.font_data.contains_key(noto_key) {
         mono.push(noto_key.into());
     }
-    if primary != jb && primary != noto_key {
+    if primary != noto_key {
         mono.push(primary);
     }
 

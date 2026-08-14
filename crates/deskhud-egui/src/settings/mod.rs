@@ -644,7 +644,7 @@ impl SettingsHost {
         ui.label(RichText::new("DeskHud").size(11.5).color(tone::muted()));
         ui.add_space(18.0);
 
-        for (next, key, icon) in [
+        for (icon, (next, key, _)) in [
             (SettingsTab::General, MessageKey::SettingsNavGeneral, "○"),
             (
                 SettingsTab::Performance,
@@ -654,10 +654,13 @@ impl SettingsHost {
             (SettingsTab::Pet, MessageKey::SettingsNavPet, "●"),
             (SettingsTab::Hud, MessageKey::SettingsNavHud, "▦"),
             (SettingsTab::About, MessageKey::SettingsNavAbout, "ⓘ"),
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let label = self.lock().prefs.t(key).to_string();
             let selected = tab == next;
-            if nav_item(ui, &format!("{icon}  {label}"), selected).clicked() {
+            if nav_item(ui, &label, selected, icon).clicked() {
                 let mut s = self.lock();
                 s.tab = next;
                 if next == SettingsTab::Pet {
@@ -3264,7 +3267,7 @@ fn opaque_tooltip_visuals(ui: &mut egui::Ui) {
     v.override_text_color = Some(tone::text());
 }
 
-fn nav_item(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
+fn nav_item(ui: &mut egui::Ui, label: &str, selected: bool, icon: usize) -> egui::Response {
     let (rect, response) =
         ui.allocate_exact_size(Vec2::new(ui.available_width(), 36.0), Sense::click());
     let bg = if selected {
@@ -3285,8 +3288,19 @@ fn nav_item(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
         ui.painter()
             .rect_filled(bar, CornerRadius::same(2), tone::accent());
     }
+    let icon_color = if selected {
+        tone::accent()
+    } else {
+        tone::text()
+    };
+    draw_nav_icon(
+        ui.painter(),
+        egui::pos2(rect.left() + 30.0, rect.center().y),
+        icon,
+        icon_color,
+    );
     ui.painter().text(
-        egui::pos2(rect.left() + 14.0, rect.center().y),
+        egui::pos2(rect.left() + 48.0, rect.center().y),
         Align2::LEFT_CENTER,
         label,
         FontId::proportional(14.0),
@@ -3297,6 +3311,63 @@ fn nav_item(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
         },
     );
     response
+}
+
+fn draw_nav_icon(painter: &egui::Painter, center: egui::Pos2, icon: usize, color: Color32) {
+    let stroke = Stroke::new(1.8, color);
+    match icon {
+        0 => {
+            for (y, x) in [
+                (center.y - 5.0, -3.0),
+                (center.y, 3.0),
+                (center.y + 5.0, -1.0),
+            ] {
+                painter.line_segment(
+                    [egui::pos2(center.x - 7.0, y), egui::pos2(center.x + 7.0, y)],
+                    stroke,
+                );
+                painter.circle_filled(egui::pos2(center.x + x, y), 2.0, color);
+            }
+        }
+        1 => {
+            for (index, height) in [5.0, 9.0, 13.0].into_iter().enumerate() {
+                let x = center.x - 6.0 + index as f32 * 6.0;
+                painter.rect_filled(
+                    egui::Rect::from_min_max(
+                        egui::pos2(x - 1.8, center.y + 6.0 - height),
+                        egui::pos2(x + 1.8, center.y + 6.0),
+                    ),
+                    CornerRadius::same(1),
+                    color,
+                );
+            }
+        }
+        2 => {
+            painter.circle_stroke(center, 7.0, stroke);
+            painter.circle_filled(center, 2.5, color);
+        }
+        3 => {
+            for y in [-5.0, 0.0, 5.0] {
+                painter.line_segment(
+                    [
+                        egui::pos2(center.x - 6.0, center.y + y),
+                        egui::pos2(center.x + 6.0, center.y + y),
+                    ],
+                    stroke,
+                );
+            }
+        }
+        _ => {
+            painter.circle_stroke(center, 7.0, stroke);
+            painter.text(
+                center + egui::vec2(0.0, 0.5),
+                Align2::CENTER_CENTER,
+                "i",
+                FontId::proportional(11.0),
+                color,
+            );
+        }
+    }
 }
 
 fn resolve_card_layout(s: &mut SettingsState, avail_w: f32) -> (usize, f32, f32, f32) {

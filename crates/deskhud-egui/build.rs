@@ -1,4 +1,4 @@
-//! 嵌入 Windows 图标；扫描 `assets/fonts` 生成内置字体字节表。
+//! 嵌入 Windows 图标；扫描根目录 `fonts` 生成内置字体字节表。
 
 use std::env;
 use std::fs;
@@ -8,7 +8,7 @@ fn main() {
     println!("cargo:rerun-if-changed=assets/icon.ico");
     println!("cargo:rerun-if-changed=assets/icon.png");
     println!("cargo:rerun-if-changed=assets/app.manifest");
-    println!("cargo:rerun-if-changed=assets/fonts");
+    println!("cargo:rerun-if-changed=../../fonts");
 
     generate_builtin_fonts();
 
@@ -31,7 +31,7 @@ fn main() {
 
 fn generate_builtin_fonts() {
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let fonts_dir = manifest.join("assets/fonts");
+    let fonts_dir = manifest.join("../../fonts");
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let out_file = out_dir.join("builtin_fonts_gen.rs");
 

@@ -2,7 +2,7 @@
 <h4 align="center">一个可扩展的桌宠引擎</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.6.8-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.6.9-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -15,7 +15,7 @@
 
 DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（外观 + 行为），并按需开关 **HUD 插件** 及其贡献条目。界面基于 **egui + winit / egui_glow**，支持多语言与本地社区包加载（商店能力后置）。
 
-当前版本：`0.6.8`。引擎契约与原生窗口迁移底座已建立；Windows 宠物、菜单、气泡和 HUD 原生覆盖层已接入；设置页暂使用 `winit + egui_glow`。macOS/Linux 原生窗口迁移按里程碑推进；状态见 [`docs/agent/roadmap/README.md`](./docs/agent/roadmap/README.md)。
+当前版本：`0.6.9`。引擎契约与原生窗口迁移底座已建立；workspace 目录已分层，内置字体与外壳 TOML 翻译资源已归档到根目录；Windows 宠物、菜单、气泡和 HUD 原生覆盖层已接入；设置页暂使用 `winit + egui_glow`。macOS/Linux 原生窗口迁移按里程碑推进；状态见 [`docs/agent/roadmap/README.md`](./docs/agent/roadmap/README.md)。
 
 ## 功能概览
 
@@ -136,8 +136,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud
 
 # 4. 打 tag 并推送后，在 GitHub Release 上传二进制
-git tag -a v0.6.8 -m "DeskHud 0.6.8"
-git push origin v0.6.8
+git tag -a v0.6.9 -m "DeskHud 0.6.9"
+git push origin v0.6.9
 ```
 
 当前 CI（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）只做三端 `check` / 测试，**不会**自动发布安装包。
@@ -147,7 +147,7 @@ git push origin v0.6.8
 1. 启动后拖动桌宠；右键打开设置或退出。
 2. **设置 → 宠物**：选择内置宠，按需打开「键鼠短提示」等行为项。
 3. **设置 → 插件**：开关演示 HUD 插件及条目。
-4. **设置 → 常规**：调整主题、语言与字体（默认 JetBrains Mono / Regular / 13）。
+4. **设置 → 常规**：调整主题、语言与字体（默认 Inter / Regular / 13）。
 5. **设置 → 关于**：查看当前应用版本（编译时自 `CARGO_PKG_VERSION` 注入，对应 workspace `version`）。
 
 ## 扩展开发
@@ -187,6 +187,6 @@ my-cool-pet.deskhud/
 
 本项目采用 [Apache License 2.0](./LICENSE)。
 
-内置字体（Noto Sans SC、JetBrains Mono）遵循 SIL OFL 1.1，详见 [`NOTICE`](./NOTICE) 与 `crates/deskhud-egui/assets/fonts/`。
+内置字体为 Inter，遵循 SIL Open Font License 1.1，详见根目录 [`fonts/`](./fonts/) 与 `fonts/LICENSE-Inter.txt`。
 
 Copyright © KO.EIKA / @KOEIKA
