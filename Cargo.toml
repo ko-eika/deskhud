@@ -30,7 +30,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.6.9"
+version = "0.6.10"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -64,6 +64,7 @@ raw-window-handle = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 thiserror = "2.0"
+ttf-parser = "0.25.1"
 
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 core-graphics = "0.23.2"

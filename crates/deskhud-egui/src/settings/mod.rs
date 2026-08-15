@@ -20,12 +20,9 @@ use egui::{
 
 const SIDE_W: f32 = 168.0;
 const CARD_GAP: f32 = 12.0;
-const CARD_MIN_W: f32 = 156.0;
 /// 允许卡片随容器拉宽，优先贴齐左右边缘。
-const CARD_MAX_W: f32 = 280.0;
 const CARD_PAD: f32 = 12.0;
 /// 卡片底部文案区固定高度（标题 / 描述 / 尺寸）。
-const CARD_TEXT_H: f32 = 78.0;
 /// 内容区宽度稳定多久后才重算卡片（系统拖边改尺寸时 pointer 不可靠）。
 const CARD_LAYOUT_SETTLE: Duration = Duration::from_millis(220);
 /// 忽略滚动条出现等造成的微小宽度抖动，避免布局来回抖。
@@ -154,18 +151,21 @@ mod tone {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SettingsTab {
-    Pet,
-    Hud,
-    General,
-    Performance,
-    About,
-}
-
 const APP_HOMEPAGE: &str = "https://github.com/ko-eika/deskhud";
+
+pub use deskhud_ui::SettingsTab;
 /// 与根 `Cargo.toml` 中 `egui` 版本对齐；升级依赖时请同步。
 const APP_EGUI_VERSION: &str = "0.36";
+
+fn about_info() -> deskhud_ui::AboutInfo {
+    deskhud_ui::AboutInfo {
+        version: env!("CARGO_PKG_VERSION").into(),
+        authors: env!("CARGO_PKG_AUTHORS").into(),
+        license: env!("CARGO_PKG_LICENSE").into(),
+        stack: format!("egui {APP_EGUI_VERSION}"),
+        homepage: APP_HOMEPAGE.into(),
+    }
+}
 
 #[derive(Clone)]
 pub struct SettingsHost {
@@ -190,11 +190,10 @@ pub struct SettingsState {
     /// 打开后需要 Focus 一次。
     /// 打开后需要下发一次尺寸 / 位置。
     /// 用户点了「应用」：主壳应把草稿写入运行态。
-    pub apply_requested: bool,
     /// 关闭时几何已写入 `prefs`，待主壳落盘（取消时只同步几何）。
-    pub pending_flush: bool,
     /// 取消关闭：丢弃草稿，勿把未应用的改动写入主壳。
-    pub discard_draft: bool,
+    /// Latest lifecycle effect waiting for the native host.
+    pub pending_effect: Option<deskhud_ui::SettingsEffect>,
     /// 宠物卡片布局缓存（宽度变化后需稳定一段时间才重算）。
     card_layout: Option<(usize, f32, f32, f32)>,
     /// 当前布局对应的内容区宽。
@@ -431,9 +430,13 @@ impl SettingsHost {
             let state = self.lock();
             state.hud_layout_editing = false;
             state.open = false;
-            state.apply_requested = apply;
-            state.discard_draft = !apply;
-            state.pending_flush = true;
+            state.pending_effect = Some(if apply {
+                deskhud_ui::SettingsModel::new(state.baseline.clone())
+                    .command_effect(deskhud_ui::SettingsCommand::Apply)
+            } else {
+                deskhud_ui::SettingsModel::new(state.baseline.clone())
+                    .command_effect(deskhud_ui::SettingsCommand::Cancel)
+            });
         }
     }
 
@@ -450,9 +453,7 @@ impl SettingsHost {
                 hud_items: Vec::new(),
                 catalogs: CatalogStore::new(),
                 locale_dirty: false,
-                apply_requested: false,
-                pending_flush: false,
-                discard_draft: false,
+                pending_effect: None,
                 card_layout: None,
                 card_layout_for_w: 0.0,
                 card_observe_w: 0.0,
@@ -489,9 +490,7 @@ impl SettingsHost {
         s.catalogs = catalogs;
         s.tab = tab;
         // 会话内窗口层级跟打开瞬间的已应用值；草稿置顶只影响「应用」后
-        s.apply_requested = false;
-        s.pending_flush = false;
-        s.discard_draft = false;
+        s.pending_effect = None;
         s.card_layout = None;
         s.card_layout_for_w = 0.0;
         s.card_observe_w = 0.0;
@@ -589,8 +588,13 @@ impl SettingsHost {
     fn close_viewport(&self, discard: bool) {
         let mut s = self.lock();
         s.open = false;
-        s.discard_draft = discard;
-        s.pending_flush = true;
+        let command = if discard {
+            deskhud_ui::SettingsCommand::Cancel
+        } else {
+            deskhud_ui::SettingsCommand::ApplyKeepOpen
+        };
+        s.pending_effect =
+            Some(deskhud_ui::SettingsModel::new(s.baseline.clone()).command_effect(command));
     }
 
     fn capture_geometry(&self, ui: &egui::Ui) {
@@ -629,7 +633,10 @@ impl SettingsHost {
             s.prefs
                 .shell
                 .set_settings_geometry(w, h, outer.left(), outer.top());
-            s.pending_flush = true;
+            s.pending_effect = Some(
+                deskhud_ui::SettingsModel::new(s.baseline.clone())
+                    .command_effect(deskhud_ui::SettingsCommand::ApplyKeepOpen),
+            );
         }
     }
 
@@ -644,20 +651,8 @@ impl SettingsHost {
         ui.label(RichText::new("DeskHud").size(11.5).color(tone::muted()));
         ui.add_space(18.0);
 
-        for (icon, (next, key, _)) in [
-            (SettingsTab::General, MessageKey::SettingsNavGeneral, "○"),
-            (
-                SettingsTab::Performance,
-                MessageKey::SettingsNavPerformance,
-                "◒",
-            ),
-            (SettingsTab::Pet, MessageKey::SettingsNavPet, "●"),
-            (SettingsTab::Hud, MessageKey::SettingsNavHud, "▦"),
-            (SettingsTab::About, MessageKey::SettingsNavAbout, "ⓘ"),
-        ]
-        .into_iter()
-        .enumerate()
-        {
+        for (icon, next) in SettingsTab::ALL.into_iter().enumerate() {
+            let key = next.nav_message();
             let label = self.lock().prefs.t(key).to_string();
             let selected = tab == next;
             if nav_item(ui, &label, selected, icon).clicked() {
@@ -696,27 +691,21 @@ impl SettingsHost {
                 if footer_primary_button(ui, &apply_l).clicked() {
                     self.capture_geometry(ui);
                     let mut s = self.lock();
-                    s.baseline = s.prefs.clone();
-                    s.apply_requested = true;
+                    let mut model = deskhud_ui::SettingsModel::new(s.baseline.clone());
+                    model.draft = s.prefs.clone();
+                    s.pending_effect =
+                        Some(model.command_effect(deskhud_ui::SettingsCommand::Apply));
                 }
             });
             ui.add_space(8.0);
             ui.add_enabled_ui(dirty, |ui| {
                 if footer_secondary_button(ui, &reset_l).clicked() {
                     let mut s = self.lock();
-                    let mode = s.prefs.pet.picker_mode;
-                    let geo = (
-                        s.prefs.shell.settings_width,
-                        s.prefs.shell.settings_height,
-                        s.prefs.shell.settings_pos_x,
-                        s.prefs.shell.settings_pos_y,
-                    );
-                    s.prefs = s.baseline.clone();
-                    s.prefs.pet.picker_mode = mode;
-                    s.prefs.shell.settings_width = geo.0;
-                    s.prefs.shell.settings_height = geo.1;
-                    s.prefs.shell.settings_pos_x = geo.2;
-                    s.prefs.shell.settings_pos_y = geo.3;
+                    let mut model = deskhud_ui::SettingsModel::new(s.baseline.clone());
+                    model.draft = s.prefs.clone();
+                    model.baseline = s.baseline.clone();
+                    model.reset_draft();
+                    s.prefs = model.draft;
                     s.card_layout = None;
                 }
             });
@@ -751,9 +740,10 @@ impl SettingsHost {
         ui.add_space(16.0);
 
         // 版本 / 作者 / 许可证：编译期从本包 Cargo 元数据注入（继承 workspace.package）
-        let version = env!("CARGO_PKG_VERSION");
-        let author = env!("CARGO_PKG_AUTHORS");
-        let license = env!("CARGO_PKG_LICENSE");
+        let info = about_info();
+        let version = info.version.as_str();
+        let author = info.authors.as_str();
+        let license = info.license.as_str();
 
         section_card(ui, |ui| {
             ui.label(
@@ -832,7 +822,8 @@ impl SettingsHost {
             ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Some(m) = view_mode_icon_group(ui, mode) {
                     let mut s = self.lock();
-                    s.prefs.pet.picker_mode = m;
+                    let pet_id = s.prefs.pet.kind.clone();
+                    deskhud_ui::apply_pet_selection(&mut s.prefs, pet_id, m);
                     s.card_layout = None;
                 }
             });
@@ -978,7 +969,8 @@ impl SettingsHost {
             let mut s = self.lock();
             if let Some(pet) = s.pets.iter().find(|p| p.id == id) {
                 let (w, h) = (pet.window_width, pet.window_height);
-                s.prefs.pet.kind = id;
+                let picker_mode = s.prefs.pet.picker_mode;
+                deskhud_ui::apply_pet_selection(&mut s.prefs, id, picker_mode);
                 s.prefs.pet.apply_window_size(w, h);
             }
         }
@@ -1454,11 +1446,34 @@ impl SettingsHost {
         let mut locale = locale;
         let mut theme = theme;
         let families = crate::fonts::list_font_families();
+        let english_font_language = matches!(locale_enum, Locale::En);
+        let supported_family_keys: Vec<String> = families
+            .iter()
+            .filter(|family| crate::fonts::family_supports_locale(family, english_font_language))
+            .map(|family| family.family_key.clone())
+            .collect();
         let mut family_key = if families.iter().any(|f| f.family_key == font_family) {
-            font_family
+            font_family.clone()
         } else {
             crate::fonts::family_key_for_font_id(&families, &font_id)
         };
+        if !supported_family_keys.iter().any(|key| key == &family_key) {
+            family_key = supported_family_keys
+                .first()
+                .and_then(|_| {
+                    families.iter().find(|family| {
+                        supported_family_keys
+                            .iter()
+                            .any(|key| key == &family.family_key)
+                            && family.faces.iter().any(|face| face.builtin)
+                    })
+                })
+                .map(|family| family.family_key.clone())
+                .or_else(|| supported_family_keys.first().cloned())
+                .unwrap_or_else(|| crate::fonts::BUILTIN_INTER.into());
+        }
+        let family_changed_by_language = family_key != font_family;
+        let original_family_key = family_key.clone();
         let mut font_style = font_style;
         let mut font_size = font_size;
         if let Some(fam) = families.iter().find(|f| f.family_key == family_key) {
@@ -1684,6 +1699,7 @@ impl SettingsHost {
                 setting_row_divided(ui, &font_family_l, true, |ui| {
                     let opts: Vec<(String, String)> = families
                         .iter()
+                        .filter(|f| supported_family_keys.iter().any(|key| key == &f.family_key))
                         .map(|f| (f.family_key.clone(), f.label.clone()))
                         .collect();
                     searchable_combo(
@@ -1712,6 +1728,20 @@ impl SettingsHost {
                         &mut family_key,
                     );
                 });
+
+                if family_key != original_family_key || family_changed_by_language {
+                    font_style = families
+                        .iter()
+                        .find(|family| family.family_key == family_key)
+                        .and_then(|family| {
+                            ["Regular", "Normal"].iter().find_map(|preferred| {
+                                family.style_names().into_iter().find(|style| {
+                                    crate::fonts::normalize_style_name(style) == *preferred
+                                })
+                            })
+                        })
+                        .unwrap_or_else(|| "Regular".into());
+                }
 
                 let style_names: Vec<String> = families
                     .iter()
@@ -1785,15 +1815,19 @@ impl SettingsHost {
             s.prefs.locale = locale;
             s.locale_dirty = true;
         }
-        s.prefs.shell.ui_theme = theme;
         let font_changed = s.prefs.shell.ui_font_id != resolved_id
             || s.prefs.shell.ui_font_family != family_key
             || crate::fonts::normalize_style_name(&s.prefs.shell.ui_font_style) != font_style
             || (s.prefs.shell.ui_font_size - font_size).abs() > 0.01;
-        s.prefs.shell.ui_font_id = resolved_id.clone();
-        s.prefs.shell.ui_font_family = family_key;
-        s.prefs.shell.ui_font_style = font_style;
-        s.prefs.shell.ui_font_size = font_size;
+        deskhud_ui::apply_general_preferences(
+            &mut s.prefs,
+            locale,
+            theme,
+            resolved_id.clone(),
+            family_key,
+            font_style,
+            font_size,
+        );
         if font_changed {
             crate::fonts::configure_typography(ui.ctx(), &resolved_id, font_size);
         }
@@ -1994,10 +2028,7 @@ impl SettingsHost {
             });
         });
         let mut s = self.lock();
-        s.prefs.graphics.fps_limit = fps;
-        s.prefs.graphics.animation_quality = animation;
-        s.prefs.graphics.power_mode = power;
-        s.prefs.graphics.effects = effects;
+        deskhud_ui::apply_graphics_preferences(&mut s.prefs, fps, animation, effects, power);
     }
 }
 
@@ -3403,26 +3434,13 @@ fn resolve_card_layout(s: &mut SettingsState, avail_w: f32) -> (usize, f32, f32,
 }
 
 fn pet_card_layout(available_w: f32) -> (usize, f32, f32, f32) {
-    let avail = available_w.max(CARD_MIN_W);
-    // 取仍 ≥ MIN 的最大列数，均分宽度以贴齐左右
-    let mut cols = 1usize;
-    for c in 2usize..=5 {
-        let w = (avail - CARD_GAP * (c - 1) as f32) / c as f32;
-        if w < CARD_MIN_W {
-            break;
-        }
-        cols = c;
-    }
-    let raw_w = (avail - CARD_GAP * (cols - 1) as f32) / cols as f32;
-    let card_w = if cols == 1 {
-        raw_w.clamp(CARD_MIN_W, CARD_MAX_W)
-    } else {
-        raw_w.max(CARD_MIN_W)
-    };
-    // 预览区 1:1：边长 = 卡片内宽 - 左右 padding（扣 2px 描边收缩）
-    let preview_side = (card_w - 2.0 - CARD_PAD * 2.0).max(96.0);
-    let card_h = 2.0 + CARD_PAD + preview_side + CARD_PAD + CARD_TEXT_H + CARD_PAD;
-    (cols, card_w, card_h, preview_side)
+    let layout = deskhud_ui::pet_card_layout(available_w);
+    (
+        layout.columns,
+        layout.card_width,
+        layout.card_height,
+        layout.preview_side,
+    )
 }
 
 /// 网格 / 列表纯图标分段按钮；点选返回新模式。
@@ -3586,17 +3604,7 @@ fn paint_preview_cover(ui: &mut egui::Ui, stage: egui::Rect, tex: &TextureHandle
 
 /// 草稿相对基准是否有可应用改动（忽略设置窗几何；几何随关窗落盘）。
 fn settings_draft_dirty(draft: &UiPreferences, baseline: &UiPreferences) -> bool {
-    let mut a = draft.clone();
-    let mut b = baseline.clone();
-    a.shell.settings_width = None;
-    a.shell.settings_height = None;
-    a.shell.settings_pos_x = None;
-    a.shell.settings_pos_y = None;
-    b.shell.settings_width = None;
-    b.shell.settings_height = None;
-    b.shell.settings_pos_x = None;
-    b.shell.settings_pos_y = None;
-    a != b
+    deskhud_ui::draft_is_dirty(draft, baseline)
 }
 
 fn footer_primary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {

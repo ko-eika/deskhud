@@ -2,8 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
-use super::classify::classify_stem;
-use super::{FontFace, FontFamilyEntry, system_font_id};
+use super::{FontFace, FontFamilyEntry, classify_stem, system_font_id};
+use deskhud_ui::font::FontCatalog;
+use deskhud_ui::font::inspect_font_file;
 
 const MAX_SYSTEM_FONTS: usize = 480;
 
@@ -101,28 +102,27 @@ pub(super) fn priority_system_cjk() -> Vec<(String, PathBuf)> {
 
 /// 扫描系统字体并按家族聚合（键为规范化家族码，无前缀）。
 pub fn system_font_families() -> Vec<FontFamilyEntry> {
-    let mut by_fam: std::collections::BTreeMap<String, FontFamilyEntry> =
-        std::collections::BTreeMap::new();
+    let mut catalog = FontCatalog::default();
     let mut seen_paths = std::collections::BTreeSet::new();
     let mut file_count = 0usize;
 
     for (_, path) in priority_system_cjk() {
-        ingest_font_path(&path, &mut by_fam, &mut seen_paths, &mut file_count);
+        ingest_font_path(&path, &mut catalog, &mut seen_paths, &mut file_count);
     }
 
     for dir in font_dirs() {
-        collect_fonts_dir(&dir, &mut by_fam, &mut seen_paths, &mut file_count);
+        collect_fonts_dir(&dir, &mut catalog, &mut seen_paths, &mut file_count);
         if file_count >= MAX_SYSTEM_FONTS {
             break;
         }
     }
 
-    by_fam.into_values().collect()
+    catalog.into_entries()
 }
 
 fn collect_fonts_dir(
     dir: &Path,
-    by_fam: &mut std::collections::BTreeMap<String, FontFamilyEntry>,
+    catalog: &mut FontCatalog,
     seen_paths: &mut std::collections::BTreeSet<String>,
     file_count: &mut usize,
 ) {
@@ -135,7 +135,7 @@ fn collect_fonts_dir(
         }
         let path = entry.path();
         if path.is_dir() {
-            collect_fonts_dir(&path, by_fam, seen_paths, file_count);
+            collect_fonts_dir(&path, catalog, seen_paths, file_count);
             continue;
         }
         let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
@@ -145,13 +145,13 @@ fn collect_fonts_dir(
         if !matches!(ext.as_str(), "ttf" | "otf" | "ttc") {
             continue;
         }
-        ingest_font_path(&path, by_fam, seen_paths, file_count);
+        ingest_font_path(&path, catalog, seen_paths, file_count);
     }
 }
 
 fn ingest_font_path(
     path: &Path,
-    by_fam: &mut std::collections::BTreeMap<String, FontFamilyEntry>,
+    catalog: &mut FontCatalog,
     seen_paths: &mut std::collections::BTreeSet<String>,
     file_count: &mut usize,
 ) {
@@ -172,40 +172,52 @@ fn ingest_font_path(
     {
         return;
     }
+    let container_faces = inspect_font_file(path).ok();
+    let has_container = container_faces.is_some();
+    for container in container_faces.into_iter().flatten() {
+        let id = format!("{}#face={}", system_font_id(path), container.face_index);
+        if !seen_paths.insert(id.clone()) {
+            continue;
+        }
+        *file_count += 1;
+        let family_stem = container.family.as_deref().unwrap_or(stem);
+        let (fam_code, display, parsed_style, aliases) = classify_stem(family_stem);
+        let style = container.subfamily.clone().unwrap_or(parsed_style);
+        let mut aliases = aliases;
+        aliases.push(display.to_lowercase());
+        aliases.push(fam_code.clone());
+        catalog.upsert(
+            fam_code,
+            display,
+            aliases,
+            FontFace {
+                style,
+                font_id: id,
+                builtin: false,
+            },
+        );
+    }
+    if has_container {
+        return;
+    }
+
     let id = system_font_id(path);
     if !seen_paths.insert(id.clone()) {
         return;
     }
     *file_count += 1;
-
     let (fam_code, display, style, aliases) = classify_stem(stem);
-    let family_key = fam_code.clone();
-    let entry = by_fam.entry(family_key.clone()).or_insert_with(|| {
-        let mut search = aliases.clone();
-        search.push(display.to_lowercase());
-        search.push(fam_code.clone());
-        FontFamilyEntry {
-            family_key: family_key.clone(),
-            label: display.clone(),
-            search_terms: search,
-            faces: Vec::new(),
-        }
-    });
-    for a in aliases {
-        if !entry.search_terms.iter().any(|t| t == &a) {
-            entry.search_terms.push(a);
-        }
-    }
-    if entry
-        .faces
-        .iter()
-        .any(|f| f.style.eq_ignore_ascii_case(&style))
-    {
-        return;
-    }
-    entry.faces.push(FontFace {
-        style,
-        font_id: id,
-        builtin: false,
-    });
+    let mut aliases = aliases;
+    aliases.push(display.to_lowercase());
+    aliases.push(fam_code.clone());
+    catalog.upsert(
+        fam_code,
+        display,
+        aliases,
+        FontFace {
+            style,
+            font_id: id,
+            builtin: false,
+        },
+    );
 }

@@ -5,11 +5,13 @@
 
 #![deny(missing_docs)]
 
+pub mod font;
 pub mod hud;
 pub mod i18n;
 pub mod persist;
 pub mod pet;
 pub mod prefs;
+pub mod settings;
 pub mod shell;
 
 pub use hud::{HudConfigValue, HudPrefs, HudSlotLayout};
@@ -23,6 +25,12 @@ pub use persist::{
 pub use pet::PetPrefs;
 pub use pet::{PetPosition, PetSize};
 pub use prefs::{UiPreferences, migrate_pet_id};
+pub use settings::{
+    AboutInfo, PetCardLayout, SettingsCommand, SettingsEffect, SettingsModel, SettingsTab,
+    apply_general_preferences, apply_graphics_preferences, apply_pet_selection, draft_is_dirty,
+    pet_card_layout,
+};
 pub use shell::{
-    AnimationQuality, FpsLimit, GraphicsPreferences, PetPickerMode, PowerMode, ShellPrefs, UiTheme,
+    AnimationQuality, FpsLimit, GraphicsPreferences, PetPickerMode, PowerMode, ShellPrefs,
+    SystemTheme, UiTheme, resolve_theme,
 };

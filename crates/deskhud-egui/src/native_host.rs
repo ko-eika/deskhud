@@ -546,18 +546,9 @@ impl NativeHost {
     }
 
     fn pull_settings(&mut self) {
-        let (open, apply, pending_flush, discard, draft) = {
+        let (open, effect, draft) = {
             let mut state = self.settings.lock();
-            let values = (
-                state.open,
-                state.apply_requested,
-                state.pending_flush,
-                state.discard_draft,
-                state.prefs.clone(),
-            );
-            state.apply_requested = false;
-            state.pending_flush = false;
-            state.discard_draft = false;
+            let values = (state.open, state.pending_effect.take(), state.prefs.clone());
             values
         };
         let layout_request = {
@@ -572,7 +563,11 @@ impl NativeHost {
             #[cfg(windows)]
             crate::gpu_overlay_probe::open_layout_editor();
         }
-        if apply {
+        if effect
+            .as_ref()
+            .and_then(|e| e.preferences.as_ref())
+            .is_some()
+        {
             #[cfg(windows)]
             let topmost_changed = self.prefs.shell.topmost != draft.shell.topmost;
             self.prefs = draft.clone();
@@ -595,8 +590,15 @@ impl NativeHost {
                 self.desk_pet
                     .apply_topmost(window, &self.prefs, &mut self.overlay_backend);
             }
-        } else if pending_flush && !discard {
+        } else if effect.as_ref().is_some_and(|e| !e.discard) {
             self.prefs = draft;
+            self.save_prefs();
+        } else if effect.as_ref().is_some_and(|e| e.discard) {
+            // Cancel discards the settings draft but keeps the window geometry.
+            self.prefs.shell.settings_width = draft.shell.settings_width;
+            self.prefs.shell.settings_height = draft.shell.settings_height;
+            self.prefs.shell.settings_pos_x = draft.shell.settings_pos_x;
+            self.prefs.shell.settings_pos_y = draft.shell.settings_pos_y;
             self.save_prefs();
         }
         if !open && self.control_surface == ControlSurface::Settings {

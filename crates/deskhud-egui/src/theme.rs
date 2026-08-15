@@ -11,9 +11,9 @@ pub fn apply(ctx: &Context, theme: UiTheme) {
 
 fn preference(theme: UiTheme) -> ThemePreference {
     match theme {
+        UiTheme::System => ThemePreference::System,
         UiTheme::Light => ThemePreference::Light,
         UiTheme::Dark => ThemePreference::Dark,
-        UiTheme::System => ThemePreference::System,
     }
 }
 

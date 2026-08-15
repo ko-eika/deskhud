@@ -1,15 +1,15 @@
 //! UI 字体：内置（build 嵌入根目录 fonts）+ 系统扫描；同名家族样式互补合并。
 
-mod classify;
 mod scan;
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use deskhud_ui::font::{FontCatalog, inspect_font_bytes};
 use egui::{self, FontData, FontDefinitions, FontFamily, FontId, TextStyle, Theme};
 
-pub use classify::{normalize_style_name, style_sort_key};
+pub use deskhud_ui::font::{FontFace, FontFamilyEntry};
+pub use deskhud_ui::font::{classify_stem, normalize_style_name};
 pub use scan::system_font_families;
 
 include!(concat!(env!("OUT_DIR"), "/builtin_fonts_gen.rs"));
@@ -24,80 +24,61 @@ const LEGACY_JB: &str = "builtin.jetbrains_mono";
 const LEGACY_JB_FACE: &str = "JetBrainsMono-Regular";
 const DEFAULT_FACE_ID: &str = "Inter";
 
-/// 字重面。
-#[derive(Debug, Clone)]
-pub struct FontFace {
-    /// 样式名：`Regular` / `Bold` / `Bold Italic` …
-    pub style: String,
-    /// 可加载 ID：内置为文件 stem；系统为字体文件路径（`/` 分隔）。
-    pub font_id: String,
-    /// 来自内置包（合并时同样式优先内置）。
-    pub builtin: bool,
-}
-
-/// 字体系列（可含多种样式）。
-#[derive(Debug, Clone)]
-pub struct FontFamilyEntry {
-    /// 稳定家族键（规范化小写码，无前缀）。
-    pub family_key: String,
-    /// 显示名（无来源后缀；合并后统一）。
-    pub label: String,
-    /// 搜索别名。
-    pub search_terms: Vec<String>,
-    pub faces: Vec<FontFace>,
-}
-
-impl FontFamilyEntry {
-    pub fn face_for(&self, style: &str) -> Option<&FontFace> {
-        let want = normalize_style_name(style);
-        self.faces
-            .iter()
-            .find(|f| normalize_style_name(&f.style) == want)
-            .or_else(|| {
-                self.faces
-                    .iter()
-                    .find(|f| normalize_style_name(&f.style) == "Regular")
-            })
-            .or_else(|| self.faces.first())
-    }
-
-    pub fn style_names(&self) -> Vec<String> {
-        let mut styles: Vec<String> = self.faces.iter().map(|f| f.style.clone()).collect();
-        styles.sort_by_key(|a| style_sort_key(a));
-        styles.dedup();
-        styles
-    }
-}
-
 /// 内置 + 系统，同名家族样式互补合并；按显示名排序（不区分来源）。
 pub fn list_font_families() -> Vec<FontFamilyEntry> {
-    let mut by_key: BTreeMap<String, FontFamilyEntry> = BTreeMap::new();
+    static FAMILIES: std::sync::OnceLock<Vec<FontFamilyEntry>> = std::sync::OnceLock::new();
+    FAMILIES.get_or_init(list_font_families_uncached).clone()
+}
+
+fn list_font_families_uncached() -> Vec<FontFamilyEntry> {
+    let mut catalog = FontCatalog::default();
 
     for (file, _bytes) in BUILTIN_FONT_FILES {
         let stem = Path::new(file)
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or(file);
-        let (fam_code, label, style, aliases) = classify::classify_stem(stem);
-        let family_key = fam_code;
-        let font_id = stem.to_string();
-        upsert_face(
-            &mut by_key,
-            family_key,
-            label,
-            aliases,
-            FontFace {
-                style,
-                font_id,
-                builtin: true,
-            },
-        );
+        if let Ok(faces) = inspect_font_bytes(_bytes) {
+            for face in faces {
+                let family_name = face.family.as_deref().unwrap_or(stem);
+                let (family_key, fallback_label, fallback_style, aliases) =
+                    classify_stem(family_name);
+                let style = face.subfamily.unwrap_or(fallback_style);
+                let label = face.family.unwrap_or(fallback_label);
+                let face_id = if face.face_index == 0 {
+                    stem.to_string()
+                } else {
+                    format!("{stem}#face={}", face.face_index)
+                };
+                catalog.upsert(
+                    family_key,
+                    label,
+                    aliases,
+                    FontFace {
+                        style,
+                        font_id: face_id,
+                        builtin: true,
+                    },
+                );
+            }
+        } else {
+            let (fam_code, label, style, aliases) = classify_stem(stem);
+            catalog.upsert(
+                fam_code,
+                label,
+                aliases,
+                FontFace {
+                    style,
+                    font_id: stem.to_string(),
+                    builtin: true,
+                },
+            );
+        }
     }
 
     for sys in system_font_families() {
         for face in sys.faces {
-            upsert_face(
-                &mut by_key,
+            catalog.upsert(
                 sys.family_key.clone(),
                 sys.label.clone(),
                 sys.search_terms.clone(),
@@ -106,14 +87,10 @@ pub fn list_font_families() -> Vec<FontFamilyEntry> {
         }
     }
 
-    let mut out: Vec<FontFamilyEntry> = by_key.into_values().collect();
-    for fam in &mut out {
-        fam.faces.sort_by_key(|a| style_sort_key(&a.style));
-    }
-    out.sort_by_key(|a| a.label.to_lowercase());
-    out
+    catalog.into_entries()
 }
 
+#[cfg(any())]
 fn upsert_face(
     map: &mut BTreeMap<String, FontFamilyEntry>,
     family_key: String,
@@ -169,6 +146,44 @@ pub fn resolve_font_id(families: &[FontFamilyEntry], family_key: &str, style: &s
         return as_face;
     }
     DEFAULT_FACE_ID.into()
+}
+
+/// Checks the actual selected face instead of relying on the OS fallback.
+pub fn font_id_supports_text(id: &str, text: &str) -> bool {
+    let Some((_, data)) = resolve_font_data(id) else {
+        return false;
+    };
+    deskhud_ui::font::face_supports_text(data.font.as_ref(), data.index, text)
+}
+
+pub fn family_supports_locale(family: &FontFamilyEntry, english: bool) -> bool {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    static CACHE: OnceLock<Mutex<HashMap<(String, bool), bool>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let cache_key = (family.family_key.clone(), english);
+    if let Some(value) = cache
+        .lock()
+        .expect("font support cache poisoned")
+        .get(&cache_key)
+    {
+        return *value;
+    }
+    let sample = if english {
+        "Settings Aa 123"
+    } else {
+        "设置中文界面"
+    };
+    let supported = family
+        .faces
+        .iter()
+        .any(|face| font_id_supports_text(&face.font_id, sample));
+    cache
+        .lock()
+        .expect("font support cache poisoned")
+        .insert(cache_key, supported);
+    supported
 }
 
 fn migrate_family_key(key: &str) -> String {
@@ -229,6 +244,19 @@ pub const FONT_SIZE_OPTIONS: &[f32] = &[11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 18.0
 pub fn configure_typography(ctx: &egui::Context, ui_font_id: &str, ui_font_size: f32) {
     configure_fonts(ctx, ui_font_id);
     apply_text_size(ctx, ui_font_size);
+    // Most of the settings surface uses explicit FontIds for compact cards and
+    // previews. Scale the egui coordinate system as well so those controls
+    // follow the user-facing font-size preference instead of only text styles.
+    let base_ppp = ctx
+        .data(|data| data.get_temp::<f32>(egui::Id::new("deskhud.base_ppp")))
+        .unwrap_or_else(|| {
+            let current = ctx.pixels_per_point();
+            ctx.data_mut(|data| {
+                data.insert_temp(egui::Id::new("deskhud.base_ppp"), current);
+            });
+            current
+        });
+    ctx.set_pixels_per_point(base_ppp * (ui_font_size.clamp(10.0, 22.0) / 13.0));
 }
 
 /// 按 prefs 中的字体 ID 配置 egui。
@@ -266,14 +294,26 @@ pub fn configure_fonts(ctx: &egui::Context, ui_font_id: &str) {
         }
     };
 
+    let selected_style = list_font_families()
+        .iter()
+        .flat_map(|family| family.faces.iter())
+        .find(|face| face.font_id == id)
+        .map(|face| face.style.to_ascii_lowercase())
+        .unwrap_or_default();
+    let wants_bold_cjk = ["bold", "semibold", "extrabold", "black"]
+        .iter()
+        .any(|weight| selected_style.contains(weight));
+
     let prop = fonts.families.entry(FontFamily::Proportional).or_default();
     prop.clear();
     prop.push(primary.clone());
     let noto_key = "builtin_data_NotoSansSC-Regular";
-    if primary != noto_key && fonts.font_data.contains_key(noto_key) {
-        prop.push(noto_key.into());
-    }
-    for (name, path) in scan::priority_system_cjk() {
+    let mut cjk_fallbacks = scan::priority_system_cjk();
+    cjk_fallbacks.sort_by_key(|(name, _)| {
+        let is_bold = name.to_ascii_lowercase().contains("bd");
+        if wants_bold_cjk == is_bold { 0 } else { 1 }
+    });
+    for (name, path) in cjk_fallbacks {
         if fonts.font_data.contains_key(&name) {
             continue;
         }
@@ -282,6 +322,11 @@ pub fn configure_fonts(ctx: &egui::Context, ui_font_id: &str) {
                 .font_data
                 .insert(name.clone(), Arc::new(FontData::from_owned(bytes)));
             prop.push(name);
+        }
+        // Keep the bundled font as the final safety net. System CJK faces are
+        // preferred so a bold selection can use a bold CJK face when available.
+        if primary != noto_key && fonts.font_data.contains_key(noto_key) {
+            prop.push(noto_key.into());
         }
     }
 
@@ -330,24 +375,45 @@ fn apply_text_size(ctx: &egui::Context, size: f32) {
 fn resolve_font_data(id: &str) -> Option<(String, Arc<FontData>)> {
     let id = migrate_legacy_font_id(id);
     // 1) 内置：按文件 stem 匹配
+    let (source_id, face_index) = split_face_id(&id);
     for (file, bytes) in BUILTIN_FONT_FILES {
         let fstem = Path::new(file)
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or(file);
-        if fstem == id || *file == id {
-            let key = format!("builtin_data_{fstem}");
-            return Some((key, Arc::new(FontData::from_static(bytes))));
+        if fstem == source_id || *file == source_id {
+            let key = if face_index == 0 {
+                format!("builtin_data_{fstem}")
+            } else {
+                format!("builtin_data_{fstem}_face_{face_index}")
+            };
+            let mut data = FontData::from_static(bytes);
+            data.index = face_index;
+            return Some((key, Arc::new(data)));
         }
     }
     // 2) 系统路径（或其它磁盘字体）
     if looks_like_font_path(&id) {
-        let path = PathBuf::from(id.replace('/', std::path::MAIN_SEPARATOR_STR));
+        let (source, index) = split_face_id(&id);
+        let path = PathBuf::from(source.replace('/', std::path::MAIN_SEPARATOR_STR));
         let bytes = std::fs::read(&path).ok()?;
-        let name = font_key_name(&path);
-        return Some((name, Arc::new(FontData::from_owned(bytes))));
+        let name = if index == 0 {
+            font_key_name(&path)
+        } else {
+            format!("{}_face_{index}", font_key_name(&path))
+        };
+        let mut data = FontData::from_owned(bytes);
+        data.index = index;
+        return Some((name, Arc::new(data)));
     }
     None
+}
+
+fn split_face_id(id: &str) -> (String, u32) {
+    let Some((source, suffix)) = id.rsplit_once("#face=") else {
+        return (id.to_string(), 0);
+    };
+    (source.to_string(), suffix.parse().unwrap_or(0))
 }
 
 fn looks_like_font_path(id: &str) -> bool {
@@ -376,6 +442,46 @@ fn font_key_name(path: &Path) -> String {
 pub fn style_label_zh(style: &str) -> String {
     let s = normalize_style_name(style);
     let lower = s.to_ascii_lowercase();
+    let known = match lower.as_str() {
+        "regular" => Some("常规"),
+        "italic" => Some("斜体"),
+        "bold" => Some("粗体"),
+        "negreta" | "negrita" | "gras" | "fett" | "grassetto" => Some("粗体"),
+        "bold italic" => Some("粗体斜体"),
+        "light" => Some("细体"),
+        "light italic" => Some("细体斜体"),
+        "thin" => Some("纤细"),
+        "thin italic" => Some("纤细斜体"),
+        "medium" => Some("中等"),
+        "medium italic" => Some("中等斜体"),
+        "demilight" => Some("微细"),
+        "demilight italic" => Some("微细斜体"),
+        "demibold" => Some("半粗"),
+        "demibold italic" => Some("半粗斜体"),
+        "semibold" => Some("半粗"),
+        "semibold italic" => Some("半粗斜体"),
+        "extrabold" => Some("特粗"),
+        "extrabold italic" => Some("特粗斜体"),
+        "extralight" => Some("特细"),
+        "extralight italic" => Some("特细斜体"),
+        "black" => Some("特黑"),
+        "black italic" => Some("特黑斜体"),
+        "normal" => Some("正常"),
+        "narrow" => Some("窄体"),
+        "narrow bold" => Some("窄体粗体"),
+        "narrow italic" => Some("窄体斜体"),
+        "narrow bold italic" => Some("窄体粗体斜体"),
+        "condensed" => Some("窄体"),
+        "condensed italic" => Some("窄体斜体"),
+        "condensed bold" => Some("窄体粗体"),
+        "condensed bold italic" => Some("窄体粗体斜体"),
+        "expanded" => Some("宽体"),
+        "expanded italic" => Some("宽体斜体"),
+        _ => None,
+    };
+    if let Some(label) = known {
+        return label.into();
+    }
     let italic = lower.contains("italic");
     let base = lower
         .replace(" italic", "")

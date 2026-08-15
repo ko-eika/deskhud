@@ -26,6 +26,24 @@ pub enum UiTheme {
     Dark,
 }
 
+/// 当前系统主题，用于解析 [`UiTheme::System`]。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemTheme {
+    /// 浅色系统主题。
+    Light,
+    /// 深色系统主题。
+    Dark,
+}
+
+/// 将用户偏好解析为实际使用的主题。
+pub fn resolve_theme(preference: UiTheme, system: Option<SystemTheme>) -> SystemTheme {
+    match preference {
+        UiTheme::Light => SystemTheme::Light,
+        UiTheme::Dark => SystemTheme::Dark,
+        UiTheme::System => system.unwrap_or(SystemTheme::Dark),
+    }
+}
+
 /// Frame-rate pacing options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -227,5 +245,31 @@ impl ShellPrefs {
         self.settings_height = Some(height.clamp(Self::SETTINGS_MIN_H, 900.0));
         self.settings_pos_x = Some(pos_x);
         self.settings_pos_y = Some(pos_y);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SystemTheme, UiTheme, resolve_theme};
+
+    #[test]
+    fn explicit_theme_overrides_system() {
+        assert_eq!(
+            resolve_theme(UiTheme::Light, Some(SystemTheme::Dark)),
+            SystemTheme::Light
+        );
+        assert_eq!(
+            resolve_theme(UiTheme::Dark, Some(SystemTheme::Light)),
+            SystemTheme::Dark
+        );
+    }
+
+    #[test]
+    fn system_theme_has_safe_dark_fallback() {
+        assert_eq!(
+            resolve_theme(UiTheme::System, Some(SystemTheme::Light)),
+            SystemTheme::Light
+        );
+        assert_eq!(resolve_theme(UiTheme::System, None), SystemTheme::Dark);
     }
 }

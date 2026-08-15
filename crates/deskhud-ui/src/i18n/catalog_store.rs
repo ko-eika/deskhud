@@ -107,4 +107,13 @@ mod tests {
             catalogs::lookup(Locale::ZhCn, MessageKey::AppName)
         );
     }
+
+    #[test]
+    fn all_shell_keys_have_locale_entries_or_english_fallback() {
+        for key in MessageKey::ALL {
+            let debug_key = format!("{key:?}");
+            assert_ne!(catalogs::lookup(Locale::En, *key), debug_key);
+            assert_ne!(catalogs::lookup(Locale::ZhCn, *key), debug_key);
+        }
+    }
 }
