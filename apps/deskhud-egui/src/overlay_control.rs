@@ -31,6 +31,15 @@ pub(crate) enum OverlayControlCommand {
     PetDragStarted,
     #[cfg_attr(windows, allow(dead_code))]
     PetDragEnded,
+    /// Native pet left-button press.
+    #[cfg_attr(windows, allow(dead_code))]
+    PetMousePressed,
+    /// Native pet left-button release.
+    #[cfg_attr(windows, allow(dead_code))]
+    PetMouseReleased,
+    /// Native pet left-button click.
+    #[cfg_attr(windows, allow(dead_code))]
+    PetMouseClicked,
     /// 请求 DeskHud 正常退出。
     Quit,
 }

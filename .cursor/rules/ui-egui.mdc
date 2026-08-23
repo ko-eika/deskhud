@@ -1,6 +1,6 @@
 ---
 description: egui 壳与窗口不变量（详见 CONSTRAINTS.md）
-globs: crates/deskhud-egui/**
+globs: apps/deskhud-egui/**
 alwaysApply: false
 ---
 

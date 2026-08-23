@@ -1,6 +1,6 @@
 id = "pet.deskhud.specs"
 kind = "pet"
-version = "0.6.10"
+version = "0.6.11"
 engine = "0.6"
 api_version = 1
 display_name = "Big Eyes"

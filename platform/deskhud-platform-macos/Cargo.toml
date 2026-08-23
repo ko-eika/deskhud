@@ -11,4 +11,5 @@ authors.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-deskhud-platform = { path = "../deskhud-platform" }
+deskhud-platform = { workspace = true }
+winit = { workspace = true }

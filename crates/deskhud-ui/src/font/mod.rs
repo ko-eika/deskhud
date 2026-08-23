@@ -439,9 +439,10 @@ mod tests {
         assert_eq!(entries[0].faces[0].font_id, "builtin-demo");
     }
 
+    #[cfg(windows)]
     #[test]
     fn inspects_inter_collection_faces_when_available() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fonts/Inter.ttc");
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/Inter.ttc");
         let Ok(faces) = inspect_font_file(path) else {
             return;
         };
@@ -461,7 +462,7 @@ mod tests {
             "TTC faces did not expose distinct styles: {styles:?}"
         );
         let bytes = std::fs::read(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fonts/Inter.ttc"),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/Inter.ttc"),
         )
         .unwrap();
         assert!(face_supports_text(&bytes, 0, "Inter"));

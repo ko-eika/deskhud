@@ -6,7 +6,8 @@ use anyhow::Result;
 use core_graphics::display::CGDisplay;
 use core_graphics::event::EventField;
 use core_graphics::event::{
-    CGEvent, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
+    CallbackResult, CGEvent, CGEventTap, CGEventTapLocation, CGEventTapOptions,
+    CGEventTapPlacement, CGEventType,
 };
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use deskhud_engine::{
@@ -82,6 +83,7 @@ define_class!(
             }
             if let Some(bus) = PET_CONTROL_BUS.get() {
                 bus.request(OverlayControlCommand::ActivateExisting);
+                bus.request(OverlayControlCommand::PetMousePressed);
             }
         }
 
@@ -124,11 +126,16 @@ define_class!(
             };
             let Some(state) = drag.take() else { return };
             if !state.dragging {
+                if let Some(bus) = PET_CONTROL_BUS.get() {
+                    bus.request(OverlayControlCommand::PetMouseClicked);
+                    bus.request(OverlayControlCommand::PetMouseReleased);
+                }
                 return;
             }
             snap_native_pet_window(&window);
             if let Some(bus) = PET_CONTROL_BUS.get() {
                 bus.request(OverlayControlCommand::PetDragEnded);
+                bus.request(OverlayControlCommand::PetMouseReleased);
             }
             let frame = window.frame();
             if let Some(bus) = PET_CONTROL_BUS.get() {
@@ -481,6 +488,9 @@ pub(crate) fn start_global_mouse_listener(
                 CGEventType::LeftMouseDown,
                 CGEventType::RightMouseDown,
                 CGEventType::OtherMouseDown,
+                CGEventType::LeftMouseUp,
+                CGEventType::RightMouseUp,
+                CGEventType::OtherMouseUp,
                 CGEventType::ScrollWheel,
                 CGEventType::KeyDown,
                 CGEventType::KeyUp,
@@ -495,16 +505,31 @@ pub(crate) fn start_global_mouse_listener(
                             pressed: matches!(kind, CGEventType::KeyDown),
                         });
                     }
-                    return None;
+                    return CallbackResult::Keep;
                 }
                 let button = match kind {
-                    CGEventType::LeftMouseDown => deskhud_engine::PetMouseButton::Primary,
-                    CGEventType::RightMouseDown => deskhud_engine::PetMouseButton::Secondary,
-                    CGEventType::OtherMouseDown => deskhud_engine::PetMouseButton::Middle,
-                    _ => return None,
+                    CGEventType::LeftMouseDown | CGEventType::LeftMouseUp => {
+                        deskhud_engine::PetMouseButton::Primary
+                    }
+                    CGEventType::RightMouseDown | CGEventType::RightMouseUp => {
+                        deskhud_engine::PetMouseButton::Secondary
+                    }
+                    CGEventType::OtherMouseDown | CGEventType::OtherMouseUp => {
+                        deskhud_engine::PetMouseButton::Middle
+                    }
+                    _ => return CallbackResult::Keep,
                 };
-                let _ = proxy.send_event(crate::native_host::UserEvent::GlobalMouse(button));
-                None
+                let pressed = matches!(
+                    kind,
+                    CGEventType::LeftMouseDown
+                        | CGEventType::RightMouseDown
+                        | CGEventType::OtherMouseDown
+                );
+                let _ = proxy.send_event(crate::native_host::UserEvent::GlobalMouse {
+                    button,
+                    pressed,
+                });
+                CallbackResult::Keep
             },
         );
         let Ok(tap) = tap else {
@@ -514,7 +539,7 @@ pub(crate) fn start_global_mouse_listener(
             return;
         };
         let run_loop = core_foundation::runloop::CFRunLoop::get_current();
-        let Ok(source) = tap.mach_port.create_runloop_source(0) else {
+        let Ok(source) = tap.mach_port().create_runloop_source(0) else {
             return;
         };
         unsafe {

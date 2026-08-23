@@ -1,12 +1,20 @@
 # 原生 UI 架构迁移
 
-当前推进顺序：目标 1、目标 2 已完成，下一步执行目标 3。
+当前推进顺序：目标 1、目标 2、目标 3 已完成；目标 4 正在按三平台原生实现基线收敛。
 
-- 状态：目标 1、目标 2、目标 3 已完成，下一步进入目标 4
+- 状态：目标 1、目标 2、目标 3 已完成，目标 4 进行中
 
 ## 总目标
 
 DeskHud 从现有 `deskhud-egui` 设置页逐步迁移到平台原生 UI：Windows 使用 WinUI，macOS 使用 AppKit，Linux 使用 GTK。迁移期间保留 egui 作为 legacy 参考实现，最终移除 egui 及相关依赖。
+
+平台实现基线（不可互换）：
+
+- Windows：WinUI 3（Windows App SDK）
+- macOS：AppKit
+- Linux：GTK
+
+`deskhud-egui` 不属于正式入口；`apps/deskhud-native` 根据目标平台选择对应平台 crate。临时 Win32 自绘窗口仅用于迁移验证，不能作为 Windows 最终实现。
 
 本计划不改变现有运行态覆盖层的中性契约、每屏一个 HUD 合成窗、扩展包 WASM 安全边界和国际化要求。
 
@@ -71,10 +79,10 @@ DeskHud 从现有 `deskhud-egui` 设置页逐步迁移到平台原生 UI：Windo
 ```text
 deskhud/
 ├── Cargo.toml
+├── assets/                         # 全局图标、清单和字体资源
 ├── locales/                         # 外壳翻译资源
 ├── packs/                           # 内置宠物包与 HUD 包
 ├── crates/                          # 通用业务 crate
-│   ├── deskhud-egui/                # 迁移期 legacy 设置页参考实现
 │   ├── deskhud-core/
 │   ├── deskhud-engine/
 │   ├── deskhud-runtime/
@@ -87,7 +95,8 @@ deskhud/
 │   ├── deskhud-platform-macos/
 │   └── deskhud-platform-linux-gtk/
 ├── apps/
-│   └── deskhud-app/
+│   ├── deskhud-egui/                # 迁移期 legacy 设置页参考实现
+│   └── deskhud-native/
 └── tools/
     └── deskhud-xtask/
 ```
@@ -97,7 +106,7 @@ deskhud/
 ### 验收标准
 
 - [x] workspace members 包含 `crates/*`、`platform/*`、`apps/*` 和 `tools/*`。
-- [x] 根目录 `fonts/` 与 `locales/` 资源迁移完成，内置字体统一保留 `Inter.ttc`。
+- [x] 根目录 `assets/` 与 `locales/` 全局资源目录整理完成，内置字体统一使用 `assets/fonts/Inter.ttc` 单文件。
 - [x] `deskhud-xtask` 的 Cargo alias 和文档路径更新。
 - [x] `deskhud-egui` 暂时保留且运行行为不变。
 - [x] `cargo metadata --format-version 1 --no-deps` 通过。
@@ -105,7 +114,7 @@ deskhud/
 - [x] `cargo test --workspace` 通过。
 - [x] `cargo pack-builtins` 通过。
 - [x] `cargo run -p deskhud-egui` 启动 legacy 设置页验证通过。
-- [x] `cargo run -p deskhud-app` 启动 native app 入口验证通过。
+- [x] `cargo run -p deskhud-native` 启动 native app 入口验证通过。
 
 ### 验证状态
 
@@ -205,19 +214,46 @@ deskhud/
 - [ ] Linux 只引入 GTK，不引入 Qt。
 - [ ] 既有 Windows 原生覆盖层行为不回归。
 
-### 验证状态
+### 执行记录
 
-状态：未开始
+- 状态：进行中
+- 开始日期：2026-08-15
+- 实际改动：
+  - 建立 `deskhud-platform` 中性数据结构与 `SettingsHost`、`OverlayHost`、`MenuHost`、`WindowHost`、`DisplayHost`、`InputHost` 能力边界。
+  - 建立 Windows、macOS、Linux GTK 三个平台 crate 的最小后端骨架。
+  - 增加不含平台类型的几何与事件契约测试。
+  - 增加可观察的中性窗口生命周期、菜单锚点、显示器快照和输入事件队列；三个后端均实现六类能力 trait。
+  - Windows 后端通过 `windows-sys` 接入当前光标所在显示器的真实屏幕范围与工作区查询，仍复用既有覆盖层的 Win32 几何语义。
+  - 将真实 Win32 窗口生命周期接入 `apps/deskhud-native`，不依赖 `deskhud-egui`。
+  - 首个窗口保留系统标题栏和边框，客户区使用色键实现透明背景，并在 `WM_PAINT` 中保持调整大小后的透明重绘。
+  - Windows 命中策略调整为客户区穿透、标题栏和系统按钮保留、边缘八方向调整大小命中由平台壳显式恢复。
+  - 为色键透明窗口增加 8px 原生边缘命中带，避免透明像素在系统命中测试前被跳过导致二次调整大小失效。
+  - （迁移验证，非最终方案）Windows 曾接入 Win32 自绘透明壳；该实现不作为 Windows 正式 UI，后续替换为 WinUI 3 Host。
+  - `deskhud-native` 按当前目标平台选择 Windows / macOS / Linux GTK 后端，不再把 Windows 作为入口级默认实现。
+- 验证命令：
+  - `cargo fmt --all`
+  - `cargo check -p deskhud-platform -p deskhud-platform-windows -p deskhud-platform-macos -p deskhud-platform-linux-gtk`
+  - `cargo test -p deskhud-platform`
+  - `cargo test -p deskhud-platform-windows -p deskhud-platform-macos -p deskhud-platform-linux-gtk`
+  - `cargo clippy -p deskhud-platform -p deskhud-platform-windows -p deskhud-platform-macos -p deskhud-platform-linux-gtk --all-targets -- -D warnings`
+  - `cargo run -p deskhud-native`
+- 验证结果：通过
+- Windows App SDK Runtime：已在开发机安装并核验 Windows App Runtime 2.4.0 x64/x86 包，安装器退出码为 0。
+- Windows WinUI 3 Host：已将 `deskhud-platform-windows` 的临时 Win32 自绘窗口替换为 `windows-rs` WinUI 3 Host 接入骨架；当前仍待完成 `windows-rs` 依赖获取与首次编译验证，未宣称可运行。
+- 遗留问题：WinUI 3 Host 的依赖获取/编译验证尚未完成；macOS AppKit、Linux GTK 已接入入口选择但尚未实现真实窗口生命周期。
 
 - 验证平台：Windows、macOS、Linux GTK 编译目标。
 - 已验证：现有 `deskhud-engine::overlay` 可作为契约边界。
-- 未验证：新平台 crate 的实际窗口生命周期。
+- 已验证：临时 Windows Win32 验证窗口生命周期；
+- 未验证：Windows WinUI 3 Host 的正式窗口生命周期。
+- 未验证：macOS AppKit 的正式窗口生命周期。
+- 未验证：Linux GTK 的正式窗口生命周期。
 
 ### 已知问题
 
 - 问题：不同平台的窗口生命周期和事件循环差异较大。
-- 修复状态：未开始。
-- 验证情况：待建立最小平台骨架后确认。
+- 修复状态：进行中。
+- 验证情况：Windows 待切换 WinUI 3；macOS/Linux 待接入各自正式原生实现。
 
 ---
 
@@ -423,7 +459,7 @@ cargo pack-builtins
 ## 当前推进顺序（2026-08-14 修订）
 
 - 目标 1：已完成。
-- 目标 2：已完成；保留 `crates/deskhud-egui` 作为 legacy 参考，并完成目录规划、workspace 约束、资源迁移和运行验证。
+- 目标 2：已完成；保留 `apps/deskhud-egui` 作为 legacy 参考，并完成目录规划、workspace 约束、资源迁移和运行验证。
 - 目标 3：目标 2 完成后执行，抽离平台无关的 `SettingsModel` / `SettingsCommand`，并确保 `deskhud-ui` 不依赖 egui。
 
 目标 2 验收结果：`cargo metadata --format-version 1 --no-deps`、`cargo check --workspace --all-targets`、`cargo test --workspace`、`cargo pack-builtins`、`cargo fmt --check` 均通过。

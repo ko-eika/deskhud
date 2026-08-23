@@ -386,6 +386,7 @@ impl PetHost {
             let hovering = ((local_x - frame.size.width as f32 * 0.5).powi(2)
                 + (local_y - frame.size.height as f32 * 0.5).powi(2))
                 <= radius.powi(2);
+            let was_hovering = self.mac_mouse.hovering;
             self.mac_mouse.hovering = hovering;
             let visible = native
                 .screen()
@@ -405,16 +406,11 @@ impl PetHost {
                     <= tolerance,
                 bottom: (frame.origin.y - visible.origin.y).abs() <= tolerance,
             };
-            let mouse = MouseState {
-                hovering,
-                ..self.mac_mouse
-            };
             let pet = engine.active_pet();
-            if mouse.hovering != self.mac_mouse.hovering {
+            if hovering != was_hovering {
                 pet.on_event(PetEvent::MouseHover {
-                    inside: mouse.hovering,
+                    inside: hovering,
                 });
-                self.mac_mouse.hovering = mouse.hovering;
             }
             if dock != self.mac_dock {
                 let from = self.mac_dock;
@@ -444,10 +440,10 @@ impl PetHost {
             })
             .collect::<HashMap<_, _>>();
         let config = PetConfigBag::new(&options);
-        let (_, mouse, dock) = self.mac_pet_context(window);
+        let (pointer_dir, mouse, dock) = self.mac_pet_context(window);
         pet.paint(PetPaintCtx {
             time_secs: self.pet_started.elapsed().as_secs_f64(),
-            pointer_dir: [0.0, 0.0],
+            pointer_dir,
             status_line: "",
             dock,
             drag: if self.mac_dragging {

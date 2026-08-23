@@ -90,7 +90,7 @@ Host 契约（当前）：
 
 1. `deskhud-ui` 只承载设置模型、命令、偏好、目录和国际化，不依赖 egui 或平台类型。
 2. `deskhud-egui` 只作为迁移期 legacy 适配层，负责把设置模型绘制成现有设置页；不得新增正式业务能力。
-3. `platform/` 下的平台 crate 负责原生设置窗口、窗口生命周期、输入和显示器能力；Windows 使用 WinUI，macOS 使用 AppKit，Linux 使用 GTK。
+3. `platform/` 下的平台 crate 负责原生设置窗口、窗口生命周期、输入和显示器能力；当前三平台统一先落地一个普通窗口基线：只创建窗口，不绘制内容、不设置背景色，Windows 直接使用 `windows` crate，macOS/Linux 使用 winit 对应的原生窗口后端。
 4. 宠物、气泡、HUD、布局编辑和菜单继续由平台覆盖层承载，不回退到 egui。
 
 ## 设置窗

@@ -58,7 +58,11 @@ impl PackageLoader {
     /// 发现目录包与 `.deskhud`/`.zip` 归档。
     pub fn discover(&self) -> Result<Vec<DiscoveredPack>, RuntimeError> {
         let mut out = Vec::new();
-        fs::create_dir_all(&self.cache_dir)?;
+        if let Err(error) = fs::create_dir_all(&self.cache_dir)
+            && error.kind() != std::io::ErrorKind::AlreadyExists
+        {
+            return Err(error.into());
+        }
         for root in &self.roots {
             if !root.exists() {
                 continue;

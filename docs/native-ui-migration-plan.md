@@ -14,7 +14,7 @@ DeskHud 从当前的 `deskhud-egui` 设置页逐步迁移到平台原生 UI：
 
 阶段 2 / 目标 3 已完成并通过最终人工验收；后续进入阶段 2 / 目标 4 的平台抽象工作。
 
-当前进度（2026-08-15）：阶段 0、阶段 1 已完成验收；阶段 1 额外完成根目录 `fonts/` 与 `locales/` 资源迁移，下一步进入阶段 2。
+当前进度（2026-08-15）：阶段 0、阶段 1 已完成验收；阶段 1 额外完成根目录 `assets/` 与 `locales/` 资源迁移，字体统一使用 `assets/fonts/Inter.ttc`，下一步进入阶段 2。
 
 状态含义：
 
@@ -28,7 +28,7 @@ DeskHud 从当前的 `deskhud-egui` 设置页逐步迁移到平台原生 UI：
 | 0 | 冻结现状与更新约束 | 已完成 | 2026-08-14 | 2026-08-14 | 文档变更（工作区待提交） | 已验收 |
 | 1 | 调整 workspace 和目录结构 | 已完成 | 2026-08-14 | 2026-08-15 | 工作区当前变更（待提交） | 已验收 |
 | 2 | 抽离平台无关 UI 模型 | 已完成 | 2026-08-15 | 2026-08-15 | 工作区当前变更（待提交） | 已验收 |
-| 3 | 建立平台抽象和平台 crate | 未开始 | — | — | — | 未执行 |
+| 3 | 建立平台抽象和平台 crate | 进行中 | 2026-08-16 | — | 工作区当前变更（待提交） | Windows 目标4已实现，待阶段验收 |
 | 4 | Windows 原生设置页 | 未开始 | — | — | — | 未执行 |
 | 5 | macOS AppKit 设置页 | 未开始 | — | — | — | 未执行 |
 | 6 | Linux GTK 设置页 | 未开始 | — | — | — | 未执行 |
@@ -111,7 +111,8 @@ deskhud/
 │   ├── deskhud-platform-macos/
 │   └── deskhud-platform-linux-gtk/
 ├── apps/
-│   └── deskhud-app/
+│   ├── deskhud-egui/                # 迁移期 legacy 设置页参考实现
+│   └── deskhud-native/
 ├── tools/
 │   └── deskhud-xtask/
 ├── packs/
@@ -120,7 +121,7 @@ deskhud/
 
 ## 不变原则
 
-资源目录补充：根目录 `fonts/` 保存宿主内置字体，根目录 `locales/` 保存外壳 TOML 翻译源；扩展包翻译仍保留在各包的 `i18n/` 目录。`.po/.mo` 支持后续另行增加。
+资源目录补充：根目录 `assets/` 保存全局图标、清单和唯一字体 `fonts/Inter.ttc`，根目录 `locales/` 保存外壳 TOML 翻译源；扩展包翻译仍保留在各包的 `i18n/` 目录。`.po/.mo` 支持后续另行增加。
 
 1. `deskhud-engine` 只放领域契约，不依赖任何 UI toolkit 或平台 API。
 2. `deskhud-runtime` 负责包发现、加载、注册和运行协调。
@@ -165,7 +166,7 @@ docs: 确定原生 UI 迁移方向与分层边界
 - 将 `deskhud-xtask` 移到 `tools/deskhud-xtask/`。
 - 更新根目录 workspace members。
 - 更新 `.cargo/config.toml` 中的 xtask 别名。
-- 成根目录 `fonts/` 与 `locales/` 资源迁移。
+- 完成根目录 `assets/` 与 `locales/` 资源迁移，字体统一为 `assets/fonts/Inter.ttc` 单文件源。
 - 保留现有 `deskhud-egui`，不改变功能行为，作为 legacy 参考入口，补充旧字体 prefs ID 到 Inter 的兼容映射。
 - 预留`.po/.mo` 支持后续再实现说明。
 - 修正文档、脚本和 CI 中的路径引用。
@@ -180,7 +181,7 @@ cargo pack-builtins
 
 # 运行测试，保证egui功能不受影响
 cargo run -p deskhud-egui
-cargo run -p deskhud-app
+cargo run -p deskhud-native
 ```
 
 ### 中文提交小结
@@ -254,6 +255,15 @@ platform/deskhud-platform-linux-gtk/
 - 定义 `WindowHost`、`DisplayHost`、`InputHost` 等必要抽象。
 - 平台后端只消费中性场景、窗口和事件契约。
 - 不设计一个包含全部职责的巨大 `Platform` trait。
+
+### 执行记录（Windows 目标4）
+
+- 状态：进行中（Windows 完成，Linux/macOS 暂不纳入本任务）。
+- 开始日期：2026-08-16
+- 实际改动：Windows 窗口回退到系统 Acrylic 材料；移除独立最小 DirectComposition host；增加宿主管理的简易右键菜单。
+- 验证命令：`cargo check -p deskhud-platform-windows --target x86_64-pc-windows-msvc`
+- 验证结果：通过编译检查；实机视觉与交互验收待执行。
+- 遗留问题：完整菜单命令、主题、多显示器/DPI 验收及 HUD 合成后续处理。
 
 ### 验收
 

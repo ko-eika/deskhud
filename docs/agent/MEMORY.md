@@ -16,6 +16,7 @@
 | 2026-08-14 | 产品版本 PATCH 升至 `0.6.8`，engine 兼容族保持 `0.6` | 完成 Windows 目标 1/2 多窗口、多显示器回归；修复 native UI GL surface 生命周期竞态日志 |
 | 2026-08-15 | 产品版本 PATCH 升至 `0.6.9`，engine 兼容族保持 `0.6`；阶段 1 / 目标 2 完成验收 | 完成 workspace 分层、根目录 fonts/locales 资源迁移、旧字体兼容、设置页几何图标与 Windows GL 上下文修复；下一步进入目标 3 |
 | 2026-08-15 | 产品版本 PATCH 升至 `0.6.10`，engine 兼容族保持 `0.6`；阶段 2 / 目标 3 完成验收 | 抽离平台无关设置模型、字体扫描与 TTC face 元数据、字体分类与家族合并、主题解析、通用设置写入和文案覆盖测试；egui 运行路径收敛为绘制、事件转换与字体注册 |
+| 2026-08-23 | 产品版本 PATCH 升至 `0.6.11`，engine 兼容族保持 `0.6` | 完成 egui 应用与全局资源目录迁移；统一使用 `assets/fonts/Inter.ttc`；修复 macOS 原生宠物 hover、指针方向、点击与全局键鼠事件；修正 Windows 包缓存并发告警 |
 | 2026-08-14 | 设置页/宠物菜单/图像解码与字体枚举仅 Windows/macOS 接入；Linux（宠物运行态专用）将 `settings`、`pet_menu`、`image_decode`、`fonts` 以 `#[cfg_attr(target_os="linux", allow(dead_code))]` 关闭死代码，`native_host` 相应 cfg 修正；三平台 `cargo check --workspace --all-targets -D warnings` 均通过 | Windows 死代码报错来自 `overlay_control`（`OpenMenu`/`PetDragStarted`/`PetDragEnded`），Linux 来自上述 UI 模块；非行为变更 |
 | 2026-08-14 | **缺陷（Windows 原生菜单不随应用/系统主题）**：`deskhud-egui/src/native_menu.rs` 用经典 `CreatePopupMenu`/`TrackPopupMenuEx`，Win10/11 经典菜单不自动跟随暗色；已验证 uxtheme `SetPreferredAppMode`/`AllowDarkModeForWindow` + owner `DwmSetWindowAttribute` 三套钩子在本机均不生效；owner-draw 自绘主题菜单曾试制但导致菜单异常，代码已回滚。定为缺陷待后续原生方案处理，Rest on 计划 C（C0 部分试制已回滚；C1 跨平台原生视图 trait 待做），不在本次继续调整代码 | 桌宠覆盖层已是 DirectComposition（原生）；国际化/主题契约在 `deskhud-ui`（无 egui），脱离 egui 不影响 |
 | 2026-08-14 | **修复（Windows native UI GL context 报错）**：设置/菜单窗口隐藏或销毁时，winit 仍可能投递一次排队的 `RedrawRequested`；此前 `native_host::draw` 直接对已不可用的 surface 调用 `make_current`，产生 Win32 error 6（句柄无效）或 error 2004（转换操作不支持），且会重复刷日志。现仅在控制窗可见时绘制，并对仍发生的短暂失败按 1 秒节流记录后跳过当前帧；错误不再按 ERROR 级别刷屏。 |
@@ -81,6 +82,10 @@
 | 2026-08-13 | 尝试修复 macOS 菜单文字错位与多窗重绘冻结（GL context 切换 + repaint 接线 + 坐标单位）；产品至 `0.6.2` | 按 `macos-gl-lifetime-fix.md` 定位；因无 macOS 实机，代码已提交、验收待定，不影响 engine 族 |
 | 2026-08-13 | Windows 运行态 HUD 合成窗接入 GPU 覆盖层（独立 HUD 窗、`HTNOWHERE`/`WS_EX_NOACTIVATE` 穿透、按 `slot_layout` 定位缩放）；产品至 `0.6.3` | 消费既有 `hud_frame`/`HudVisual` 契约，engine 族不变 |
 | 2026-08-13 | 产品与内置包升至 `0.6.4`；统一平台后端工厂，修正 engine 兼容族为 `0.6`，同步 macOS 待验收与三平台 CI 文档 | PATCH 修复与发布元数据同步，不改变包契约 |
+
+| 2026-08-15 | 阶段 3 / 目标 4 固定三平台正式实现：Windows 使用 WinUI 3（Windows App SDK）、macOS 使用 AppKit、Linux 使用 GTK；`deskhud-egui` 仅作 legacy 参考，临时 Win32 自绘窗口不得升级为正式 Windows UI | 防止为修复视觉或命中问题继续扩展错误的 Win32 自绘路径；Windows 下一步先准备 App SDK Runtime，再替换 `deskhud-platform-windows` Host |
+| 2026-08-16 | Windows App SDK Runtime 2.4.0 已安装并核验；`deskhud-platform-windows` 已切换到 `windows-rs` WinUI 3 Host 接入骨架，尚待依赖获取和首次编译验证 | Runtime 已具备，未将网络获取超时误记为 Host 已验收 |
+| 2026-08-16 | 依赖管理约定固定：workspace 只集中管理依赖版本与依赖配置，不自动引入依赖；成员 crate 按需使用 `{ workspace = true }` 继承 | 保持版本单一来源，同时避免成员无意间获得未使用依赖 |
 
 ## 已知上游限制（勿当「本仓库可修」）
 

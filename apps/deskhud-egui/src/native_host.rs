@@ -46,7 +46,10 @@ pub(crate) enum UserEvent {
     Commands,
     Repaint(Duration),
     #[cfg(target_os = "macos")]
-    GlobalMouse(deskhud_engine::PetMouseButton),
+    GlobalMouse {
+        button: deskhud_engine::PetMouseButton,
+        pressed: bool,
+    },
     #[cfg(target_os = "macos")]
     GlobalKey {
         key: deskhud_engine::PetKey,
@@ -198,6 +201,24 @@ impl NativeHost {
                 }
                 OverlayControlCommand::PetDragEnded => {
                     self.desk_pet.command(command, &mut self.engine);
+                }
+                OverlayControlCommand::PetMousePressed => {
+                    self.engine.active_pet().on_event(deskhud_engine::PetEvent::MousePressed {
+                        button: deskhud_engine::PetMouseButton::Primary,
+                        modifiers: deskhud_engine::PetModifiers::NONE,
+                    });
+                }
+                OverlayControlCommand::PetMouseReleased => {
+                    self.engine.active_pet().on_event(deskhud_engine::PetEvent::MouseReleased {
+                        button: deskhud_engine::PetMouseButton::Primary,
+                        modifiers: deskhud_engine::PetModifiers::NONE,
+                    });
+                }
+                OverlayControlCommand::PetMouseClicked => {
+                    self.engine.active_pet().on_event(deskhud_engine::PetEvent::MouseClicked {
+                        button: deskhud_engine::PetMouseButton::Primary,
+                        modifiers: deskhud_engine::PetModifiers::NONE,
+                    });
                 }
                 OverlayControlCommand::Quit => event_loop.exit(),
             }
@@ -971,13 +992,20 @@ impl ApplicationHandler<UserEvent> for NativeHost {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             #[cfg(target_os = "macos")]
-            UserEvent::GlobalMouse(button) => {
+            UserEvent::GlobalMouse { button, pressed } => {
                 use deskhud_engine::{PetEvent, PetModifiers};
                 self.engine
                     .active_pet()
-                    .on_event(PetEvent::GlobalMousePressed {
-                        button,
-                        modifiers: PetModifiers::NONE,
+                    .on_event(if pressed {
+                        PetEvent::GlobalMousePressed {
+                            button,
+                            modifiers: PetModifiers::NONE,
+                        }
+                    } else {
+                        PetEvent::GlobalMouseReleased {
+                            button,
+                            modifiers: PetModifiers::NONE,
+                        }
                     });
                 if let Some(window) = self.window() {
                     window.request_redraw();

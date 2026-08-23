@@ -1,10 +1,26 @@
 /target/
+
+# Rust backup files
 **/*.rs.bk
+
+# IDE and editor files
 .idea/
 .vscode/
+
+# Debug symbols and generated binaries
 *.pdb
+*.dSYM/
+
+# Operating system files
 .DS_Store
 Thumbs.db
 
-dist/
+# Local environment and logs
+.env
+.env.*
+*.log
+.sync_temp_dir/
 
+# Generated distribution files
+dist/
+release/
