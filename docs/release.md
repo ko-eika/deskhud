@@ -87,13 +87,13 @@ shasum -a 256 target/release/deskhud
 
 ## 导出内置参考包（`.deskhud`）
 
-从仓库根 [`packs/`](../packs/) 导出对照用包（仅 `manifest.toml` + `assets/` + `i18n/`；原生实现仍 compile-in）：
+从 [`crates/packs/`](../crates/packs/) 导出对照用包（仅 `manifest.toml` + `assets/` + `i18n/`；原生实现仍 compile-in）：
 
 ```bash
 # 全部 → target/packages/*.deskhud
 cargo pack-builtins
 
-# 单个（参数为 packs/ 下目录名）
+# 单个（参数为 crates/packs/ 下目录名）
 cargo pack-builtin pet-deskhud-specs
 cargo pack-builtin pet-deskhud-blob
 cargo pack-builtin hud-deskhud-demo

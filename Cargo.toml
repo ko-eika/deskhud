@@ -5,32 +5,22 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/deskhud-ui",
-    "crates/deskhud-package",
-    "crates/deskhud-engine",
-    "crates/deskhud-runtime",
-    "crates/deskhud-sdk",
-    "apps/deskhud-egui",
-    "apps/deskhud-native",
-    "tools/deskhud-xtask",
-    "platform/deskhud-platform",
-    "platform/deskhud-platform-windows",
-    "platform/deskhud-platform-macos",
-    "platform/deskhud-platform-linux-gtk",
-    "packs/pet-deskhud-specs",
-    "packs/pet-deskhud-blob",
-    "packs/hud-deskhud-demo",
+    "crates/core/*",
+    "crates/tools/*",
+    "crates/packs/*",
+    "crates/platform/*",
+    "crates/apps/*",
 ]
 default-members = [
-    "crates/deskhud-ui",
-    "crates/deskhud-package",
-    "crates/deskhud-engine",
-    "crates/deskhud-runtime",
-    "crates/deskhud-sdk",
+    "crates/core/deskhud-engine",
+    "crates/core/deskhud-runtime",
+    "crates/core/deskhud-ui",
+    "crates/core/deskhud-sdk",
+    "crates/core/deskhud-package",
 ]
 
 [workspace.package]
-version = "0.6.11"
+version = "0.6.12"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -41,25 +31,40 @@ keywords = ["desktop-pet", "hud", "egui"]
 categories = ["gui"]
 
 [workspace.dependencies]
-deskhud-ui = { path = "crates/deskhud-ui" }
-deskhud-package = { path = "crates/deskhud-package" }
-deskhud-engine = { path = "crates/deskhud-engine" }
-deskhud-runtime = { path = "crates/deskhud-runtime" }
-pet-deskhud-specs = { path = "packs/pet-deskhud-specs" }
-pet-deskhud-blob = { path = "packs/pet-deskhud-blob" }
-hud-deskhud-demo = { path = "packs/hud-deskhud-demo" }
-deskhud-platform = { path = "platform/deskhud-platform" }
-deskhud-platform-windows = { path = "platform/deskhud-platform-windows" }
-deskhud-platform-macos = { path = "platform/deskhud-platform-macos" }
-deskhud-platform-linux-gtk = { path = "platform/deskhud-platform-linux-gtk" }
+# -----------------------------------------------------------------------------
+# DeskHud 内部 crate：按依赖方向排列，避免把应用层依赖混入领域层。
+# -----------------------------------------------------------------------------
+deskhud-engine = { path = "crates/core/deskhud-engine" }
+deskhud-runtime = { path = "crates/core/deskhud-runtime" }
+deskhud-ui = { path = "crates/core/deskhud-ui" }
+deskhud-package = { path = "crates/core/deskhud-package" }
+
+# 内置宠物 / HUD 包：由 deskhud-runtime 注册，不属于 UI 壳。
+pet-deskhud-specs = { path = "crates/packs/pet-deskhud-specs" }
+pet-deskhud-blob = { path = "crates/packs/pet-deskhud-blob" }
+hud-deskhud-demo = { path = "crates/packs/hud-deskhud-demo" }
+
+# 平台中性契约与平台实现；OS 类型只允许出现在这些平台 crate 内。
+deskhud-platform = { path = "crates/platform/deskhud-platform" }
+deskhud-platform-windows = { path = "crates/platform/deskhud-platform-windows" }
+deskhud-platform-macos = { path = "crates/platform/deskhud-platform-macos" }
+deskhud-platform-linux-gtk = { path = "crates/platform/deskhud-platform-linux-gtk" }
+
+# -----------------------------------------------------------------------------
+# desktop_egui 的窗口与设置页：winit + egui + OpenGL。
+# -----------------------------------------------------------------------------
+winit = { version = "0.30.13", default-features = false, features = ["rwh_06"] }
 
 egui = "0.36.1"
 egui-winit = { version = "0.36.1", default-features = false, features = ["links"] }
+
+glow = "0.18.0"
 egui_glow = { version = "0.36.1", features = ["winit"] }
-winit = { version = "0.30.13", default-features = false, features = ["rwh_06"] }
+
 glutin = "0.32.3"
 glutin-winit = "0.5.0"
-glow = "0.17.0"
+
+# 应用错误、日志、窗口句柄和通用序列化。
 anyhow = "1.0.104"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
@@ -69,7 +74,11 @@ toml = "1.1.4"
 thiserror = "2.0.20"
 ttf-parser = "0.25.1"
 
-image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+# 设置页资源：位图解码与 SVG 栅格化。
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "ico"] }
+resvg = { version = "0.48.1", default-features = false }
+
+# macOS AppKit / CoreGraphics；仅由 macOS 平台实现使用。
 core-graphics = "0.25.0"
 core-foundation = "0.10.1"
 objc2 = "0.6.4"
@@ -87,9 +96,8 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
     "NSColor",
     "objc2-core-graphics",
 ] }
-# 设置页图标/预览：SVG 栅格化（图标类无需系统字体）
-resvg = { version = "0.48.1", default-features = false }
 
+# Windows Win32 / DirectComposition；仅由 Windows 平台实现使用。
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
     "Win32_System",
@@ -104,6 +112,7 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_HiDpi",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_Globalization",
 ] }
 windows = { version = "0.62.2", features = [
     "Win32_Foundation",
@@ -121,6 +130,8 @@ windows = { version = "0.62.2", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 windows-numerics = "0.3.1"
+
+# 打包与 Windows 资源：构建脚本、.deskhud 压缩包和图标资源。
 winresource = "0.1.31"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 

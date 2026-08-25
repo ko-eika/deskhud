@@ -1,10 +1,10 @@
 # DeskHud 扩展指南：宠物包与 HUD 插件
 
-面向社区 / 内置扩展作者。引擎契约在 [`deskhud-engine`](../crates/deskhud-engine)；UI 壳只做几何与输入转发，**扩展代码不要依赖 HWND、屏幕坐标或 egui**。
+面向社区 / 内置扩展作者。引擎契约在 [`deskhud-engine`](../crates/core/deskhud-engine)；UI 壳只做几何与输入转发，**扩展代码不要依赖 HWND、屏幕坐标或 egui**。
 
 当前阶段：
 
-- **内置扩展**：在 `packs/` 实现 `PetKind` / `Plugin`（目录名 `pet-*` / `hud-*`），由 `deskhud-runtime` 引导注册进空的 `EngineRegistry`。
+- **内置扩展**：在 `crates/packs/` 实现 `PetKind` / `Plugin`（目录名 `pet-*` / `hud-*`），由 `deskhud-runtime` 引导注册进空的 `EngineRegistry`。
 - **社区扩展（规划）**：`.deskhud` 包 + WASM Guest（`deskhud-sdk` / `deskhud-runtime`），语义与下文 host 契约对齐。
 
 ---
@@ -44,9 +44,9 @@ impl PetKind for MyPet {
 | `time_secs` | 运行时间 |
 | `pointer_dir` | **全局**光标相对宠心方向（约 `[-1,1]`）；不要求悬停在宠上 |
 | `status_line` | 引擎短文案（可空） |
-| `dock` | [`DockState`](../crates/deskhud-engine/src/pet/dock_state.rs) 贴边（四边可组合） |
-| `drag` | [`DragState`](../crates/deskhud-engine/src/pet/drag_state.rs) 是否在拖窗 |
-| `mouse` | [`MouseState`](../crates/deskhud-engine/src/pet/mouse_state.rs) 局部悬停/按下 + **全局**按键 |
+| `dock` | [`DockState`](../crates/core/deskhud-engine/src/pet/dock_state.rs) 贴边（四边可组合） |
+| `drag` | [`DragState`](../crates/core/deskhud-engine/src/pet/drag_state.rs) 是否在拖窗 |
+| `mouse` | [`MouseState`](../crates/core/deskhud-engine/src/pet/mouse_state.rs) 局部悬停/按下 + **全局**按键 |
 
 | `theme` | 宿主已解析的 `PetTheme::Light` / `PetTheme::Dark`；不暴露 egui 或平台主题对象 |
 
@@ -99,10 +99,10 @@ impl PetKind for MyPet {
 
 ### 1.6 包格式与导出 `.deskhud`
 
-出厂包源在仓库根 [`packs/`](../packs/)（`pet-*` / `hud-*`），目录布局与分发包一致：
+出厂包源在 [`crates/packs/`](../crates/packs/)（`pet-*` / `hud-*`），目录布局与分发包一致：
 
 ```text
-packs/pet-deskhud-specs/   # 示例
+crates/packs/pet-deskhud-specs/   # 示例
   Cargo.toml               # 原生实现（compile-in；不会打进 .deskhud）
   manifest.toml
   assets/preview.svg
@@ -114,10 +114,10 @@ packs/pet-deskhud-specs/   # 示例
 导出 **仅** 打包 `manifest.toml` + `assets/` + `i18n/`（不含 `src/` / `Cargo.toml`）：
 
 ```bash
-# 导出 packs/ 下全部出厂包 → target/packages/*.deskhud
+# 导出 crates/packs/ 下全部出厂包 → target/packages/*.deskhud
 cargo pack-builtins
 
-# 导出单个目录名（packs/ 下的文件夹名）
+# 导出单个目录名（crates/packs/ 下的文件夹名）
 cargo pack-builtin pet-deskhud-specs
 cargo pack-builtin hud-deskhud-demo
 
@@ -197,10 +197,10 @@ impl Plugin for MyPlugin {
 
 ### 2.4 包格式与导出
 
-与宠物包相同，用 `cargo pack-builtins` / `cargo pack-builtin <目录名>` 从 `packs/` 导出。HUD 示例：
+与宠物包相同，用 `cargo pack-builtins` / `cargo pack-builtin <目录名>` 从 `crates/packs/` 导出。HUD 示例：
 
 ```text
-packs/hud-deskhud-demo/
+crates/packs/hud-deskhud-demo/
   manifest.toml    # kind = "plugin"
   assets/icon.svg
   assets/icon_clock.svg

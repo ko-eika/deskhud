@@ -1,4 +1,4 @@
-# DeskHud 0.6.x 路线图（当前版本 0.6.11）
+# DeskHud 0.6.x 路线图（当前版本 0.6.12）
 
 当前产品状态：引擎约定与迁移底座已建立；Windows 原生窗口迁移已在实机验证主要功能，仍有 HUD 生命周期、重绘、穿透和功能补齐事项。平台计划详见 [`docs/agent/roadmap/README.md`](agent/roadmap/README.md)。
 

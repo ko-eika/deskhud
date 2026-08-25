@@ -86,6 +86,7 @@
 | 2026-08-15 | 阶段 3 / 目标 4 固定三平台正式实现：Windows 使用 WinUI 3（Windows App SDK）、macOS 使用 AppKit、Linux 使用 GTK；`deskhud-egui` 仅作 legacy 参考，临时 Win32 自绘窗口不得升级为正式 Windows UI | 防止为修复视觉或命中问题继续扩展错误的 Win32 自绘路径；Windows 下一步先准备 App SDK Runtime，再替换 `deskhud-platform-windows` Host |
 | 2026-08-16 | Windows App SDK Runtime 2.4.0 已安装并核验；`deskhud-platform-windows` 已切换到 `windows-rs` WinUI 3 Host 接入骨架，尚待依赖获取和首次编译验证 | Runtime 已具备，未将网络获取超时误记为 Host 已验收 |
 | 2026-08-16 | 依赖管理约定固定：workspace 只集中管理依赖版本与依赖配置，不自动引入依赖；成员 crate 按需使用 `{ workspace = true }` 继承 | 保持版本单一来源，同时避免成员无意间获得未使用依赖 |
+| 2026-08-25 | 产品版本 PATCH 升至 `0.6.12`，engine 兼容族保持 `0.6`；内置字体资源、扫描与语言筛选统一收口到 `deskhud-ui`，egui 仅负责注册渲染字体 | 修复设置页未按地区/语言筛选字体的问题，并避免字体扫描与 glyph 检查在每帧重复执行 |
 
 ## 已知上游限制（勿当「本仓库可修」）
 

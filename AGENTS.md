@@ -82,7 +82,8 @@ docs/agent/MEMORY.md      ← 决策时间线
 docs/agent/README.md      ← 本目录索引
 docs/                     架构、覆盖层迁移、扩展指南、版本、发版、路线图
 .codex/                   Codex 项目配置预留（非规则真相源）
-crates/ … packs/ … packages/ … examples/
+crates/core/ … crates/apps/ … crates/platform/ … crates/packs/ … crates/tools/
+packages/ … examples/
 .cursor/rules/            Cursor 薄指针（勿当第二真相源）
 ```
 
@@ -95,7 +96,7 @@ crates/ … packs/ … packages/ … examples/
 - [x] 拖拽状态 + `PetEvent::DragStarted`/`DragEnded` / `PetPaintCtx.drag`
 - [x] 键鼠事件 + `MouseState` / `PetKey` + 扩展指南 `docs/extension-guide.md`
 - [x] 全 ID 约定 `pet|hud.<组织>.<标识>` + `[pet|hud.config]`；宠 `PetConfigOption` / 插件图标
-- [x] 包格式（目录/zip）+ 本地扫描引导；跨平台 MVP（`platform` + CI 三端）
+- [x] 包格式（目录/zip）+ 本地扫描引导；跨平台 MVP（`crates/platform` + CI 三端）
 - [x] `CatalogStore` 多源 i18n 合并 + 设置页接线（宠/插件/配置项/字体来源后缀）
 - [x] 桌宠引擎化（`deskhud-engine`）+ 包 `version`/`engine` 适配门闸
 - [x] 内置宠/插件独立 crate + `cargo pack-builtins`
@@ -112,7 +113,7 @@ cargo check
 cargo test
 cargo run -p deskhud-egui
 cargo build -p deskhud-egui --release   # 产物见 docs/release.md
-cargo pack-builtins                     # packs/ → target/packages/*.deskhud
+cargo pack-builtins                     # crates/packs/ → target/packages/*.deskhud
 cargo pack-builtin <dir>                # 单个，如 pet-deskhud-specs
 cargo fmt
 cargo clippy --workspace --all-targets -- -D warnings

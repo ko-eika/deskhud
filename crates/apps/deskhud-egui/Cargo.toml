@@ -1,0 +1,30 @@
+[package]
+name = "deskhud-egui"
+description = "DeskHud egui desktop-pet shell."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "deskhud-egui"
+path = "src/main.rs"
+
+[dependencies]
+deskhud-ui = { workspace = true }
+winit = { workspace = true }
+
+egui = { workspace = true }
+egui-winit = { workspace = true }
+
+glow = { workspace = true }
+egui_glow = { workspace = true }
+
+glutin = { workspace = true }
+glutin-winit = { workspace = true }
+
+image = { workspace = true }
+
+[build-dependencies]
+image = { workspace = true }

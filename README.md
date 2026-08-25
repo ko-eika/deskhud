@@ -2,7 +2,7 @@
 <h4 align="center">一个可扩展的桌宠引擎</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.6.11-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.6.12-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -15,7 +15,7 @@
 
 DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（外观 + 行为），并按需开关 **HUD 插件** 及其贡献条目。界面基于 **egui + winit / egui_glow**，支持多语言与本地社区包加载（商店能力后置）。
 
-当前版本：`0.6.11`。完成 egui 应用与全局资源目录迁移，统一使用 `assets/fonts/Inter.ttc`；修复 macOS 原生宠物 hover、指针方向与键鼠事件；Windows 原生覆盖层与设置页保持不变。
+当前版本：`0.6.12`。统一由 `deskhud-ui` 提供内置与系统字体扫描、地区语言筛选和 Inter 回退；`deskhud-egui` 仅负责 egui 字体适配，并修复设置页重复扫描造成的卡顿。
 
 ## 功能概览
 
@@ -88,7 +88,11 @@ deskhud-sdk         社区 Guest SDK（编译为 wasm32）
 仓库主要目录：
 
 ```
-crates/          各 crate 源码
+crates/core/     通用业务 crate（engine、runtime、package、ui、sdk）
+crates/apps/     应用入口（deskhud-egui、deskhud-native）
+crates/platform/ 平台抽象与 Windows/macOS/Linux 实现
+crates/packs/    内置宠物包与 HUD 包
+crates/tools/    构建与打包工具
 packages/        本地已安装 / 开发用包扫描根
 examples/        社区开发示例
 docs/            架构、扩展指南、路线图
@@ -109,7 +113,7 @@ cargo run -p deskhud-egui
 cargo check --workspace
 cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime
 
-# 导出 packs/ → target/packages/*.deskhud（manifest + assets + i18n）
+# 导出 crates/packs/ → target/packages/*.deskhud（manifest + assets + i18n）
 cargo pack-builtins
 cargo pack-builtin pet-deskhud-specs
 
@@ -136,8 +140,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud
 
 # 4. 打 tag 并推送后，在 GitHub Release 上传二进制
-git tag -a v0.6.11 -m "DeskHud 0.6.11"
-git push origin v0.6.11
+git tag -a v0.6.12 -m "DeskHud 0.6.12"
+git push origin v0.6.12
 ```
 
 当前 CI（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）只做三端 `check` / 测试，**不会**自动发布安装包。

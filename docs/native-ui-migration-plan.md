@@ -98,24 +98,11 @@ DeskHud 从当前的 `deskhud-egui` 设置页逐步迁移到平台原生 UI：
 ```text
 deskhud/
 ├── crates/
-│   └── deskhud-egui/                  # 迁移期 legacy 设置页参考实现
-│   ├── deskhud-core/
-│   ├── deskhud-engine/
-│   ├── deskhud-runtime/
-│   ├── deskhud-package/
-│   ├── deskhud-ui/
-│   └── deskhud-sdk/
-├── platform/
-│   ├── deskhud-platform/
-│   ├── deskhud-platform-windows/
-│   ├── deskhud-platform-macos/
-│   └── deskhud-platform-linux-gtk/
-├── apps/
-│   ├── deskhud-egui/                # 迁移期 legacy 设置页参考实现
-│   └── deskhud-native/
-├── tools/
-│   └── deskhud-xtask/
-├── packs/
+│   ├── core/                          # 通用业务 crate
+│   ├── apps/                          # 应用入口（含 deskhud-egui）
+│   ├── platform/                      # 平台抽象与原生实现
+│   ├── packs/                         # 内置宠物包与 HUD 包
+│   └── tools/                         # 构建与打包工具
 └── locales/
 ```
 
@@ -162,8 +149,8 @@ docs: 确定原生 UI 迁移方向与分层边界
 
 ### 工作内容
 
-- 新建 `platform/`、`apps/` 和 `tools/` 分类目录。
-- 将 `deskhud-xtask` 移到 `tools/deskhud-xtask/`。
+- 在 `crates/` 下建立 `platform/`、`apps/` 和 `tools/` 分类目录。
+- 将 `deskhud-xtask` 移到 `crates/tools/deskhud-xtask/`。
 - 更新根目录 workspace members。
 - 更新 `.cargo/config.toml` 中的 xtask 别名。
 - 完成根目录 `assets/` 与 `locales/` 资源迁移，字体统一为 `assets/fonts/Inter.ttc` 单文件源。

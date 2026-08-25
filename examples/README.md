@@ -7,4 +7,4 @@
 | `community-pet-idle` | 宠物包 | 简单闲逛 / 状态机行为（Phase 3） |
 | `community-hud-clock` | HUD 插件 | 输出真实 HUD 帧 + 多条目开关（Phase 3） |
 
-作者流程见 [`../docs/architecture.md`](../docs/architecture.md) 与 [`../crates/deskhud-sdk`](../crates/deskhud-sdk)。
+作者流程见 [`../docs/architecture.md`](../docs/architecture.md) 与 [`../crates/deskhud-sdk`](../crates/core/deskhud-sdk)。

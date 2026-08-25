@@ -81,31 +81,20 @@ deskhud/
 ├── Cargo.toml
 ├── assets/                         # 全局图标、清单和字体资源
 ├── locales/                         # 外壳翻译资源
-├── packs/                           # 内置宠物包与 HUD 包
-├── crates/                          # 通用业务 crate
-│   ├── deskhud-core/
-│   ├── deskhud-engine/
-│   ├── deskhud-runtime/
-│   ├── deskhud-package/
-│   ├── deskhud-ui/
-│   └── deskhud-sdk/
-├── platform/                        # 平台抽象与原生实现
-│   ├── deskhud-platform/
-│   ├── deskhud-platform-windows/
-│   ├── deskhud-platform-macos/
-│   └── deskhud-platform-linux-gtk/
-├── apps/
-│   ├── deskhud-egui/                # 迁移期 legacy 设置页参考实现
-│   └── deskhud-native/
-└── tools/
-    └── deskhud-xtask/
+├── crates/
+│   ├── core/                         # 通用业务 crate
+│   ├── platform/                     # 平台抽象与原生实现
+│   ├── apps/                         # 应用入口（含 deskhud-egui）
+│   ├── packs/                        # 内置宠物包与 HUD 包
+│   └── tools/                        # 构建与打包工具
+└── packages/                         # 本地包扫描根
 ```
 
-`platform/` 是分类目录；每个子目录都是独立 Cargo crate。`deskhud-platform` 只定义抽象，不能依赖 Windows、AppKit 或 GTK。
+`crates/platform/` 是平台分类目录；每个子目录都是独立 Cargo crate。`deskhud-platform` 只定义抽象，不能依赖 Windows、AppKit 或 GTK。
 
 ### 验收标准
 
-- [x] workspace members 包含 `crates/*`、`platform/*`、`apps/*` 和 `tools/*`。
+- [x] workspace members 包含 `crates/core/*`、`crates/platform/*`、`crates/apps/*`、`crates/packs/*` 和 `crates/tools/*`。
 - [x] 根目录 `assets/` 与 `locales/` 全局资源目录整理完成，内置字体统一使用 `assets/fonts/Inter.ttc` 单文件。
 - [x] `deskhud-xtask` 的 Cargo alias 和文档路径更新。
 - [x] `deskhud-egui` 暂时保留且运行行为不变。
