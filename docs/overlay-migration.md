@@ -6,7 +6,7 @@
 
 迁移不改变以下边界：`deskhud-engine`、宠物包、HUD 插件与 SDK 只表达场景和输入语义，不得依赖 HWND、Cocoa、Wayland 或渲染器。平台后端负责宠物、气泡、HUD、布局编辑器和菜单；设置窗暂由 `winit + egui_glow` 承载。
 
-Windows 默认路径使用原生 GPU 宠物、菜单、气泡和 HUD 窗口；设置页暂由 `winit + egui_glow` 托管。旧的双路径运行方案已经移除，避免维护两套窗口生命周期。macOS/Linux 的正式原生窗口后端按里程碑推进，fallback 仅表示明确降级，不代表正式平台适配完成。当前产品版本为 `0.6.14`。
+Windows 默认路径使用原生 GPU 宠物、菜单、气泡和 HUD 窗口；设置页暂由 `winit + egui_glow` 托管。旧的双路径运行方案已经移除，避免维护两套窗口生命周期。macOS/Linux 的正式原生窗口后端按里程碑推进，fallback 仅表示明确降级，不代表正式平台适配完成。当前产品版本为 `0.6.15`。
 
 ## macOS 待验收问题（0.6.6）
 

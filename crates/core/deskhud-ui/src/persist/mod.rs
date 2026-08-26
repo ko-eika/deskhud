@@ -146,7 +146,8 @@ pub fn format_prefs_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> S
             crate::AnimationQuality::High => "high",
         }
     ));
-    out.push_str(&format!("effects = {}\n", prefs.graphics.effects));
+    out.push_str(&format!("bubbles = {}\n", prefs.graphics.bubbles));
+    out.push_str(&format!("shadows = {}\n", prefs.graphics.shadows));
     out.push_str(&format!(
         "power_mode = \"{}\"\n",
         match prefs.graphics.power_mode {
@@ -237,9 +238,17 @@ fn prefs_from_value(root: toml::Value) -> UiPreferences {
                 _ => crate::AnimationQuality::Standard,
             };
         }
-        if let Some(v) = g.get("effects").and_then(|v| v.as_bool()) {
-            prefs.graphics.effects = v;
-        }
+        let legacy_effects = g.get("effects").and_then(|v| v.as_bool());
+        prefs.graphics.bubbles = g
+            .get("bubbles")
+            .and_then(|v| v.as_bool())
+            .or(legacy_effects)
+            .unwrap_or(prefs.graphics.bubbles);
+        prefs.graphics.shadows = g
+            .get("shadows")
+            .and_then(|v| v.as_bool())
+            .or(legacy_effects)
+            .unwrap_or(prefs.graphics.shadows);
         if let Some(v) = g.get("power_mode").and_then(|v| v.as_str()) {
             prefs.graphics.power_mode = match v {
                 "saving" => crate::PowerMode::Saving,

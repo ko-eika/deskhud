@@ -100,9 +100,12 @@ pub struct GraphicsPreferences {
     /// Animation quality.
     #[serde(default)]
     pub animation_quality: AnimationQuality,
-    /// Whether bubbles and effects are enabled.
+    /// Whether speech bubbles are enabled.
     #[serde(default = "default_true")]
-    pub effects: bool,
+    pub bubbles: bool,
+    /// Whether shadows are enabled.
+    #[serde(default = "default_true")]
+    pub shadows: bool,
     /// Power versus smoothness preference.
     #[serde(default)]
     pub power_mode: PowerMode,
@@ -115,7 +118,8 @@ impl Default for GraphicsPreferences {
         Self {
             fps_limit: Default::default(),
             animation_quality: Default::default(),
-            effects: true,
+            bubbles: true,
+            shadows: true,
             power_mode: Default::default(),
         }
     }

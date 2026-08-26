@@ -47,8 +47,12 @@ pub enum MessageKey {
     SettingsPerformanceBalanced,
     /// 流畅性能模式选项。
     SettingsPerformanceSmooth,
-    /// 气泡与阴影开关标签。
+    /// 效果配置卡标题。
     SettingsPerformanceEffects,
+    /// 气泡开关标签。
+    SettingsPerformanceBubbles,
+    /// 阴影开关标签。
+    SettingsPerformanceShadows,
     /// 侧栏：关于。
     SettingsNavAbout,
     /// 关于页说明。
@@ -167,6 +171,8 @@ impl MessageKey {
         Self::SettingsPerformanceBalanced,
         Self::SettingsPerformanceSmooth,
         Self::SettingsPerformanceEffects,
+        Self::SettingsPerformanceBubbles,
+        Self::SettingsPerformanceShadows,
         Self::SettingsNavAbout,
         Self::SettingsAboutIntro,
         Self::SettingsAboutVersion,

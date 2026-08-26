@@ -269,12 +269,14 @@ pub fn apply_graphics_preferences(
     prefs: &mut UiPreferences,
     fps_limit: crate::FpsLimit,
     animation_quality: crate::AnimationQuality,
-    effects: bool,
+    bubbles: bool,
+    shadows: bool,
     power_mode: crate::PowerMode,
 ) {
     prefs.graphics.fps_limit = fps_limit;
     prefs.graphics.animation_quality = animation_quality;
-    prefs.graphics.effects = effects;
+    prefs.graphics.bubbles = bubbles;
+    prefs.graphics.shadows = shadows;
     prefs.graphics.power_mode = power_mode;
 }
 
@@ -315,6 +317,7 @@ mod tests {
             crate::FpsLimit::Fps60,
             crate::AnimationQuality::High,
             false,
+            true,
             crate::PowerMode::Smooth,
         );
         assert_eq!(prefs.graphics.fps_limit, crate::FpsLimit::Fps60);
@@ -322,7 +325,8 @@ mod tests {
             prefs.graphics.animation_quality,
             crate::AnimationQuality::High
         );
-        assert!(!prefs.graphics.effects);
+        assert!(!prefs.graphics.bubbles);
+        assert!(prefs.graphics.shadows);
         assert_eq!(prefs.graphics.power_mode, crate::PowerMode::Smooth);
     }
 

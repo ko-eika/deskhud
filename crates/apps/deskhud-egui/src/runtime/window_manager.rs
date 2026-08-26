@@ -34,6 +34,7 @@ pub(crate) struct WindowManager {
     menu: Option<PetMenu>,
     registry: Arc<EngineRegistry>,
     prefs: UiPreferences,
+    frame_rate: u32,
 }
 
 impl WindowManager {
@@ -59,6 +60,7 @@ impl WindowManager {
                 .pet
                 .apply_window_size(info.window_width, info.window_height);
         }
+        let frame_rate = super::render::frame_rate_for(&prefs.graphics);
         Self {
             proxy,
             pet: None,
@@ -67,6 +69,7 @@ impl WindowManager {
             menu: None,
             registry: Arc::new(bootstrap.registry),
             prefs,
+            frame_rate,
         }
     }
 
@@ -160,6 +163,7 @@ impl WindowManager {
 
     fn commit_preferences(&mut self, prefs: deskhud_ui::UiPreferences) {
         self.prefs = prefs;
+        self.frame_rate = super::render::frame_rate_for(&self.prefs.graphics);
         let order = PrefsWriteOrder {
             pet_ids: self
                 .registry
@@ -198,6 +202,10 @@ impl WindowManager {
         if let Some(hud) = self.hud.as_mut() {
             hud.apply_preferences(self.prefs.clone());
         }
+    }
+
+    pub(crate) fn frame_rate(&self) -> u32 {
+        self.frame_rate
     }
 
     #[cfg(target_os = "macos")]
