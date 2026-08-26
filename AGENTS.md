@@ -103,7 +103,7 @@ packages/ … examples/
 - [x] HUD 全屏布局（多屏归一化矩形 + 设置页调整布局）；运行态每屏一合成窗同层绘制
 - [x] Windows 原生 GPU 覆盖层正式运行路径（透明、局部命中、拖拽与置顶已完成单显示器验收）
 - [ ] 宠物行为事件完善（更多 `PetEvent`）与更中性绘制帧
-- [ ] HUD 插件真实帧数据（prefs 插件级/条目级开关已具备）
+- [x] HUD 插件真实帧数据（扫描 registry contribution，按总开关 ∧ 插件 ∧ 条目绘制 `HudFrame`）
 - [ ] WASM runtime + SDK + 示例包
 
 ## 常用命令

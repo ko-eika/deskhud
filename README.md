@@ -2,7 +2,7 @@
 <h4 align="center">一个可扩展的桌宠引擎</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.6.13-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.6.14-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -15,7 +15,7 @@
 
 DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（外观 + 行为），并按需开关 **HUD 插件** 及其贡献条目。界面基于 **egui + winit / egui_glow**，支持多语言与本地社区包加载（商店能力后置）。
 
-当前版本：`0.6.13`。统一由 `deskhud-ui` 提供内置与系统字体扫描、地区语言筛选和 Inter 回退；`deskhud-egui` 仅负责 egui 字体适配，并修复设置页重复扫描造成的卡顿。
+当前版本：`0.6.14`。降低隐藏窗口和字体缓存的内存占用；右键菜单恢复本地化、主题与全局字体配置，并在离屏初始化后淡入；运行态 HUD 改为扫描注册插件贡献并绘制实际 `HudFrame`。
 
 ## 功能概览
 
@@ -23,7 +23,7 @@ DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（�
 
 - 透明宠窗，可拖动；松手后靠近屏幕边缘时吸附
 - 贴边 / 拖拽状态会通知当前宠物包（便于做姿势、反馈）
-- 右键菜单：打开设置、退出
+- 右键菜单：设置、置顶、插件开关、插件层级、插件布局与退出
 - 可选宠物置顶；窗口尺寸跟随当前宠物包
 
 ### 设置（侧栏）
@@ -49,7 +49,8 @@ DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（�
 
 - 插件可贡献 0..N 条 HUD；prefs 支持插件总开关与条目开关
 - 全 ID：`hud.<组织>.<标识>`
-- 内置演示插件已接入；真实 HUD 帧数据仍在完善中
+- 运行态按“总开关 ∧ 插件开关 ∧ 条目开关”扫描贡献并绘制插件 `HudFrame`
+- 内置 `hud.deskhud.demo` 提供时钟和提示两条演示 HUD
 
 ### 国际化
 
@@ -140,8 +141,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud
 
 # 4. 打 tag 并推送后，在 GitHub Release 上传二进制
-git tag -a v0.6.13 -m "DeskHud 0.6.13"
-git push origin v0.6.13
+git tag -a v0.6.14 -m "DeskHud 0.6.14"
+git push origin v0.6.14
 ```
 
 当前 CI（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）只做三端 `check` / 测试，**不会**自动发布安装包。

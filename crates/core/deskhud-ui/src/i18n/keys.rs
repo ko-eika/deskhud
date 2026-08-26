@@ -121,6 +121,14 @@ pub enum MessageKey {
     HudLayoutResetSizeHint,
     /// 右键：插件布局。
     MenuHudLayout,
+    /// 右键：插件窗口层级。
+    MenuPluginLayer,
+    /// 插件窗口层级：始终置顶。
+    MenuLayerTop,
+    /// 插件窗口层级：普通。
+    MenuLayerNormal,
+    /// 插件窗口层级：始终置底。
+    MenuLayerBottom,
     /// 全局置顶。
     SettingsTopmost,
     /// 全局置顶说明。
@@ -195,6 +203,10 @@ impl MessageKey {
         Self::HudLayoutResetSize,
         Self::HudLayoutResetSizeHint,
         Self::MenuHudLayout,
+        Self::MenuPluginLayer,
+        Self::MenuLayerTop,
+        Self::MenuLayerNormal,
+        Self::MenuLayerBottom,
         Self::SettingsTopmost,
         Self::SettingsTopmostHint,
         Self::OptLocaleZh,

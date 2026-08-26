@@ -7,10 +7,11 @@ pub(crate) mod placement;
 
 pub(crate) use controller::MenuController;
 
-use deskhud_ui::UiTheme;
-use egui::{Align2, Color32, Context, FontId, RawInput, Sense, Stroke, Vec2};
+use deskhud_ui::UiPreferences;
+use egui::{Align2, Color32, Context, FontId, RawInput, Sense, Stroke, TextStyle, Vec2};
+use std::time::{Duration, Instant};
 use winit::{
-    dpi::PhysicalPosition,
+    dpi::{PhysicalPosition, PhysicalSize},
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoopProxy},
     window::WindowId,
@@ -27,10 +28,22 @@ const MENU_RIGHT_ICON_WIDTH: f32 = 24.0;
 const MENU_PADDING: f32 = 8.0;
 const MENU_TEXT_GAP: f32 = 8.0;
 const MENU_ITEM_GAP: f32 = MENU_PADDING;
-const MENU_ITEM_HEIGHT: f32 = 28.0;
-const MENU_TITLE_HEIGHT: f32 = 24.0;
+const MENU_MIN_ITEM_HEIGHT: f32 = 28.0;
+const MENU_MIN_TITLE_HEIGHT: f32 = 24.0;
 const MENU_SEPARATOR_HEIGHT: f32 = MENU_ITEM_GAP * 2.0 + 1.0;
-const MENU_FONT_SIZE: f32 = 14.0;
+const MENU_FADE_DURATION: Duration = Duration::from_millis(100);
+const MENU_PREPARE_TIMEOUT: Duration = Duration::from_millis(160);
+const MENU_INITIAL_OPACITY: f32 = 0.12;
+
+enum MenuPresentation {
+    Closed,
+    Preparing { started_at: Instant },
+    Visible { shown_at: Instant },
+}
+
+struct MenuAppearance {
+    opacity: f32,
+}
 
 /// 菜单窗口的原生配置。
 pub(crate) struct MenuConfig {
@@ -167,6 +180,8 @@ pub(crate) struct MenuWindow {
     show_title: bool,
     /// 打开时是否获取焦点。
     focus_on_show: bool,
+    /// 原生窗口仅在离屏绘制和几何更新完成后才显示。
+    presentation: MenuPresentation,
 }
 
 impl MenuWindow {
@@ -187,6 +202,7 @@ impl MenuWindow {
             skip_taskbar: config.skip_taskbar,
             visible: false,
             always_on_top: config.always_on_top,
+            configure_fonts: false,
             undecorated_shadow: config.undecorated_shadow,
             x11_popup: config.x11_popup,
         };
@@ -195,19 +211,27 @@ impl MenuWindow {
             title: config.title,
             show_title: config.show_title,
             focus_on_show: config.focus_on_show,
+            presentation: MenuPresentation::Closed,
         }
     }
 
     pub(crate) fn open(&mut self, anchor: PhysicalPosition<i32>, definition: &MenuDefinition) {
         let _ = definition;
-        self.set_visible(true);
+        self.begin_preparing();
         self.set_outer_position(placement::choose_position(self.viewport.window(), anchor));
     }
 
     pub(crate) fn open_at(&mut self, position: PhysicalPosition<i32>, definition: &MenuDefinition) {
         let _ = definition;
-        self.set_visible(true);
+        self.begin_preparing();
         self.set_outer_position(position);
+    }
+
+    fn begin_preparing(&mut self) {
+        self.set_visible(false);
+        self.presentation = MenuPresentation::Preparing {
+            started_at: Instant::now(),
+        };
     }
 
     fn set_visible(&mut self, visible: bool) {
@@ -219,10 +243,14 @@ impl MenuWindow {
     }
 
     pub(crate) fn close(&mut self) {
+        self.presentation = MenuPresentation::Closed;
         self.set_visible(false);
     }
     pub(crate) fn is_visible(&self) -> bool {
-        self.viewport.is_visible()
+        !matches!(self.presentation, MenuPresentation::Closed)
+    }
+    pub(crate) fn is_preparing(&self) -> bool {
+        matches!(self.presentation, MenuPresentation::Preparing { .. })
     }
     pub(crate) fn window_id(&self) -> WindowId {
         self.viewport.window_id()
@@ -246,8 +274,10 @@ impl MenuWindow {
         &mut self,
         definition: &MenuDefinition,
         highlighted_submenu: Option<usize>,
-        theme: UiTheme,
+        prefs: &UiPreferences,
     ) -> MenuOutput {
+        let opacity = self.content_opacity();
+        self.viewport.apply_ui_preferences(prefs);
         let viewport = self.viewport.render(|context, raw_input| {
             run(
                 context,
@@ -256,7 +286,7 @@ impl MenuWindow {
                 self.title,
                 self.show_title,
                 highlighted_submenu,
-                theme,
+                MenuAppearance { opacity },
             )
         });
         let selected_item = viewport.selected_menu_item.clone();
@@ -266,6 +296,40 @@ impl MenuWindow {
             submenu_anchor: viewport.submenu_anchor,
             viewport,
             selected_item,
+        }
+    }
+
+    /// 在目标位置和尺寸已经由窗口系统确认后显示原生窗口。
+    ///
+    /// 超时分支用于不允许应用自行定位窗口的平台，避免菜单永久保持隐藏。
+    pub(crate) fn reveal_when_ready(
+        &mut self,
+        expected_position: PhysicalPosition<i32>,
+        expected_size: PhysicalSize<u32>,
+    ) {
+        let MenuPresentation::Preparing { started_at } = self.presentation else {
+            return;
+        };
+        let size_ready = self.viewport.window().inner_size() == expected_size;
+        let position_ready =
+            self.viewport.window().outer_position().ok() == Some(expected_position);
+        if (size_ready && position_ready) || started_at.elapsed() >= MENU_PREPARE_TIMEOUT {
+            let shown_at = Instant::now();
+            self.presentation = MenuPresentation::Visible { shown_at };
+            self.set_visible(true);
+        }
+    }
+
+    fn content_opacity(&self) -> f32 {
+        match self.presentation {
+            MenuPresentation::Closed => 0.0,
+            MenuPresentation::Preparing { .. } => MENU_INITIAL_OPACITY,
+            MenuPresentation::Visible { shown_at } => {
+                let progress = (shown_at.elapsed().as_secs_f32()
+                    / MENU_FADE_DURATION.as_secs_f32())
+                .clamp(0.0, 1.0);
+                MENU_INITIAL_OPACITY + (1.0 - MENU_INITIAL_OPACITY) * progress
+            }
         }
     }
 
@@ -298,22 +362,23 @@ fn run(
     title: &str,
     show_title: bool,
     highlighted_submenu: Option<usize>,
-    theme: UiTheme,
+    appearance: MenuAppearance,
 ) -> ViewOutput {
     let mut output = ViewOutput::default();
     let mut hovered_item = None;
     let mut target_size = [0.0, 0.0];
     let full_output = context.run_ui(raw_input, |ctx| {
-        crate::views::theme::apply(ctx.ctx(), theme);
         let layout = menu_layout(ctx, definition, title, show_title);
-        let frame =
-            egui::Frame::menu(&ctx.style()).inner_margin(egui::Margin::same(MENU_PADDING as i8));
+        let frame = egui::Frame::menu(ctx.style())
+            .inner_margin(egui::Margin::same(MENU_PADDING as i8))
+            .multiply_with_opacity(appearance.opacity);
         let frame_margin = frame.total_margin();
         egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
+            ui.multiply_opacity(appearance.opacity);
             ui.set_min_size(Vec2::new(layout.content_width, layout.content_height));
             ui.spacing_mut().item_spacing = Vec2::ZERO;
             if show_title {
-                menu_title(ui, title);
+                menu_title(ui, title, layout.title_height);
                 menu_separator(ui);
             }
             for (index, item) in definition.items.iter().enumerate() {
@@ -329,6 +394,7 @@ fn run(
                     item.enabled,
                     item.submenu.is_some(),
                     highlighted_submenu == Some(index),
+                    layout.item_height,
                 );
                 if response.hovered() {
                     hovered_item = Some(index);
@@ -361,6 +427,8 @@ fn run(
 struct MenuLayout {
     content_width: f32,
     content_height: f32,
+    item_height: f32,
+    title_height: f32,
 }
 
 fn menu_layout(
@@ -369,6 +437,9 @@ fn menu_layout(
     title: &str,
     show_title: bool,
 ) -> MenuLayout {
+    let font_size = menu_font_id(ctx).size;
+    let item_height = (font_size + 14.0).max(MENU_MIN_ITEM_HEIGHT);
+    let title_row_height = (font_size + 10.0).max(MENU_MIN_TITLE_HEIGHT);
     let text_width = menu_text_width(ctx, definition, show_title.then_some(title));
     let content_width =
         text_width + MENU_LEFT_ICON_WIDTH + MENU_RIGHT_ICON_WIDTH + MENU_TEXT_GAP * 2.0;
@@ -384,31 +455,30 @@ fn menu_layout(
         .filter(|(index, item)| *index > 0 && !item.separator_before)
         .count();
     let title_height = if show_title {
-        MENU_TITLE_HEIGHT + MENU_SEPARATOR_HEIGHT
+        title_row_height + MENU_SEPARATOR_HEIGHT
     } else {
         0.0
     };
     let content_height = title_height
-        + definition.items.len() as f32 * MENU_ITEM_HEIGHT
+        + definition.items.len() as f32 * item_height
         + separator_count as f32 * MENU_SEPARATOR_HEIGHT
         + item_gap_count as f32 * MENU_ITEM_GAP;
     MenuLayout {
         content_width,
         content_height,
+        item_height,
+        title_height: title_row_height,
     }
 }
 
-fn menu_title(ui: &mut egui::Ui, title: &str) {
-    let (rect, _) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width(), MENU_TITLE_HEIGHT),
-        Sense::hover(),
-    );
+fn menu_title(ui: &mut egui::Ui, title: &str, height: f32) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
     ui.painter().text(
         rect.left_center() + Vec2::new(MENU_LEFT_ICON_WIDTH + MENU_TEXT_GAP, 0.0),
         Align2::LEFT_CENTER,
         title,
-        FontId::proportional(MENU_FONT_SIZE),
-        Color32::from_rgb(150, 150, 150),
+        TextStyle::Body.resolve(ui.style()),
+        ui.visuals().weak_text_color(),
     );
 }
 
@@ -420,7 +490,7 @@ fn menu_separator(ui: &mut egui::Ui) {
     let y = rect.center().y;
     ui.painter().line_segment(
         [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
-        Stroke::new(1.0, Color32::from_rgb(65, 65, 65)),
+        Stroke::new(1.0, ui.visuals().window_stroke.color),
     );
 }
 
@@ -429,7 +499,7 @@ fn menu_gap(ui: &mut egui::Ui) {
 }
 
 fn menu_text_width(ctx: &Context, definition: &MenuDefinition, title: Option<&str>) -> f32 {
-    let font_id = FontId::proportional(MENU_FONT_SIZE);
+    let font_id = menu_font_id(ctx);
     ctx.fonts_mut(|fonts| {
         title
             .into_iter()
@@ -444,6 +514,10 @@ fn menu_text_width(ctx: &Context, definition: &MenuDefinition, title: Option<&st
     })
 }
 
+fn menu_font_id(ctx: &Context) -> FontId {
+    TextStyle::Body.resolve(&ctx.style_of(ctx.theme()))
+}
+
 fn menu_item(
     ui: &mut egui::Ui,
     text: &str,
@@ -451,9 +525,10 @@ fn menu_item(
     enabled: bool,
     has_submenu: bool,
     highlighted: bool,
+    item_height: f32,
 ) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width(), MENU_ITEM_HEIGHT),
+        Vec2::new(ui.available_width(), item_height),
         if enabled {
             Sense::click()
         } else {
@@ -469,31 +544,34 @@ fn menu_item(
         let middle = center + Vec2::new(-1.0, 4.0);
         ui.painter().line_segment(
             [center + Vec2::new(-5.0, 0.0), middle],
-            Stroke::new(1.8, Color32::from_rgb(95, 190, 120)),
+            Stroke::new(1.8, ui.visuals().selection.bg_fill),
         );
         ui.painter().line_segment(
             [middle, center + Vec2::new(6.0, -5.0)],
-            Stroke::new(1.8, Color32::from_rgb(95, 190, 120)),
+            Stroke::new(1.8, ui.visuals().selection.bg_fill),
         );
     }
     ui.painter().text(
         rect.left_center() + Vec2::new(MENU_LEFT_ICON_WIDTH + MENU_TEXT_GAP, 0.0),
         Align2::LEFT_CENTER,
         text,
-        FontId::proportional(MENU_FONT_SIZE),
+        TextStyle::Body.resolve(ui.style()),
         if enabled {
-            Color32::from_rgb(225, 225, 225)
+            ui.visuals().text_color()
         } else {
-            Color32::from_rgb(110, 110, 110)
+            ui.visuals()
+                .weak_text_color()
+                .gamma_multiply(ui.visuals().disabled_alpha)
         },
     );
     if has_submenu {
+        let arrow_size = TextStyle::Body.resolve(ui.style()).size + 4.0;
         ui.painter().text(
             rect.right_center() - Vec2::new(MENU_RIGHT_ICON_WIDTH * 0.5, 0.0),
             Align2::RIGHT_CENTER,
             "›",
-            FontId::proportional(18.0),
-            Color32::from_rgb(190, 190, 190),
+            FontId::proportional(arrow_size),
+            ui.visuals().weak_text_color(),
         );
     }
     response

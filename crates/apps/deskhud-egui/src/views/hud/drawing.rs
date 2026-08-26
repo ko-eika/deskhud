@@ -1,9 +1,10 @@
 //! HUD 子窗口、布局边界和虚线动画绘制职责。
 
-use super::LayoutState;
+use super::{HudRenderItem, LayoutState};
+use deskhud_engine::HudVisual;
 
 const HUD_PADDING: f32 = 8.0;
-const PANEL_MIN_SIZE: egui::Vec2 = egui::Vec2::new(136.0, 72.0);
+const EMPTY_FRAME_SIZE: egui::Vec2 = egui::Vec2::new(136.0, 72.0);
 
 pub(super) struct DrawResult {
     pub(super) size: [f32; 2],
@@ -11,64 +12,23 @@ pub(super) struct DrawResult {
 }
 
 /// 绘制 HUD 子窗口并返回根据子窗口计算出的 HUD 尺寸。
-pub(super) fn draw(ui: &mut egui::Ui, time: f32, layout: &mut LayoutState) -> DrawResult {
+pub(super) fn draw(
+    ui: &mut egui::Ui,
+    time: f32,
+    layout: &mut LayoutState,
+    items: &[HudRenderItem],
+) -> DrawResult {
     let mut bounds = egui::Rect::NOTHING;
-    for (index, position) in layout.positions.iter_mut().enumerate() {
-        let title = if index == 0 {
-            "HUD panel A"
-        } else {
-            "HUD panel B"
-        };
-        let response = egui::Area::new(egui::Id::new(("hud-panel", index)))
+    for item in items {
+        let position = layout
+            .positions
+            .entry(item.key.clone())
+            .or_insert(item.initial_position);
+        let response = egui::Area::new(egui::Id::new(("hud-item", &item.key)))
             .order(egui::Order::Middle)
             .movable(false)
             .fixed_pos(*position)
-            .show(ui.ctx(), |ui| {
-                egui::Frame::NONE
-                    .fill(egui::Color32::from_rgba_unmultiplied(18, 24, 36, 235))
-                    .stroke(egui::Stroke::new(
-                        1.0,
-                        egui::Color32::from_rgba_unmultiplied(100, 160, 255, 180),
-                    ))
-                    .corner_radius(10)
-                    .inner_margin(egui::Margin::same(10))
-                    .show(ui, |ui| {
-                        ui.set_min_size(PANEL_MIN_SIZE);
-                        ui.horizontal(|ui| {
-                            let (dot, _) =
-                                ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
-                            ui.painter().circle_filled(
-                                dot.center(),
-                                4.0,
-                                if index == 0 {
-                                    egui::Color32::from_rgb(92, 172, 255)
-                                } else {
-                                    egui::Color32::from_rgb(112, 220, 180)
-                                },
-                            );
-                            ui.label(
-                                egui::RichText::new(title)
-                                    .strong()
-                                    .color(egui::Color32::WHITE),
-                            );
-                        });
-                        ui.separator();
-                        ui.label(
-                            egui::RichText::new("Live HUD content")
-                                .small()
-                                .color(egui::Color32::from_gray(180)),
-                        );
-                    });
-                ui.interact(
-                    ui.max_rect(),
-                    egui::Id::new(("hud-panel-drag", index)),
-                    if layout.layout_mode {
-                        egui::Sense::drag()
-                    } else {
-                        egui::Sense::hover()
-                    },
-                )
-            });
+            .show(ui.ctx(), |ui| draw_frame(ui, item, layout.layout_mode));
         if layout.layout_mode && response.inner.dragged() {
             *position += response.inner.drag_delta();
         }
@@ -114,8 +74,10 @@ pub(super) fn draw(ui: &mut egui::Ui, time: f32, layout: &mut LayoutState) -> Dr
 
     let offset = egui::vec2(HUD_PADDING, HUD_PADDING) - bounds.min.to_vec2();
     if offset != egui::Vec2::ZERO {
-        for position in &mut layout.positions {
-            *position += offset;
+        for item in items {
+            if let Some(position) = layout.positions.get_mut(&item.key) {
+                *position += offset;
+            }
         }
     }
     let border_size = bounds.size() + egui::vec2(HUD_PADDING * 2.0, HUD_PADDING * 2.0);
@@ -140,14 +102,92 @@ pub(super) fn draw(ui: &mut egui::Ui, time: f32, layout: &mut LayoutState) -> Dr
     }
 }
 
+fn draw_frame(ui: &mut egui::Ui, item: &HudRenderItem, layout_mode: bool) -> egui::Response {
+    let base_size = frame_size(&item.frame.visuals);
+    let scale = item.scale.clamp(0.5, 3.0);
+    let size = base_size * scale;
+    let (rect, response) = ui.allocate_exact_size(
+        size,
+        if layout_mode {
+            egui::Sense::drag()
+        } else {
+            egui::Sense::hover()
+        },
+    );
+    let ui_font_scale =
+        egui::TextStyle::Body.resolve(ui.style()).size / deskhud_ui::DEFAULT_UI_FONT_SIZE.max(1.0);
+    for visual in &item.frame.visuals {
+        match visual {
+            HudVisual::Panel {
+                width,
+                height,
+                radius,
+                color,
+            } => {
+                let panel = egui::Rect::from_min_size(
+                    rect.min,
+                    egui::vec2(width.max(1.0), height.max(1.0)) * scale,
+                );
+                ui.painter().rect_filled(
+                    panel,
+                    (*radius * scale).round().clamp(0.0, 255.0) as u8,
+                    rgba(*color),
+                );
+            }
+            HudVisual::Text {
+                text,
+                font_size,
+                color,
+            } => {
+                ui.painter().text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    text,
+                    egui::FontId::proportional(
+                        (font_size * scale * ui_font_scale).clamp(8.0, 96.0),
+                    ),
+                    rgba(*color),
+                );
+            }
+        }
+    }
+    response
+}
+
+fn frame_size(visuals: &[HudVisual]) -> egui::Vec2 {
+    let mut size = egui::Vec2::ZERO;
+    for visual in visuals {
+        match visual {
+            HudVisual::Panel { width, height, .. } => {
+                size.x = size.x.max(*width);
+                size.y = size.y.max(*height);
+            }
+            HudVisual::Text {
+                text, font_size, ..
+            } => {
+                size.x = size
+                    .x
+                    .max(text.chars().count() as f32 * font_size * 0.62 + 20.0);
+                size.y = size.y.max(font_size + 16.0);
+            }
+        }
+    }
+    if size == egui::Vec2::ZERO {
+        EMPTY_FRAME_SIZE
+    } else {
+        size
+    }
+}
+
+fn rgba([red, green, blue, alpha]: [u8; 4]) -> egui::Color32 {
+    egui::Color32::from_rgba_unmultiplied(red, green, blue, alpha)
+}
+
 /// 绘制沿边框移动的虚线动画。
 pub(super) fn draw_border(ui: &mut egui::Ui, time: f32, rect: egui::Rect) {
     let dash_phase = (time * 42.0) % 16.0;
     let rect = rect.shrink(2.0);
-    let stroke = egui::Stroke::new(
-        2.0,
-        egui::Color32::from_rgba_unmultiplied(76, 145, 255, 220),
-    );
+    let stroke = egui::Stroke::new(2.0, with_alpha(ui.visuals().selection.bg_fill, 220));
     let dash = 10.0;
     let gap = 6.0;
     let draw_dashes = |start: egui::Pos2, end: egui::Pos2| {
@@ -170,4 +210,9 @@ pub(super) fn draw_border(ui: &mut egui::Ui, time: f32, rect: egui::Rect) {
     draw_dashes(rect.right_top(), rect.right_bottom());
     draw_dashes(rect.right_bottom(), rect.left_bottom());
     draw_dashes(rect.left_bottom(), rect.left_top());
+}
+
+fn with_alpha(color: egui::Color32, alpha: u8) -> egui::Color32 {
+    let [red, green, blue, _] = color.to_array();
+    egui::Color32::from_rgba_unmultiplied(red, green, blue, alpha)
 }

@@ -14,7 +14,7 @@ use winit::{
 
 use super::{MenuConfig, MenuDefinition, MenuWindow, placement};
 use crate::runtime::viewport::UserEvent;
-use deskhud_ui::UiTheme;
+use deskhud_ui::UiPreferences;
 
 /// 可复用的菜单树窗口控制器。
 pub(crate) struct MenuController {
@@ -97,6 +97,8 @@ impl MenuController {
 
     /// 在指定屏幕位置打开根菜单。
     pub(crate) fn open(&mut self, anchor: PhysicalPosition<i32>, definition: &MenuDefinition) {
+        self.close_submenus_from(0);
+        self.focus_lost_at = None;
         self.root_anchor = Some(anchor);
         self.window.open(anchor, definition);
     }
@@ -132,24 +134,28 @@ impl MenuController {
             } else {
                 false
             };
-            self.track_focus_event(event);
+            let preparing = self
+                .submenus
+                .get(depth)
+                .is_some_and(MenuWindow::is_preparing);
+            self.track_focus_event(event, preparing);
             if submenu_closed {
                 self.close_submenus_from(depth);
             }
         } else {
             self.window.handle_event(event, false);
-            self.track_focus_event(event);
+            self.track_focus_event(event, self.window.is_preparing());
         }
         if !self.window.is_visible() {
             self.close();
         }
     }
 
-    fn track_focus_event(&mut self, event: &WindowEvent) {
+    fn track_focus_event(&mut self, event: &WindowEvent, preparing: bool) {
         if !self.track_focus_loss {
             return;
         }
-        if matches!(event, WindowEvent::Focused(false)) {
+        if matches!(event, WindowEvent::Focused(false)) && !preparing {
             self.focus_lost_at = Some(Instant::now());
         } else if matches!(event, WindowEvent::Focused(true)) {
             self.focus_lost_at = None;
@@ -160,11 +166,11 @@ impl MenuController {
     pub(crate) fn render(
         &mut self,
         definition: &MenuDefinition,
-        theme: UiTheme,
+        prefs: &UiPreferences,
     ) -> (Option<String>, bool) {
-        let root_output =
-            self.window
-                .render(&definition, self.submenu_path.first().copied(), theme);
+        let root_output = self
+            .window
+            .render(definition, self.submenu_path.first().copied(), prefs);
         if root_output.hovered_item.is_some() {
             self.focus_lost_at = None;
         }
@@ -183,6 +189,7 @@ impl MenuController {
             );
             let position = placement::choose_position_for_size(self.window.window(), anchor, size);
             self.window.set_outer_position(position);
+            self.window.reveal_when_ready(position, size);
         }
 
         let root_scale = self.window.scale_factor();
@@ -279,7 +286,7 @@ impl MenuController {
                 let child_output = submenu.render(
                     submenu_definition,
                     self.submenu_path.get(depth + 1).copied(),
-                    theme,
+                    prefs,
                 );
                 let child_size = child_output
                     .viewport
@@ -322,6 +329,7 @@ impl MenuController {
             self.submenu_sides[depth] = side;
             self.submenu_vertical_sides[depth] = vertical;
             self.submenus[depth].set_outer_position(position);
+            self.submenus[depth].reveal_when_ready(position, child_size);
             parent_position = position;
             parent_size = child_size;
             should_close |= child_output.viewport.should_close;

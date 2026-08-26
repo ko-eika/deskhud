@@ -81,7 +81,12 @@ impl WindowManager {
             ));
         }
         if self.hud.is_none() {
-            self.hud = Some(HudWindow::create(event_loop, &self.proxy));
+            self.hud = Some(HudWindow::create(
+                event_loop,
+                &self.proxy,
+                self.registry.clone(),
+                self.prefs.clone(),
+            ));
         }
         if self.settings.is_none() {
             self.settings = Some(SettingsWindow::create(
@@ -190,6 +195,9 @@ impl WindowManager {
         if let Some(pet) = self.pet.as_mut() {
             pet.apply_preferences(&self.registry, self.prefs.clone());
         }
+        if let Some(hud) = self.hud.as_mut() {
+            hud.apply_preferences(self.prefs.clone());
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -220,6 +228,7 @@ impl WindowManager {
         }
         self.menu.as_mut().expect("pet menu disappeared").open(
             anchor,
+            &self.prefs,
             pet.window_layer(),
             self.hud.as_ref().map_or(
                 super::viewport::WindowLayer::Normal,
@@ -391,7 +400,7 @@ impl WindowManager {
                             HudWindow::window_layer,
                         ),
                         self.hud.as_ref().is_some_and(HudWindow::is_visible),
-                        self.prefs.shell.ui_theme,
+                        &self.prefs,
                     );
                 if should_close {
                     self.hide_menu();
@@ -439,9 +448,16 @@ impl WindowManager {
                     .window_id(),
             );
         }
-        window_ids
+        let should_close = window_ids
             .into_iter()
-            .any(|window_id| self.render_window(window_id))
+            .any(|window_id| self.render_window(window_id));
+        if let Some(hud) = self.hud.as_mut() {
+            hud.maintain_surface();
+        }
+        if let Some(settings) = self.settings.as_mut() {
+            settings.maintain_surface();
+        }
+        should_close
     }
 
     fn handle_menu_action(&mut self, action: PetMenuAction) -> bool {

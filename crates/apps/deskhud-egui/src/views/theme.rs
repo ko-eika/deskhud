@@ -4,11 +4,19 @@ use deskhud_ui::{SystemTheme, UiTheme, resolve_theme};
 use egui::{Color32, Context, Stroke};
 
 /// Applies the application's resolved theme to an egui context.
-pub(crate) fn apply(ctx: &Context, theme: UiTheme) {
-    let dark = matches!(
-        resolve_theme(theme, Some(SystemTheme::Dark)),
-        SystemTheme::Dark
-    );
+pub(crate) fn apply(ctx: &Context, theme: UiTheme, system_theme: Option<SystemTheme>) {
+    let system_theme = system_theme.or_else(|| {
+        ctx.system_theme().map(|theme| match theme {
+            egui::Theme::Dark => SystemTheme::Dark,
+            egui::Theme::Light => SystemTheme::Light,
+        })
+    });
+    let dark = matches!(resolve_theme(theme, system_theme), SystemTheme::Dark);
+    ctx.set_theme(if dark {
+        egui::Theme::Dark
+    } else {
+        egui::Theme::Light
+    });
     let mut visuals = if dark {
         egui::Visuals::dark()
     } else {

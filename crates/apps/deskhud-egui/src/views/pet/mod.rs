@@ -43,7 +43,10 @@ pub(crate) fn run(
             drag: DragState::IDLE,
             mouse: MouseState::IDLE,
             config: PetConfigBag::new(&map),
-            theme: PetTheme::default(),
+            theme: match ctx.ctx().theme() {
+                egui::Theme::Light => PetTheme::Light,
+                egui::Theme::Dark => PetTheme::Dark,
+            },
         });
 
         egui::CentralPanel::default()

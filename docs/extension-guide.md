@@ -147,7 +147,7 @@ cargo pack-builtins --out path/to/out
 
 插件可贡献 **0..N** 条 HUD；用户可关整个插件意向条目，也可关单条（prefs）。
 
-当前 host 已实现：按插件折叠 + **插件总开关** + 条目开关；壳在宠窗底部画演示条。**真实 HUD 帧数据**仍在路线图中。
+当前 host 已实现：按插件折叠 + **插件总开关** + 条目开关；运行态从 `EngineRegistry` 扫描贡献，按“总开关 ∧ 插件开关 ∧ 条目开关”调用 `hud_frame()` 并绘制中性 `HudVisual`。
 
 ### 2.2 实现入口：`Plugin`
 
@@ -347,7 +347,7 @@ cargo run -p deskhud-egui
 
 1. 实现 `PetKind` 或 `Plugin`，由 runtime / 包加载调用 `register_pet` / `register_plugin`。
 2. 宠物：验证贴边 / 拖动 / 悬停 / 单击获焦后键盘。
-3. HUD：设置 → **插件** 按插件折叠列表开关条目；演示条画在宠窗底部。
+3. HUD：设置 → **插件** 按插件折叠列表开关条目；运行态验证启用贡献返回的 `HudFrame` 内容、位置与缩放。
 4. 宠物：设置 → 宠物页切换包，并验证「当前宠物行为」开关（跟眼 / 提示等）。
 
 更细架构与路线图：[`architecture.md`](./architecture.md)、[`roadmap.md`](./roadmap.md)。

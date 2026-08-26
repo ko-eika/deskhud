@@ -21,7 +21,6 @@ pub(crate) struct SettingsWindow {
     viewport: Viewport,
     registry: Arc<EngineRegistry>,
     model: SettingsModel,
-    font_signature: Option<(String, u32)>,
 }
 
 impl SettingsWindow {
@@ -50,7 +49,6 @@ impl SettingsWindow {
             },
             registry,
             model: SettingsModel::new(prefs),
-            font_signature: None,
         }
     }
 
@@ -64,6 +62,7 @@ impl SettingsWindow {
     /// 隐藏 Settings 窗口。
     pub(crate) fn hide(&mut self) {
         self.viewport.set_visible(false);
+        self.viewport.request_surface_compaction();
     }
 
     /// 判断 Settings 是否可见。
@@ -97,18 +96,17 @@ impl SettingsWindow {
 
     /// 绘制一帧并返回 UI 是否请求关闭。
     pub(crate) fn render(&mut self) -> (bool, Option<UiPreferences>) {
+        self.viewport.apply_ui_preferences(&self.model.draft);
         self.viewport
             .set_titlebar_theme(self.model.draft.shell.ui_theme);
         let output = self.viewport.render(|context, raw_input| {
-            view::setting::run(
-                context,
-                raw_input,
-                &self.registry,
-                &mut self.model,
-                &mut self.font_signature,
-            )
+            view::setting::run(context, raw_input, &self.registry, &mut self.model)
         });
         (output.should_close, output.applied_preferences)
+    }
+
+    pub(crate) fn maintain_surface(&mut self) {
+        self.viewport.maintain_surface();
     }
 
     fn sync_geometry(&mut self) {

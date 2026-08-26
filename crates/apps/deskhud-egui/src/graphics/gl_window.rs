@@ -109,7 +109,13 @@ impl GlWindow {
         #[cfg(target_os = "macos")]
         disable_macos_window_tiling(&window);
 
-        let size = window.inner_size();
+        // Hidden secondary windows keep their native geometry, but do not need
+        // a full-size framebuffer until their first visible frame.
+        let size = if visible {
+            window.inner_size()
+        } else {
+            winit::dpi::PhysicalSize::new(1, 1)
+        };
         let width = NonZeroU32::new(size.width).unwrap_or(NonZeroU32::MIN);
         let height = NonZeroU32::new(size.height).unwrap_or(NonZeroU32::MIN);
         let surface_attributes = SurfaceAttributesBuilder::<WindowSurface>::new().build(
@@ -141,11 +147,14 @@ impl GlWindow {
     ///
     /// 宽高为 0 时使用 1 像素占位；最小化窗口可能产生这种尺寸，真正绘制会由
     /// `Viewport::render` 跳过，恢复有效尺寸后再继续。
-    pub(crate) fn resize(&self, width: u32, height: u32) {
+    pub(crate) fn resize(&self, width: u32, height: u32) -> bool {
         let width = NonZeroU32::new(width).unwrap_or(NonZeroU32::MIN);
         let height = NonZeroU32::new(height).unwrap_or(NonZeroU32::MIN);
         if let Some(context) = &self.current {
             self.surface.resize(context, width, height);
+            true
+        } else {
+            false
         }
     }
 

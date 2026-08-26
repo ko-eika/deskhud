@@ -142,6 +142,7 @@ impl PetWindow {
     /// 绘制 Pet 一帧，并返回是否请求退出应用。
     pub(crate) fn render(&mut self) -> bool {
         self.pet.tick(1.0 / 60.0);
+        self.viewport.apply_ui_preferences(&self.prefs);
         self.viewport
             .render(|context, raw_input| {
                 view::pet::run(

@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use deskhud_ui::{SystemTheme, UiTheme, resolve_theme};
+use deskhud_ui::UiTheme;
 use egui::{Color32, Context, RawInput};
 use egui_glow::Painter;
 use egui_winit::State;
@@ -80,6 +80,10 @@ pub(crate) struct Viewport {
     visible: bool,
     cursor_position: Option<PhysicalPosition<f64>>,
     destroyed: bool,
+    fonts_configured: bool,
+    font_signature: Option<(String, u32)>,
+    surface_compacted: bool,
+    surface_compaction_pending: bool,
 }
 
 impl Viewport {
@@ -105,7 +109,9 @@ impl Viewport {
             )
         };
         let context = Context::default();
-        crate::fonts::configure_context(&context);
+        if config.configure_fonts {
+            crate::fonts::configure_context(&context);
+        }
         let repaint_proxy = proxy.clone();
         context.set_request_repaint_callback(move |_info| {
             let _ = repaint_proxy.send_event(UserEvent::Repaint);
@@ -140,6 +146,10 @@ impl Viewport {
             visible: config.visible,
             cursor_position: None,
             destroyed: false,
+            fonts_configured: config.configure_fonts,
+            font_signature: None,
+            surface_compacted: !config.visible,
+            surface_compaction_pending: false,
         }
     }
 
@@ -175,10 +185,10 @@ impl Viewport {
 
     /// Synchronizes the native decorated title bar with the application theme.
     pub(crate) fn set_titlebar_theme(&self, theme: UiTheme) {
-        let resolved = resolve_theme(theme, None);
-        let native_theme = match resolved {
-            SystemTheme::Light => Some(winit::window::Theme::Light),
-            SystemTheme::Dark => Some(winit::window::Theme::Dark),
+        let native_theme = match theme {
+            UiTheme::System => None,
+            UiTheme::Light => Some(winit::window::Theme::Light),
+            UiTheme::Dark => Some(winit::window::Theme::Dark),
         };
         self.gl_window.window().set_theme(native_theme);
 
@@ -202,7 +212,10 @@ impl Viewport {
             let RawWindowHandle::Win32(handle) = window_handle.as_raw() else {
                 return;
             };
-            let dark = matches!(resolved, SystemTheme::Dark);
+            let dark = match native_theme.or_else(|| self.gl_window.window().theme()) {
+                Some(winit::window::Theme::Light) => false,
+                Some(winit::window::Theme::Dark) | None => true,
+            };
             let value = i32::from(dark);
             // Windows 10 and 11 use different attribute IDs in the wild.
             for attribute in [19_u32, 20_u32] {
@@ -220,8 +233,33 @@ impl Viewport {
         let _ = theme;
     }
 
+    /// 将已应用的全局外观同步到当前独立 egui Context。
+    pub(crate) fn apply_ui_preferences(&mut self, prefs: &deskhud_ui::UiPreferences) {
+        let system_theme = self.gl_window.window().theme().map(|theme| match theme {
+            winit::window::Theme::Light => deskhud_ui::SystemTheme::Light,
+            winit::window::Theme::Dark => deskhud_ui::SystemTheme::Dark,
+        });
+        crate::views::theme::apply(&self.context, prefs.shell.ui_theme, system_theme);
+        let signature = (
+            prefs.shell.ui_font_id.clone(),
+            prefs.shell.ui_font_size.to_bits(),
+        );
+        if self.font_signature.as_ref() != Some(&signature) {
+            crate::fonts::configure_context_for(
+                &self.context,
+                &signature.0,
+                prefs.shell.ui_font_size,
+            );
+            self.font_signature = Some(signature);
+            self.fonts_configured = true;
+        }
+    }
+
     pub(crate) fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
+        if visible {
+            self.surface_compaction_pending = false;
+        }
         self.gl_window.window().set_visible(visible);
         if visible {
             let _ = self.gl_window.window().set_cursor_hittest(true);
@@ -301,6 +339,13 @@ impl Viewport {
         }
         // 另一个视口可能刚刚完成绘制，因此先恢复当前视口的 OpenGL 上下文。
         self.gl_window.make_current();
+        if self.surface_compacted {
+            self.surface_compacted = !self.gl_window.resize(size.width, size.height);
+        }
+        if !self.fonts_configured {
+            crate::fonts::configure_context(&self.context);
+            self.fonts_configured = true;
+        }
         if self.painter.is_none() {
             let painter = self.gl_window.create_painter();
             self.state.set_max_texture_side(painter.max_texture_side());
@@ -353,7 +398,11 @@ impl Viewport {
         let clear_color = if self.transparent {
             Color32::TRANSPARENT.to_normalized_gamma_f32()
         } else {
-            Color32::from_rgb(30, 32, 38).to_normalized_gamma_f32()
+            self.context
+                .style_of(self.context.theme())
+                .visuals
+                .panel_fill
+                .to_normalized_gamma_f32()
         };
         let painter = self.painter.as_mut().expect("Painter 未初始化");
         painter.clear([size.width, size.height], clear_color);
@@ -391,16 +440,38 @@ impl Viewport {
                 });
             }
         }
-        match event {
-            WindowEvent::Resized(size) => {
-                self.gl_window.resize(size.width, size.height);
-            }
-            _ => {}
+        if let WindowEvent::Resized(size) = event
+            && self.visible
+            && self.gl_window.resize(size.width, size.height)
+        {
+            self.surface_compacted = false;
         }
         let _ = self.state.on_window_event(self.gl_window.window(), event);
         // 实际绘制由渲染线程统一调度；输入事件只请求下一帧，避免在事件处理阶段绘制。
         if !matches!(event, WindowEvent::RedrawRequested) {
             self.context.request_repaint();
+        }
+    }
+
+    /// Shrinks only the native framebuffer while retaining the reusable
+    /// window, egui state, Painter and OpenGL context.
+    pub(crate) fn request_surface_compaction(&mut self) {
+        if self.destroyed || self.surface_compacted {
+            return;
+        }
+        self.surface_compaction_pending = true;
+    }
+
+    /// Applies deferred framebuffer compaction outside the window-event close
+    /// path, where switching OpenGL contexts can otherwise block the driver.
+    pub(crate) fn maintain_surface(&mut self) {
+        if self.destroyed || !self.surface_compaction_pending || self.visible {
+            return;
+        }
+        self.gl_window.make_current();
+        if self.gl_window.resize(1, 1) {
+            self.surface_compacted = true;
+            self.surface_compaction_pending = false;
         }
     }
 

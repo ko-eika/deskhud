@@ -2,7 +2,7 @@
 <h4 align="center">An extensible desktop pet engine</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.6.11-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.6.14-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -13,7 +13,7 @@
 
 [简体中文](./README.md) | English
 
-DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release line: `0.6.11`.
+DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.6.14`.
 
 ## Features
 
@@ -21,7 +21,7 @@ DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + be
 
 - Transparent, draggable pet window; snaps when released near screen edges
 - Dock / drag state is forwarded to the active pet pack (poses, feedback, etc.)
-- Context menu: Settings, Quit
+- Context menu: Settings, keep on top, plugins, plugin layer, plugin layout, and Quit
 - Optional pet always-on-top; window size follows the active pet pack
 
 ### Settings (sidebar)
@@ -47,7 +47,8 @@ Preferences are persisted (locale, theme, font, active pet, HUD switches, window
 
 - A plugin may contribute 0..N HUD items; prefs support plugin-level and item-level switches
 - Full ID: `hud.<org>.<name>`
-- Demo plugin is wired; real HUD frame data is still evolving
+- Runtime HUD scans enabled registry contributions and renders their actual `HudFrame`
+- Built-in `hud.deskhud.demo` contributes clock and tip demo HUD items
 
 ### Internationalization
 
@@ -134,8 +135,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud
 
 # 4. Tag, push, and attach binaries on a GitHub Release
-git tag -a v0.6.11 -m "DeskHud 0.6.11"
-git push origin v0.6.11
+git tag -a v0.6.14 -m "DeskHud 0.6.14"
+git push origin v0.6.14
 ```
 
 CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs cross-platform `check` / tests only; it does **not** publish installers yet.

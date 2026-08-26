@@ -1,7 +1,7 @@
 //! Pet 菜单窗口与通用菜单控制器之间的适配层。
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use deskhud_ui::UiTheme;
+use deskhud_ui::UiPreferences;
 use winit::{
     dpi::PhysicalPosition,
     event::WindowEvent,
@@ -69,11 +69,12 @@ impl PetMenu {
     pub(crate) fn open(
         &mut self,
         anchor: PhysicalPosition<i32>,
+        prefs: &UiPreferences,
         pet_layer: WindowLayer,
         hud_layer: WindowLayer,
         hud_open: bool,
     ) {
-        let menu_definition = definition(pet_layer, hud_layer, hud_open);
+        let menu_definition = definition(prefs.locale, pet_layer, hud_layer, hud_open);
         self.controller.open(anchor, &menu_definition);
     }
 
@@ -93,10 +94,10 @@ impl PetMenu {
         pet_layer: WindowLayer,
         hud_layer: WindowLayer,
         hud_open: bool,
-        theme: UiTheme,
+        prefs: &UiPreferences,
     ) -> (Option<PetMenuAction>, bool) {
-        let menu_definition = definition(pet_layer, hud_layer, hud_open);
-        let (selected_item, should_close) = self.controller.render(&menu_definition, theme);
+        let menu_definition = definition(prefs.locale, pet_layer, hud_layer, hud_open);
+        let (selected_item, should_close) = self.controller.render(&menu_definition, prefs);
         let action = selected_item.as_deref().and_then(parse_action);
         (action, should_close)
     }

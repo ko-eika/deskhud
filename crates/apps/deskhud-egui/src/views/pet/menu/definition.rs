@@ -4,6 +4,7 @@ use crate::{
     menu::{MenuDefinition, MenuItem},
     runtime::viewport::WindowLayer,
 };
+use deskhud_ui::{CatalogStore, Locale, MessageKey};
 
 const TOGGLE_ALWAYS_ON_TOP: &str = "pet.toggle_always_on_top";
 const OPEN_SETTINGS: &str = "pet.open_settings";
@@ -13,9 +14,6 @@ const HUD_LAYER: &str = "pet.hud_layer";
 const HUD_LAYER_TOP: &str = "pet.hud_layer.top";
 const HUD_LAYER_NORMAL: &str = "pet.hud_layer.normal";
 const HUD_LAYER_BOTTOM: &str = "pet.hud_layer.bottom";
-const HUD_LAYER_MORE: &str = "pet.hud_layer.more";
-const HUD_LAYER_DETAILS: &str = "pet.hud_layer.details";
-const HUD_LAYER_INFO: &str = "pet.hud_layer.info";
 const EXIT_APPLICATION: &str = "pet.exit_application";
 
 /// Pet 菜单返回给窗口协调层的业务动作。
@@ -36,48 +34,59 @@ pub(crate) enum Action {
 
 /// 根据当前 Pet/HUD 状态创建菜单定义。
 pub(crate) fn definition(
+    locale: Locale,
     pet_layer: WindowLayer,
     hud_layer: WindowLayer,
     hud_open: bool,
 ) -> MenuDefinition {
     MenuDefinition::new(vec![
+        MenuItem::new(
+            OPEN_SETTINGS,
+            CatalogStore::t_shell(locale, MessageKey::MenuSettings),
+        ),
         MenuItem::checkable(
             TOGGLE_ALWAYS_ON_TOP,
-            "Toggle always on top",
+            CatalogStore::t_shell(locale, MessageKey::SettingsTopmost),
             pet_layer == WindowLayer::AlwaysOnTop,
         ),
-        MenuItem::new(OPEN_SETTINGS, "Open settings"),
-        MenuItem::checkable(OPEN_HUD, "HUD", hud_open).with_separator_before(),
-        MenuItem::new(HUD_LAYER, "HUD layer")
-            .with_enabled(hud_open)
-            .with_submenu(MenuDefinition::new(vec![
-                MenuItem::checkable(
-                    HUD_LAYER_TOP,
-                    "Always on top",
-                    hud_layer == WindowLayer::AlwaysOnTop,
-                ),
-                MenuItem::checkable(HUD_LAYER_NORMAL, "Normal", hud_layer == WindowLayer::Normal),
-                MenuItem::checkable(
-                    HUD_LAYER_BOTTOM,
-                    "Always on bottom",
-                    hud_layer == WindowLayer::AlwaysOnBottom,
-                ),
-            ])),
-        MenuItem::new(HUD_LAYOUT, "HUD layout").with_enabled(hud_open),
-        MenuItem::new(HUD_LAYER_MORE, "More options")
-            .with_separator_before()
-            .with_submenu(MenuDefinition::new(vec![
-                MenuItem::new(HUD_LAYER_DETAILS, "Display details").with_submenu(
-                    MenuDefinition::new(vec![MenuItem::new(HUD_LAYER_INFO, "Window info")]),
-                ),
-                MenuItem::new("pet.debug.monitor", "Monitor information").with_enabled(false),
-                MenuItem::new("pet.debug.position", "Window position").with_enabled(false),
-                MenuItem::new("pet.debug.size", "Window size").with_enabled(false),
-                MenuItem::new("pet.debug.renderer", "Renderer status").with_enabled(false),
-                MenuItem::new("pet.debug.input", "Input state").with_enabled(false),
-                MenuItem::new("pet.debug.layout", "Layout diagnostics").with_enabled(false),
-            ])),
-        MenuItem::new(EXIT_APPLICATION, "Close application").with_separator_before(),
+        MenuItem::checkable(
+            OPEN_HUD,
+            CatalogStore::t_shell(locale, MessageKey::SettingsNavHud),
+            hud_open,
+        )
+        .with_separator_before(),
+        MenuItem::new(
+            HUD_LAYER,
+            CatalogStore::t_shell(locale, MessageKey::MenuPluginLayer),
+        )
+        .with_enabled(hud_open)
+        .with_submenu(MenuDefinition::new(vec![
+            MenuItem::checkable(
+                HUD_LAYER_TOP,
+                CatalogStore::t_shell(locale, MessageKey::MenuLayerTop),
+                hud_layer == WindowLayer::AlwaysOnTop,
+            ),
+            MenuItem::checkable(
+                HUD_LAYER_NORMAL,
+                CatalogStore::t_shell(locale, MessageKey::MenuLayerNormal),
+                hud_layer == WindowLayer::Normal,
+            ),
+            MenuItem::checkable(
+                HUD_LAYER_BOTTOM,
+                CatalogStore::t_shell(locale, MessageKey::MenuLayerBottom),
+                hud_layer == WindowLayer::AlwaysOnBottom,
+            ),
+        ])),
+        MenuItem::new(
+            HUD_LAYOUT,
+            CatalogStore::t_shell(locale, MessageKey::MenuHudLayout),
+        )
+        .with_enabled(hud_open),
+        MenuItem::new(
+            EXIT_APPLICATION,
+            CatalogStore::t_shell(locale, MessageKey::MenuQuit),
+        )
+        .with_separator_before(),
     ])
 }
 
@@ -93,5 +102,58 @@ pub(crate) fn parse_action(id: &str) -> Option<Action> {
         HUD_LAYER_BOTTOM => Some(Action::SetHudLayer(WindowLayer::AlwaysOnBottom)),
         EXIT_APPLICATION => Some(Action::ExitApplication),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn localized_menu_keeps_product_order_and_states() {
+        let menu = definition(
+            Locale::ZhCn,
+            WindowLayer::AlwaysOnTop,
+            WindowLayer::Normal,
+            false,
+        );
+        let labels = menu.items.iter().map(|item| item.label).collect::<Vec<_>>();
+        assert_eq!(
+            labels,
+            ["设置", "置顶", "插件", "插件层级", "插件布局", "退出"]
+        );
+        assert!(menu.items[1].checked);
+        assert!(!menu.items[2].checked);
+        assert!(menu.items[2].separator_before);
+        assert!(!menu.items[3].enabled);
+        assert!(!menu.items[4].enabled);
+        assert!(menu.items[5].separator_before);
+
+        let layer_items = &menu.items[3]
+            .submenu
+            .as_ref()
+            .expect("plugin layer submenu")
+            .items;
+        assert_eq!(
+            layer_items
+                .iter()
+                .map(|item| item.label)
+                .collect::<Vec<_>>(),
+            ["置顶", "正常", "置底"]
+        );
+        assert!(layer_items[1].checked);
+    }
+
+    #[test]
+    fn english_menu_uses_shell_catalog() {
+        let menu = definition(
+            Locale::En,
+            WindowLayer::Normal,
+            WindowLayer::AlwaysOnTop,
+            true,
+        );
+        assert_eq!(menu.items[0].label, "Settings");
+        assert_eq!(menu.items[3].label, "Plugin layer");
+        assert_eq!(menu.items[5].label, "Quit");
     }
 }

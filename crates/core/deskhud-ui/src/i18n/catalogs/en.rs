@@ -69,6 +69,10 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::HudLayoutResetSize => "Reset size",
         MessageKey::HudLayoutResetSizeHint => "Restore the default 1× size",
         MessageKey::MenuHudLayout => "Plugin layout",
+        MessageKey::MenuPluginLayer => "Plugin layer",
+        MessageKey::MenuLayerTop => "Always on top",
+        MessageKey::MenuLayerNormal => "Normal",
+        MessageKey::MenuLayerBottom => "Always on bottom",
         MessageKey::SettingsTopmost => "Keep on top",
         MessageKey::SettingsTopmostHint => {
             "Keep only the pet and HUD on top; Settings remains a normal window."

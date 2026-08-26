@@ -26,6 +26,8 @@ pub(crate) struct ViewportConfig {
     pub visible: bool,
     /// 是否创建时置顶。
     pub always_on_top: bool,
+    /// 是否在创建视口时立即配置字体；隐藏的大视口可延迟到首次绘制。
+    pub configure_fonts: bool,
     /// Windows 无边框窗口是否保留系统阴影。
     pub undecorated_shadow: bool,
     pub x11_popup: bool,
@@ -46,6 +48,7 @@ impl ViewportConfig {
             skip_taskbar: true,
             visible: false,
             always_on_top: true,
+            configure_fonts: false,
             undecorated_shadow: false,
             x11_popup: false,
         }
@@ -65,6 +68,7 @@ impl ViewportConfig {
             skip_taskbar: true,
             visible: false,
             always_on_top: true,
+            configure_fonts: false,
             undecorated_shadow: false,
             x11_popup: false,
         }
@@ -84,6 +88,7 @@ impl ViewportConfig {
             skip_taskbar: false,
             visible: false,
             always_on_top: false,
+            configure_fonts: false,
             undecorated_shadow: false,
             x11_popup: false,
         }

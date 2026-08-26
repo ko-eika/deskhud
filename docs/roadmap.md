@@ -1,4 +1,4 @@
-# DeskHud 0.6.x 路线图（当前版本 0.6.13）
+# DeskHud 0.6.x 路线图（当前版本 0.6.14）
 
 当前产品状态：引擎约定与迁移底座已建立；Windows 原生窗口迁移已在实机验证主要功能，仍有 HUD 生命周期、重绘、穿透和功能补齐事项。平台计划详见 [`docs/agent/roadmap/README.md`](agent/roadmap/README.md)。
 
@@ -15,7 +15,7 @@
 - [~] 引擎化 / 版本契约 / 内置 crate 化 / HUD 全屏布局（0.3）
 - 扩展 `PetKind`：更多 `PetEvent` / 中性 `PetFrame`
 - [x] HUD 全屏 overlay + 布局 prefs + Windows 主屏原生布局编辑器（运行态帧合成见 Phase 4）
-- 扩展 `Plugin`：`HudFrame` 真实帧数据
+- [x] 扩展 `Plugin`：`HudFrame` 真实帧数据并接入运行态筛选与绘制
 
 ## Phase 1b — 跨平台 MVP（与 Phase 1 并行，基础完成）
 
@@ -44,7 +44,7 @@
 
 - [x] prefs 持久化
 - 更多内置宠
-- [~] HUD 真实帧数据与每屏原生合成：Windows 已验证可渲染并随插件更新；布局模式生命周期、退出重绘、鼠标穿透和功能补齐待完成；其它平台按各自 native 计划推进
+- [~] HUD 真实帧数据与每屏原生合成：egui 运行态已扫描 registry contribution、按三级开关绘制实际 `HudFrame`；Windows 原生合成、布局模式生命周期、退出重绘、鼠标穿透和多屏补齐仍继续推进
 - [~] 主屏 HUD 布局编辑：基本功能可用；退出后的 HUD 刷新、选中 HUD 重置大小待完善
 - [ ] HUD 运行态布局与可读性打磨
 - [~] macOS 菜单迁移：代码已接入，功能待验收；宠物、气泡、HUD 和布局窗口原生迁移尚未开始（见 `docs/agent/roadmap/02-macos-native.md`）

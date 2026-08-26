@@ -1,6 +1,6 @@
 //! 应用层字体适配：扫描结果由 `deskhud-ui` 提供，应用只负责缓存。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use deskhud_ui::font::FontFamilyEntry;
@@ -14,9 +14,17 @@ struct FontCache {
 }
 
 static FONT_CACHE: OnceLock<FontCache> = OnceLock::new();
-static FONT_DATA_CACHE: OnceLock<Mutex<HashMap<String, Arc<egui::FontData>>>> = OnceLock::new();
+static FONT_DATA_CACHE: OnceLock<Mutex<FontDataCache>> = OnceLock::new();
 static FONT_LOCALE_CACHE: OnceLock<Mutex<HashMap<String, Arc<[FontFamilyEntry]>>>> =
     OnceLock::new();
+
+const MAX_CACHED_FONT_FILES: usize = 2;
+
+#[derive(Default)]
+struct FontDataCache {
+    entries: HashMap<String, Arc<egui::FontData>>,
+    order: VecDeque<String>,
+}
 
 fn cache() -> &'static FontCache {
     FONT_CACHE.get_or_init(|| {
@@ -113,18 +121,14 @@ pub(crate) fn default_font_selection() -> Option<&'static deskhud_ui::FontSelect
 pub(crate) fn configure_context(context: &egui::Context) {
     let mut definitions = egui::FontDefinitions::default();
     let key = "deskhud_primary_font".to_owned();
-    let Some(data) = selected_font_data().or_else(|| {
-        deskhud_ui::font::builtin_font_data("Inter#face=0").map(|(bytes, index)| {
-            let mut data = egui::FontData::from_static(bytes);
-            data.index = index;
-            data
-        })
-    }) else {
+    let selected_id = default_font_selection()
+        .map(|selection| selection.font_id.as_str())
+        .unwrap_or(DEFAULT_UI_FONT_ID);
+    let Some(data) = cached_font_data(selected_id).or_else(|| cached_font_data(DEFAULT_UI_FONT_ID))
+    else {
         return;
     };
-    definitions
-        .font_data
-        .insert(key.clone(), std::sync::Arc::new(data));
+    definitions.font_data.insert(key.clone(), data);
     for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
         definitions
             .families
@@ -155,8 +159,14 @@ pub(crate) fn configure_context_for(context: &egui::Context, font_id: &str, size
     context.set_fonts(definitions);
     for theme in [egui::Theme::Dark, egui::Theme::Light] {
         context.style_mut_of(theme, |style| {
+            let current_body_size = style
+                .text_styles
+                .get(&egui::TextStyle::Body)
+                .map_or(14.0, |font_id| font_id.size)
+                .max(1.0);
+            let scale = size.clamp(10.0, 28.0) / current_body_size;
             for font_id in style.text_styles.values_mut() {
-                font_id.size = size.clamp(10.0, 28.0);
+                font_id.size = (font_id.size * scale).clamp(8.0, 48.0);
             }
         });
     }
@@ -200,15 +210,26 @@ fn add_ui_fallback_font(definitions: &mut egui::FontDefinitions, selected_id: &s
 }
 
 fn cached_font_data(font_id: &str) -> Option<Arc<egui::FontData>> {
-    let cache = FONT_DATA_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let cache = FONT_DATA_CACHE.get_or_init(|| Mutex::new(FontDataCache::default()));
     if let Ok(entries) = cache.lock() {
-        if let Some(data) = entries.get(font_id) {
+        if let Some(data) = entries.entries.get(font_id) {
             return Some(data.clone());
         }
     }
     let data = Arc::new(font_data_for(font_id)?);
     if let Ok(mut entries) = cache.lock() {
-        entries.insert(font_id.to_owned(), data.clone());
+        if let Some(existing) = entries.entries.get(font_id) {
+            return Some(existing.clone());
+        }
+        let font_id = font_id.to_owned();
+        entries.entries.insert(font_id.clone(), data.clone());
+        entries.order.push_back(font_id);
+        while entries.entries.len() > MAX_CACHED_FONT_FILES {
+            let Some(oldest) = entries.order.pop_front() else {
+                break;
+            };
+            entries.entries.remove(&oldest);
+        }
     }
     Some(data)
 }
@@ -222,25 +243,6 @@ fn font_data_for(font_id: &str) -> Option<egui::FontData> {
     let (path, index) = font_id
         .split_once("#face=")
         .map_or((font_id, 0), |(path, index)| {
-            (path, index.parse().unwrap_or(0))
-        });
-    let mut data = egui::FontData::from_owned(std::fs::read(path).ok()?);
-    data.index = index;
-    Some(data)
-}
-
-fn selected_font_data() -> Option<egui::FontData> {
-    let selection = default_font_selection()?;
-    if selection.builtin {
-        let (bytes, index) = deskhud_ui::font::builtin_font_data(&selection.font_id)?;
-        let mut data = egui::FontData::from_static(bytes);
-        data.index = index;
-        return Some(data);
-    }
-    let (path, index) = selection
-        .font_id
-        .split_once("#face=")
-        .map_or((selection.font_id.as_str(), 0), |(path, index)| {
             (path, index.parse().unwrap_or(0))
         });
     let mut data = egui::FontData::from_owned(std::fs::read(path).ok()?);

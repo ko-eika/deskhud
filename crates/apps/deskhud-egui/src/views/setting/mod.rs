@@ -19,25 +19,11 @@ pub(crate) fn run(
     raw_input: RawInput,
     registry: &Arc<EngineRegistry>,
     model: &mut SettingsModel,
-    font_signature: &mut Option<(String, u32)>,
 ) -> ViewOutput {
     let mut should_close = false;
     let mut applied_preferences = None;
     let full_output = context.run_ui(raw_input, |ctx| {
         ctx.request_repaint_after(Duration::from_millis(100));
-        crate::views::theme::apply(ctx.ctx(), model.draft.shell.ui_theme);
-        let signature = (
-            model.draft.shell.ui_font_id.clone(),
-            model.draft.shell.ui_font_size.to_bits(),
-        );
-        if font_signature.as_ref() != Some(&signature) {
-            crate::fonts::configure_context_for(
-                ctx.ctx(),
-                &signature.0,
-                model.draft.shell.ui_font_size,
-            );
-            *font_signature = Some(signature);
-        }
         let result = drawing::draw(ctx, registry, model);
         should_close = result.0;
         applied_preferences = result.1;

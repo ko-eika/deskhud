@@ -1,6 +1,9 @@
 //! HUD 原生窗口生命周期。
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
+use deskhud_engine::EngineRegistry;
+use deskhud_ui::UiPreferences;
+use std::{sync::Arc, time::Instant};
 use winit::{
     dpi::PhysicalSize,
     event::WindowEvent,
@@ -16,7 +19,7 @@ use crate::runtime::{
 use crate::area::{self, ActivityArea};
 use crate::views as view;
 
-use super::LayoutState;
+use super::{HudRenderItem, LayoutState, active_hud_frames};
 
 pub(crate) struct HudWindow {
     /// HUD 对应的通用视口运行时。
@@ -27,11 +30,21 @@ pub(crate) struct HudWindow {
     activity_area: Option<ActivityArea>,
     /// 布局模式期间暂存的用户选择层级；布局模式本身临时强制置顶。
     layout_restore_layer: Option<WindowLayer>,
+    /// 所有窗口共享的已应用外观与语言偏好。
+    prefs: UiPreferences,
+    /// 提供实际插件 HUD contribution 和逐帧内容。
+    registry: Arc<EngineRegistry>,
+    started: Instant,
 }
 
 impl HudWindow {
     /// 创建 HUD 窗口，并缓存其初始活动区域。
-    pub(crate) fn create(event_loop: &ActiveEventLoop, proxy: &EventLoopProxy<UserEvent>) -> Self {
+    pub(crate) fn create(
+        event_loop: &ActiveEventLoop,
+        proxy: &EventLoopProxy<UserEvent>,
+        registry: Arc<EngineRegistry>,
+        prefs: UiPreferences,
+    ) -> Self {
         let viewport = Viewport::new(event_loop, ViewportConfig::hud(), proxy);
         let activity_area = area::get(viewport.window());
         let mut hud = Self {
@@ -39,6 +52,9 @@ impl HudWindow {
             layout: LayoutState::default(),
             activity_area,
             layout_restore_layer: None,
+            prefs,
+            registry,
+            started: Instant::now(),
         };
         // HUD 普通显示时只提供视觉叠加，不应拦截下面应用的鼠标输入。
         hud.viewport.set_cursor_hittest(false);
@@ -56,6 +72,7 @@ impl HudWindow {
         self.layout.compact_pending = false;
         self.viewport.set_visible(false);
         self.viewport.set_cursor_hittest(false);
+        self.viewport.request_surface_compaction();
     }
 
     pub(crate) fn is_visible(&self) -> bool {
@@ -125,7 +142,7 @@ impl HudWindow {
                 (previous_position.x - activity.position.x) as f32 / scale,
                 (previous_position.y - activity.position.y) as f32 / scale,
             );
-            for position in &mut self.layout.positions {
+            for position in self.layout.positions.values_mut() {
                 *position += delta;
             }
         }
@@ -152,9 +169,53 @@ impl HudWindow {
     }
 
     pub(crate) fn should_close(&mut self) -> bool {
+        self.viewport.apply_ui_preferences(&self.prefs);
+        let items = self.render_items();
         self.viewport
-            .render(|context, raw_input| view::hud::run(context, raw_input, &mut self.layout))
+            .render(|context, raw_input| {
+                view::hud::run(context, raw_input, &mut self.layout, &items)
+            })
             .should_close
+    }
+
+    pub(crate) fn apply_preferences(&mut self, prefs: UiPreferences) {
+        self.prefs = prefs;
+        self.layout.positions.clear();
+    }
+
+    fn render_items(&self) -> Vec<HudRenderItem> {
+        let elapsed = self.started.elapsed().as_secs_f32();
+        let window_position = self.viewport.window().outer_position().unwrap_or_default();
+        let scale_factor = self.viewport.window().scale_factor() as f32;
+        let activity = self.activity_area.unwrap_or(ActivityArea {
+            position: window_position,
+            size: self.viewport.window().inner_size(),
+        });
+        active_hud_frames(&self.registry, &self.prefs, elapsed)
+            .into_iter()
+            .filter_map(|item| {
+                if item.layout.display != "primary" {
+                    return None;
+                }
+                let target_x =
+                    activity.position.x as f32 + item.layout.x * activity.size.width as f32;
+                let target_y =
+                    activity.position.y as f32 + item.layout.y * activity.size.height as f32;
+                Some(HudRenderItem {
+                    key: format!("{}/{}", item.plugin_id, item.contribution_id),
+                    frame: item.frame,
+                    initial_position: egui::pos2(
+                        (target_x - window_position.x as f32) / scale_factor,
+                        (target_y - window_position.y as f32) / scale_factor,
+                    ),
+                    scale: item.layout.scale,
+                })
+            })
+            .collect()
+    }
+
+    pub(crate) fn maintain_surface(&mut self) {
+        self.viewport.maintain_surface();
     }
 
     pub(crate) fn destroy(&mut self) {

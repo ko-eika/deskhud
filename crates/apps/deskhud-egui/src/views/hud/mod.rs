@@ -5,16 +5,18 @@ mod window;
 
 pub(crate) use window::HudWindow;
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
+use deskhud_engine::{EngineRegistry, HudFrame};
+use deskhud_ui::{HudSlotLayout, UiPreferences};
 use egui::{Context, RawInput};
 
 use crate::views::ViewOutput;
 
 /// HUD 内部子窗口的布局状态。
 pub(crate) struct LayoutState {
-    /// 两个 HUD 子面板的逻辑坐标。
-    pub(crate) positions: [egui::Pos2; 2],
+    /// 按 `plugin_id/contribution_id` 保留的 HUD 条目逻辑坐标。
+    pub(crate) positions: HashMap<String, egui::Pos2>,
     /// 是否处于可拖动布局模式。
     pub(crate) layout_mode: bool,
     /// 当前显示器活动区域的逻辑尺寸。
@@ -26,7 +28,7 @@ pub(crate) struct LayoutState {
 impl Default for LayoutState {
     fn default() -> Self {
         Self {
-            positions: [egui::pos2(24.0, 24.0), egui::pos2(180.0, 76.0)],
+            positions: HashMap::new(),
             layout_mode: false,
             activity_size: None,
             compact_pending: false,
@@ -34,8 +36,55 @@ impl Default for LayoutState {
     }
 }
 
+/// 已通过全局、插件和条目开关筛选的一条真实 HUD 帧。
+pub(crate) struct HudRenderItem {
+    pub(crate) key: String,
+    pub(crate) frame: HudFrame,
+    pub(crate) initial_position: egui::Pos2,
+    pub(crate) scale: f32,
+}
+
+struct ActiveHudFrame {
+    plugin_id: &'static str,
+    contribution_id: &'static str,
+    frame: HudFrame,
+    layout: HudSlotLayout,
+}
+
+fn active_hud_frames(
+    registry: &EngineRegistry,
+    prefs: &UiPreferences,
+    elapsed_secs: f32,
+) -> Vec<ActiveHudFrame> {
+    registry
+        .all_hud_contributions()
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, (plugin_id, contribution))| {
+            if !prefs
+                .hud
+                .is_active(plugin_id, contribution.id, contribution.default_enabled)
+            {
+                return None;
+            }
+            let frame = registry.hud_frame(plugin_id, contribution.id, elapsed_secs);
+            (!frame.is_empty()).then(|| ActiveHudFrame {
+                plugin_id,
+                contribution_id: contribution.id,
+                frame,
+                layout: prefs.hud.slot_layout(plugin_id, contribution.id, index),
+            })
+        })
+        .collect()
+}
+
 /// 构建透明、无边框并带有动态虚线边框的 HUD 视图。
-pub(crate) fn run(context: &Context, raw_input: RawInput, layout: &mut LayoutState) -> ViewOutput {
+pub(crate) fn run(
+    context: &Context,
+    raw_input: RawInput,
+    layout: &mut LayoutState,
+    items: &[HudRenderItem],
+) -> ViewOutput {
     let mut content_size = [320.0, 180.0];
     let mut move_by = None;
     let full_output = context.run_ui(raw_input, |ctx| {
@@ -44,7 +93,7 @@ pub(crate) fn run(context: &Context, raw_input: RawInput, layout: &mut LayoutSta
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::TRANSPARENT))
             .show(ctx, |ui| {
-                let result = drawing::draw(ui, time, layout);
+                let result = drawing::draw(ui, time, layout, items);
                 content_size = result.size;
                 move_by = result.move_by;
             });
@@ -55,5 +104,29 @@ pub(crate) fn run(context: &Context, raw_input: RawInput, layout: &mut LayoutSta
         resize_to: Some(content_size),
         move_by,
         ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::active_hud_frames;
+    use deskhud_engine::HudVisual;
+
+    #[test]
+    fn registry_contributions_follow_all_three_enable_levels() {
+        let bootstrap = deskhud_runtime::bootstrap_registry();
+        let mut prefs = deskhud_ui::UiPreferences::default();
+        let initial = active_hud_frames(&bootstrap.registry, &prefs, 1.0);
+        assert_eq!(initial.len(), 1);
+        assert_eq!(initial[0].contribution_id, "clock");
+        assert!(initial[0].frame.visuals.iter().any(|visual| {
+            matches!(visual, HudVisual::Text { text, .. } if text.starts_with("DeskHud"))
+        }));
+
+        prefs.hud.set_enabled("hud.deskhud.demo", "tip", true);
+        assert_eq!(active_hud_frames(&bootstrap.registry, &prefs, 1.0).len(), 2);
+
+        prefs.hud.set_plugin_enabled("hud.deskhud.demo", false);
+        assert!(active_hud_frames(&bootstrap.registry, &prefs, 1.0).is_empty());
     }
 }
