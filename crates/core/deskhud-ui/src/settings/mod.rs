@@ -233,7 +233,7 @@ impl SettingsModel {
     }
 }
 
-/// Compares preference values while ignoring settings-window geometry.
+/// Compares editable preference values while ignoring the window geometry preset.
 pub fn draft_is_dirty(draft: &UiPreferences, baseline: &UiPreferences) -> bool {
     let mut draft = draft.clone();
     let mut baseline = baseline.clone();

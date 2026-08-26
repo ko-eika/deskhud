@@ -85,9 +85,14 @@ impl SettingsWindow {
         self.viewport.handle_event(event);
     }
 
-    pub(crate) fn preferences(&mut self) -> &UiPreferences {
+    pub(crate) fn geometry(&mut self) -> [Option<f32>; 4] {
         self.sync_geometry();
-        &self.model.draft
+        [
+            self.model.draft.shell.settings_width,
+            self.model.draft.shell.settings_height,
+            self.model.draft.shell.settings_pos_x,
+            self.model.draft.shell.settings_pos_y,
+        ]
     }
 
     pub(crate) fn preferences_mut(&mut self) -> &mut UiPreferences {
@@ -96,6 +101,8 @@ impl SettingsWindow {
 
     /// 绘制一帧并返回 UI 是否请求关闭。
     pub(crate) fn render(&mut self) -> (bool, Option<UiPreferences>) {
+        // Capture native changes before the Apply command snapshots the draft.
+        self.sync_geometry();
         self.viewport.apply_ui_preferences(&self.model.draft);
         self.viewport
             .set_titlebar_theme(self.model.draft.shell.ui_theme);

@@ -150,10 +150,14 @@ impl WindowManager {
 
     fn hide_settings(&mut self) {
         if let Some(settings) = self.settings.as_mut() {
-            // 几何信息由设置窗口在读取 prefs 前同步回草稿。
-            self.prefs = settings.preferences().clone();
+            // Closing discards the draft; only the native window preset is kept.
+            let geometry = settings.geometry();
+            self.prefs.shell.settings_width = geometry[0];
+            self.prefs.shell.settings_height = geometry[1];
+            self.prefs.shell.settings_pos_x = geometry[2];
+            self.prefs.shell.settings_pos_y = geometry[3];
+            self.save_geometry();
         }
-        self.commit_preferences(self.prefs.clone());
         if let Some(settings) = self.settings.as_mut() {
             settings.hide();
         }
@@ -201,6 +205,12 @@ impl WindowManager {
         }
         if let Some(hud) = self.hud.as_mut() {
             hud.apply_preferences(self.prefs.clone());
+        }
+    }
+
+    fn save_geometry(&self) {
+        if let Err(error) = save_ordered(&self.prefs, &PrefsWriteOrder::default()) {
+            tracing::warn!(%error, "save settings window geometry failed");
         }
     }
 
@@ -350,6 +360,16 @@ impl WindowManager {
                     .as_mut()
                     .expect("settings viewport disappeared")
                     .handle_event(&event);
+            }
+        }
+        if !hud && matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+            if let Some(settings) = self.settings.as_mut() {
+                let geometry = settings.geometry();
+                self.prefs.shell.settings_width = geometry[0];
+                self.prefs.shell.settings_height = geometry[1];
+                self.prefs.shell.settings_pos_x = geometry[2];
+                self.prefs.shell.settings_pos_y = geometry[3];
+                self.save_geometry();
             }
         }
     }

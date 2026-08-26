@@ -45,7 +45,7 @@ pub(super) fn draw(
                 if footer_button(
                     ui,
                     text(model, MessageKey::ActionApply),
-                    true,
+                    model.is_dirty(),
                     ui.visuals().selection.bg_fill,
                     ui.visuals().selection.bg_fill.gamma_multiply(1.16),
                 )
@@ -754,38 +754,13 @@ fn footer_button(
     label: &str,
     enabled: bool,
     fill: Color32,
-    hover_fill: Color32,
+    _hover_fill: Color32,
 ) -> egui::Response {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(88.0, 32.0), Sense::hover());
-    let response = ui.interact(
-        rect,
-        ui.id().with(("footer-button", label)),
-        if enabled {
-            Sense::click()
-        } else {
-            Sense::hover()
-        },
-    );
-    let fill = if !enabled {
-        ui.visuals().disable(fill)
-    } else if response.hovered() {
-        components::lerp_color(fill, hover_fill, 0.70)
-    } else {
-        fill
-    };
-    ui.painter().rect_filled(rect, CornerRadius::same(8), fill);
-    ui.painter().text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
-        label,
-        egui::FontId::proportional(14.0),
-        if enabled {
-            ui.visuals().text_color()
-        } else {
-            ui.visuals().weak_text_color()
-        },
-    );
-    response
+    let button = egui::Button::new(RichText::new(label).size(14.0))
+        .min_size(Vec2::new(88.0, 32.0))
+        .fill(fill)
+        .corner_radius(CornerRadius::same(8));
+    ui.add_enabled(enabled, button)
 }
 
 fn text(model: &SettingsModel, key: MessageKey) -> &'static str {
