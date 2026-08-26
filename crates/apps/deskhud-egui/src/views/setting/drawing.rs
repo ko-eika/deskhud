@@ -5,18 +5,19 @@ use std::sync::Arc;
 use crate::components;
 use deskhud_engine::EngineRegistry;
 use deskhud_ui::{
-    AnimationQuality, FpsLimit, Locale, MessageKey, PowerMode, SettingsCommand, SettingsModel,
-    SettingsTab, UiPreferences, UiTheme,
+    AnimationQuality, CatalogStore, FpsLimit, Locale, MessageKey, PowerMode, SettingsCommand,
+    SettingsModel, SettingsTab, UiPreferences, UiTheme,
 };
 use egui::{
     Align, CentralPanel, Color32, CornerRadius, Frame, Layout, Margin, Panel, Pos2, RichText,
-    ScrollArea, Sense, Stroke, Ui, Vec2,
+    ScrollArea, Sense, Stroke, TextureOptions, Ui, Vec2,
 };
 
 /// 绘制设置窗口，返回是否请求关闭窗口。
 pub(super) fn draw(
     ui: &mut Ui,
     registry: &Arc<EngineRegistry>,
+    catalogs: &CatalogStore,
     model: &mut SettingsModel,
 ) -> (bool, Option<UiPreferences>) {
     let mut applied_preferences = None;
@@ -80,6 +81,7 @@ pub(super) fn draw(
                 .show(ui, |ui| match model.tab {
                     SettingsTab::General => draw_general(ui, model),
                     SettingsTab::Performance => draw_performance(ui, model),
+                    SettingsTab::Pet => draw_pet(ui, registry, catalogs, model),
                     SettingsTab::Hud => draw_hud(ui, registry, model),
                     _ => draw_placeholder(ui, model),
                 });
@@ -426,6 +428,694 @@ fn draw_performance(ui: &mut egui::Ui, model: &mut SettingsModel) {
         },
         None,
     );
+}
+
+fn draw_pet(
+    ui: &mut Ui,
+    registry: &Arc<EngineRegistry>,
+    catalogs: &CatalogStore,
+    model: &mut SettingsModel,
+) {
+    ui.heading(RichText::new(text(model, MessageKey::SettingsNavPet)).size(24.0));
+    // Match the standard settings page title → description rhythm.
+    ui.add_space(8.0);
+    ui.label(
+        RichText::new(text(model, MessageKey::SettingsPetIntro))
+            .color(ui.visuals().weak_text_color()),
+    );
+    ui.add_space(14.0);
+
+    let infos = registry.pet_infos();
+    let mode = model.draft.pet.picker_mode;
+    components::section_card(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(text(model, MessageKey::SettingsPetList)).strong());
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                draw_pet_view_modes(ui, model)
+            });
+        });
+        ui.add_space(8.0);
+        ui.separator();
+        ui.add_space(12.0);
+        match mode {
+            deskhud_ui::PetPickerMode::Grid => {
+                let card_layout = deskhud_ui::pet_card_layout(ui.available_width());
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
+                    for info in &infos {
+                        draw_pet_grid_card(ui, catalogs, model, info, card_layout);
+                    }
+                });
+            }
+            deskhud_ui::PetPickerMode::List => {
+                for info in &infos {
+                    draw_pet_list_row(ui, catalogs, model, info);
+                    ui.add_space(8.0);
+                }
+            }
+        }
+    });
+    ui.add_space(16.0);
+
+    let active_id = model.draft.pet.kind.clone();
+    let Some(pet) = registry
+        .pets()
+        .into_iter()
+        .find(|pet| pet.info().id == active_id)
+    else {
+        draw_placeholder(ui, model);
+        return;
+    };
+    let options = pet.config_options();
+    if options.is_empty() {
+        ui.label(text(model, MessageKey::SettingsPetIntro));
+        return;
+    }
+
+    components::config_card(
+        ui,
+        Some(
+            RichText::new(text(model, MessageKey::SettingsPetConfig))
+                .strong()
+                .into(),
+        ),
+        |ui| {
+            for (index, option) in options.iter().enumerate() {
+                if index > 0 {
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+                }
+                let mut enabled =
+                    model
+                        .draft
+                        .pet
+                        .get_option(&active_id, option.key, option.default);
+                let label = pet_catalog_text(
+                    catalogs,
+                    model.draft.locale,
+                    &active_id,
+                    &format!("{}.label", option.key),
+                    option.label,
+                );
+                let description = pet_catalog_text(
+                    catalogs,
+                    model.draft.locale,
+                    &active_id,
+                    &format!("{}.description", option.key),
+                    option.description,
+                );
+                let mut changed = false;
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(label).strong());
+                        ui.label(
+                            RichText::new(description)
+                                .small()
+                                .color(ui.visuals().weak_text_color()),
+                        );
+                    });
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let (rect, _) =
+                            ui.allocate_exact_size(Vec2::new(42.0, 24.0), Sense::hover());
+                        changed = components::toggle_switch(ui, rect, &mut enabled).changed();
+                    });
+                });
+                if changed {
+                    model.draft.pet.set_option(&active_id, option.key, enabled);
+                }
+            }
+        },
+        None,
+    );
+}
+
+fn draw_pet_view_modes(ui: &mut Ui, model: &mut SettingsModel) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(64.0, 28.0), Sense::hover());
+    ui.painter().rect(
+        rect,
+        8.0,
+        ui.visuals().extreme_bg_color,
+        Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color),
+        egui::StrokeKind::Inside,
+    );
+    let (left, right) = (
+        egui::Rect::from_min_max(rect.min, egui::pos2(rect.center().x, rect.max.y)),
+        egui::Rect::from_min_max(egui::pos2(rect.center().x, rect.min.y), rect.max),
+    );
+    let l = ui.interact(left, ui.id().with("pet-grid"), Sense::click());
+    let r = ui.interact(right, ui.id().with("pet-list"), Sense::click());
+    let active = if model.draft.pet.picker_mode == deskhud_ui::PetPickerMode::Grid {
+        left
+    } else {
+        right
+    };
+    ui.painter().rect_filled(
+        active.shrink(1.0),
+        7.0,
+        ui.visuals().selection.bg_fill.gamma_multiply(0.18),
+    );
+    ui.painter().line_segment(
+        [
+            egui::pos2(rect.center().x, rect.top() + 5.0),
+            egui::pos2(rect.center().x, rect.bottom() - 5.0),
+        ],
+        Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color),
+    );
+    let color = ui.visuals().selection.stroke.color;
+    let icon_rect = |area: egui::Rect| {
+        let side = area.width().min(area.height()) - 12.0;
+        egui::Rect::from_center_size(area.center(), Vec2::splat(side.max(1.0)))
+    };
+    components::icons::paint(ui, "grid", icon_rect(left), color, false);
+    components::icons::paint(ui, "list", icon_rect(right), color, false);
+    if l.clicked() {
+        model.draft.pet.picker_mode = deskhud_ui::PetPickerMode::Grid;
+    }
+    if r.clicked() {
+        model.draft.pet.picker_mode = deskhud_ui::PetPickerMode::List;
+    }
+}
+
+#[allow(dead_code)] // Removed after the new grid/list renderers have passed visual QA.
+fn draw_pet_choice(
+    ui: &mut Ui,
+    model: &mut SettingsModel,
+    info: &deskhud_engine::PetKindInfo,
+    list: bool,
+) {
+    let selected = model.draft.pet.kind == info.id;
+    let body_size = ui
+        .style()
+        .text_styles
+        .get(&egui::TextStyle::Body)
+        .map(|font| font.size)
+        .unwrap_or(14.0);
+    let small_size = ui
+        .style()
+        .text_styles
+        .get(&egui::TextStyle::Small)
+        .map(|font| font.size)
+        .unwrap_or(body_size * 0.8);
+    let height = if list {
+        94.0
+    } else if ui.available_width() > 300.0 {
+        350.0
+    } else {
+        208.0
+    };
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::click());
+    let fill = if selected {
+        ui.visuals().selection.bg_fill.gamma_multiply(0.38)
+    } else if response.hovered() {
+        ui.visuals().widgets.hovered.bg_fill
+    } else {
+        ui.visuals().faint_bg_color
+    };
+    let stroke = if selected {
+        Stroke::new(2.0, ui.visuals().selection.stroke.color)
+    } else {
+        Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color)
+    };
+    ui.painter()
+        .rect(rect, 12.0, fill, stroke, egui::StrokeKind::Inside);
+    let preview = if list {
+        egui::Rect::from_min_size(rect.min + Vec2::splat(10.0), Vec2::splat(74.0))
+    } else {
+        egui::Rect::from_min_max(
+            rect.min + Vec2::splat(10.0),
+            egui::pos2(rect.max.x - 10.0, rect.min.y + rect.width() - 10.0),
+        )
+    };
+    ui.painter()
+        .rect_filled(preview, 8.0, ui.visuals().extreme_bg_color);
+    if let Some(bytes) = info.preview {
+        let cache_id = ui.make_persistent_id(("pet-preview", info.id));
+        let cached = ui
+            .ctx()
+            .data(|data| data.get_temp::<egui::TextureHandle>(cache_id));
+        let texture = cached.or_else(|| {
+            let image = crate::image_decode::decode(bytes, 768)?;
+            let texture = ui.ctx().load_texture(
+                format!("pet-preview-{}", info.id),
+                image,
+                TextureOptions::LINEAR,
+            );
+            ui.ctx()
+                .data_mut(|data| data.insert_temp(cache_id, texture.clone()));
+            Some(texture)
+        });
+        if let Some(texture) = texture {
+            let source = texture.size_vec2();
+            let scale = (preview.width() / source.x).min(preview.height() / source.y);
+            let fitted = egui::Rect::from_center_size(preview.center(), source * scale);
+            ui.painter().image(
+                texture.id(),
+                fitted,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+        }
+    }
+    let text_x = if list {
+        rect.left() + 96.0
+    } else {
+        rect.left() + 14.0
+    };
+    let title_y = if list {
+        rect.top() + 20.0
+    } else {
+        preview.bottom() + 22.0
+    };
+    ui.painter().text(
+        egui::pos2(text_x, title_y),
+        egui::Align2::LEFT_CENTER,
+        info.display_name,
+        egui::FontId::proportional(body_size),
+        ui.visuals().text_color(),
+    );
+    ui.painter().text(
+        egui::pos2(
+            text_x,
+            if list {
+                rect.top() + 40.0
+            } else {
+                preview.bottom() + 43.0
+            },
+        ),
+        egui::Align2::LEFT_CENTER,
+        info.description,
+        egui::FontId::proportional(small_size),
+        ui.visuals().weak_text_color(),
+    );
+    ui.painter().text(
+        egui::pos2(
+            text_x,
+            if list {
+                rect.top() + 61.0
+            } else {
+                rect.bottom() - 14.0
+            },
+        ),
+        egui::Align2::LEFT_CENTER,
+        format!(
+            "{}  ·  {:.0}×{:.0}",
+            info.author, info.window_width, info.window_height
+        ),
+        egui::FontId::proportional(small_size * 0.9),
+        ui.visuals().weak_text_color(),
+    );
+    if selected {
+        ui.painter().text(
+            egui::pos2(
+                rect.right() - 14.0,
+                if list {
+                    rect.center().y
+                } else {
+                    rect.bottom() - 14.0
+                },
+            ),
+            egui::Align2::RIGHT_CENTER,
+            text(model, MessageKey::SettingsPetSelected),
+            egui::FontId::proportional(small_size),
+            ui.visuals().selection.stroke.color,
+        );
+    }
+    if response.clicked() {
+        let picker_mode = model.draft.pet.picker_mode;
+        deskhud_ui::apply_pet_selection(&mut model.draft, info.id.to_string(), picker_mode);
+        model
+            .draft
+            .pet
+            .apply_window_size(info.window_width, info.window_height);
+    }
+}
+
+fn draw_pet_grid_card(
+    ui: &mut Ui,
+    catalogs: &CatalogStore,
+    model: &mut SettingsModel,
+    info: &deskhud_engine::PetKindInfo,
+    layout: deskhud_ui::PetCardLayout,
+) {
+    const PAD: f32 = 12.0;
+    let selected = model.draft.pet.kind == info.id;
+    let (rect, response) = ui.allocate_exact_size(
+        Vec2::new(layout.card_width, layout.card_height),
+        Sense::click(),
+    );
+    let name = pet_catalog_text(
+        catalogs,
+        model.draft.locale,
+        info.id,
+        "display_name",
+        info.display_name,
+    );
+    let description = pet_catalog_text(
+        catalogs,
+        model.draft.locale,
+        info.id,
+        "description",
+        info.description,
+    );
+    let response = pet_tooltip(response, info, &name, &description);
+    let draw = rect.shrink(1.0);
+    let fill = if selected {
+        ui.visuals().selection.bg_fill.gamma_multiply(0.28)
+    } else if response.hovered() {
+        ui.visuals().widgets.hovered.bg_fill
+    } else {
+        ui.visuals().faint_bg_color
+    };
+    let stroke = if selected {
+        Stroke::new(
+            1.0,
+            components::lerp_color(
+                ui.visuals().widgets.noninteractive.bg_stroke.color,
+                ui.visuals().selection.stroke.color,
+                0.32,
+            ),
+        )
+    } else {
+        Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color)
+    };
+    ui.painter()
+        .rect(draw, 12.0, fill, stroke, egui::StrokeKind::Inside);
+
+    let stage = egui::Rect::from_center_size(
+        egui::pos2(
+            draw.center().x,
+            draw.top() + PAD + layout.preview_side * 0.5,
+        ),
+        Vec2::splat(layout.preview_side),
+    );
+    ui.painter()
+        .rect_filled(stage, 10.0, ui.visuals().extreme_bg_color);
+    if let Some(texture) = pet_preview_texture(ui, info) {
+        paint_preview_cover(ui, stage, &texture);
+    }
+
+    let body = ui.text_style_height(&egui::TextStyle::Body);
+    let small = ui.text_style_height(&egui::TextStyle::Small);
+    let left = draw.left() + PAD;
+    let top = stage.bottom() + PAD;
+    ui.painter().text(
+        egui::pos2(left, top),
+        egui::Align2::LEFT_TOP,
+        truncate_ui_text(
+            ui,
+            &name,
+            egui::FontId::proportional(body),
+            draw.width() - PAD * 2.0,
+        ),
+        egui::FontId::proportional(body),
+        ui.visuals().text_color(),
+    );
+    ui.painter().text(
+        egui::pos2(left, top + body + 4.0),
+        egui::Align2::LEFT_TOP,
+        truncate_ui_text(
+            ui,
+            &description,
+            egui::FontId::proportional(small),
+            draw.width() - PAD * 2.0,
+        ),
+        egui::FontId::proportional(small),
+        ui.visuals().weak_text_color(),
+    );
+    ui.painter().text(
+        egui::pos2(left, draw.bottom() - PAD),
+        egui::Align2::LEFT_BOTTOM,
+        format!(
+            "{}  ·  {:.0}×{:.0}",
+            info.author, info.window_width, info.window_height
+        ),
+        egui::FontId::proportional(small),
+        ui.visuals().weak_text_color(),
+    );
+    if selected {
+        ui.painter().text(
+            egui::pos2(draw.right() - PAD, draw.bottom() - PAD),
+            egui::Align2::RIGHT_BOTTOM,
+            text(model, MessageKey::SettingsPetSelected),
+            egui::FontId::proportional(small),
+            ui.visuals().selection.stroke.color,
+        );
+    }
+    if response.clicked() {
+        let mode = model.draft.pet.picker_mode;
+        deskhud_ui::apply_pet_selection(&mut model.draft, info.id.to_string(), mode);
+        model
+            .draft
+            .pet
+            .apply_window_size(info.window_width, info.window_height);
+    }
+}
+
+fn draw_pet_list_row(
+    ui: &mut Ui,
+    catalogs: &CatalogStore,
+    model: &mut SettingsModel,
+    info: &deskhud_engine::PetKindInfo,
+) {
+    const PAD: f32 = 12.0;
+    let selected = model.draft.pet.kind == info.id;
+    let body = ui.text_style_height(&egui::TextStyle::Body);
+    let small = ui.text_style_height(&egui::TextStyle::Small);
+    const LINE_GAP: f32 = 4.0;
+    let text_block_height = body + small * 3.0 + LINE_GAP * 3.0;
+    let thumb_side = text_block_height.max(72.0);
+    let (rect, response) = ui.allocate_exact_size(
+        Vec2::new(ui.available_width(), thumb_side + PAD * 2.0),
+        Sense::click(),
+    );
+    let name = pet_catalog_text(
+        catalogs,
+        model.draft.locale,
+        info.id,
+        "display_name",
+        info.display_name,
+    );
+    let description = pet_catalog_text(
+        catalogs,
+        model.draft.locale,
+        info.id,
+        "description",
+        info.description,
+    );
+    let response = pet_tooltip(response, info, &name, &description);
+    let draw = rect.shrink(0.5);
+    let fill = if selected {
+        ui.visuals().selection.bg_fill.gamma_multiply(0.28)
+    } else if response.hovered() {
+        ui.visuals().widgets.hovered.bg_fill
+    } else {
+        ui.visuals().faint_bg_color
+    };
+    let stroke = if selected {
+        Stroke::new(
+            1.0,
+            components::lerp_color(
+                ui.visuals().widgets.noninteractive.bg_stroke.color,
+                ui.visuals().selection.stroke.color,
+                0.32,
+            ),
+        )
+    } else {
+        Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color)
+    };
+    ui.painter()
+        .rect(draw, 10.0, fill, stroke, egui::StrokeKind::Inside);
+    let thumb = egui::Rect::from_min_size(draw.min + Vec2::splat(PAD), Vec2::splat(thumb_side));
+    ui.painter()
+        .rect_filled(thumb, 8.0, ui.visuals().extreme_bg_color);
+    if let Some(texture) = pet_preview_texture(ui, info) {
+        paint_preview_cover(ui, thumb, &texture);
+    }
+    let left = thumb.right() + PAD;
+    let top = thumb.top() + ((thumb_side - text_block_height) * 0.5).max(0.0);
+    ui.painter().text(
+        egui::pos2(left, top),
+        egui::Align2::LEFT_TOP,
+        truncate_ui_text(
+            ui,
+            &name,
+            egui::FontId::proportional(body),
+            draw.right() - left - PAD,
+        ),
+        egui::FontId::proportional(body),
+        ui.visuals().text_color(),
+    );
+    ui.painter().text(
+        egui::pos2(left, top + body + LINE_GAP),
+        egui::Align2::LEFT_TOP,
+        truncate_ui_text(
+            ui,
+            &description,
+            egui::FontId::proportional(small),
+            draw.right() - left - PAD,
+        ),
+        egui::FontId::proportional(small),
+        ui.visuals().weak_text_color(),
+    );
+    ui.painter().text(
+        egui::pos2(left, top + body + small + LINE_GAP * 2.0),
+        egui::Align2::LEFT_TOP,
+        info.author,
+        egui::FontId::proportional(small),
+        ui.visuals().weak_text_color(),
+    );
+    ui.painter().text(
+        egui::pos2(left, top + body + small * 2.0 + LINE_GAP * 3.0),
+        egui::Align2::LEFT_TOP,
+        format!("{:.0}×{:.0}", info.window_width, info.window_height),
+        egui::FontId::proportional(small),
+        ui.visuals().weak_text_color(),
+    );
+    if selected {
+        ui.painter().text(
+            egui::pos2(draw.right() - PAD, draw.center().y),
+            egui::Align2::RIGHT_CENTER,
+            text(model, MessageKey::SettingsPetSelected),
+            egui::FontId::proportional(small),
+            ui.visuals().selection.stroke.color,
+        );
+    }
+    if response.clicked() {
+        let mode = model.draft.pet.picker_mode;
+        deskhud_ui::apply_pet_selection(&mut model.draft, info.id.to_string(), mode);
+        model
+            .draft
+            .pet
+            .apply_window_size(info.window_width, info.window_height);
+    }
+}
+
+fn pet_preview_texture(ui: &Ui, info: &deskhud_engine::PetKindInfo) -> Option<egui::TextureHandle> {
+    let bytes = info.preview?;
+    let cache_id = ui.make_persistent_id(("pet-preview", info.id));
+    if let Some(texture) = ui.ctx().data(|data| data.get_temp(cache_id)) {
+        return Some(texture);
+    }
+    let image = crate::image_decode::decode(bytes, 1536)?;
+    let texture = ui.ctx().load_texture(
+        format!("pet-preview-{}", info.id),
+        image,
+        TextureOptions::LINEAR,
+    );
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(cache_id, texture.clone()));
+    Some(texture)
+}
+
+fn paint_preview_cover(ui: &Ui, stage: egui::Rect, texture: &egui::TextureHandle) {
+    let size = texture.size_vec2();
+    if size.x <= 0.0 || size.y <= 0.0 {
+        return;
+    }
+    let scale = (stage.width() / size.x).max(stage.height() / size.y);
+    let image_rect = egui::Rect::from_center_size(stage.center(), size * scale);
+    ui.painter().with_clip_rect(stage).image(
+        texture.id(),
+        image_rect,
+        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+        Color32::WHITE,
+    );
+}
+
+fn truncate_ui_text(ui: &Ui, text: &str, font: egui::FontId, max_width: f32) -> String {
+    if ui.fonts_mut(|fonts| {
+        fonts
+            .layout_no_wrap(text.into(), font.clone(), Color32::WHITE)
+            .size()
+            .x
+    }) <= max_width
+    {
+        return text.into();
+    }
+    let mut result = String::new();
+    for ch in text.chars() {
+        let mut candidate = result.clone();
+        candidate.push(ch);
+        candidate.push('…');
+        if ui.fonts_mut(|fonts| {
+            fonts
+                .layout_no_wrap(candidate.clone(), font.clone(), Color32::WHITE)
+                .size()
+                .x
+        }) > max_width
+        {
+            break;
+        }
+        result.push(ch);
+    }
+    if result.is_empty() {
+        "…".into()
+    } else {
+        format!("{result}…")
+    }
+}
+
+fn pet_catalog_text(
+    catalogs: &CatalogStore,
+    locale: Locale,
+    id: &str,
+    field: &str,
+    fallback: &str,
+) -> String {
+    catalogs
+        .t(locale, &format!("{id}.{field}"), fallback)
+        .to_owned()
+}
+
+fn pet_tooltip(
+    response: egui::Response,
+    info: &deskhud_engine::PetKindInfo,
+    name: &str,
+    description: &str,
+) -> egui::Response {
+    let name = name.to_owned();
+    let description = description.to_owned();
+    response.on_hover_ui(|ui| {
+        ui.set_max_width(300.0);
+        ui.scope(|ui| {
+            ui.style_mut()
+                .text_styles
+                .insert(egui::TextStyle::Body, egui::FontId::proportional(12.0));
+            ui.style_mut()
+                .text_styles
+                .insert(egui::TextStyle::Small, egui::FontId::proportional(11.0));
+            ui.label(RichText::new(&name).size(14.0).strong());
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(&description)
+                    .size(12.5)
+                    .color(ui.visuals().weak_text_color()),
+            );
+            ui.add_space(8.0);
+            ui.separator();
+            ui.add_space(6.0);
+            ui.label(RichText::new(info.id).small());
+            ui.label(
+                RichText::new(format!("{}  ·  v{}", info.author, info.version))
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
+            ui.label(
+                RichText::new(format!(
+                    "{}  ·  {:.0}×{:.0}",
+                    info.engine, info.window_width, info.window_height
+                ))
+                .small()
+                .color(ui.visuals().weak_text_color()),
+            );
+            if let Some(homepage) = info.homepage {
+                ui.add_space(2.0);
+                ui.hyperlink_to("↗", homepage).on_hover_text(homepage);
+            }
+        });
+    })
 }
 
 fn draw_hud(ui: &mut egui::Ui, registry: &Arc<EngineRegistry>, model: &mut SettingsModel) {

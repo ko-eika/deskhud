@@ -2,7 +2,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use deskhud_engine::EngineRegistry;
-use deskhud_ui::{SettingsModel, UiPreferences};
+use deskhud_ui::{CatalogStore, SettingsModel, UiPreferences};
 use std::sync::Arc;
 use winit::{
     event::WindowEvent,
@@ -20,6 +20,7 @@ pub(crate) struct SettingsWindow {
     /// Settings 对应的通用视口运行时。
     viewport: Viewport,
     registry: Arc<EngineRegistry>,
+    catalogs: CatalogStore,
     model: SettingsModel,
 }
 
@@ -29,6 +30,7 @@ impl SettingsWindow {
         event_loop: &ActiveEventLoop,
         proxy: &EventLoopProxy<UserEvent>,
         registry: Arc<EngineRegistry>,
+        catalogs: CatalogStore,
         prefs: UiPreferences,
     ) -> Self {
         Self {
@@ -48,6 +50,7 @@ impl SettingsWindow {
                 viewport
             },
             registry,
+            catalogs,
             model: SettingsModel::new(prefs),
         }
     }
@@ -107,7 +110,13 @@ impl SettingsWindow {
         self.viewport
             .set_titlebar_theme(self.model.draft.shell.ui_theme);
         let output = self.viewport.render(|context, raw_input| {
-            view::setting::run(context, raw_input, &self.registry, &mut self.model)
+            view::setting::run(
+                context,
+                raw_input,
+                &self.registry,
+                &self.catalogs,
+                &mut self.model,
+            )
         });
         (output.should_close, output.applied_preferences)
     }

@@ -40,6 +40,8 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::SettingsPetWindowSize => "Window",
         MessageKey::SettingsPetSelected => "In use",
         MessageKey::SettingsPetOptions => "Active pet behavior",
+        MessageKey::SettingsPetList => "Pet list",
+        MessageKey::SettingsPetConfig => "Pet configuration",
         MessageKey::HudSettingsIntro => {
             "Takes effect after you Enable and Apply. Third-party plugins may read system info or show content and pose privacy or security risks—only enable plugins from sources you trust."
         }

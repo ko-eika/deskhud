@@ -1,5 +1,5 @@
 display_name = "大眼球"
-description = "自然眨眼；全局跟鼠标看；键鼠短提示；悬停高亮"
+description = "会眨眼、跟随鼠标视线的大眼小球。"
 "follow_eyes.label" = "鼠标跟随"
 "follow_eyes.description" = "鼠标移动时跟随，空闲后回正，点击时短暂朝鼠标方向瞪眼"
 "key_tips.label" = "按键提示"

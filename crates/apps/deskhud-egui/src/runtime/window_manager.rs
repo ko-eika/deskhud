@@ -5,8 +5,8 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use deskhud_engine::EngineRegistry;
-use deskhud_runtime::bootstrap_registry;
-use deskhud_ui::{PrefsWriteOrder, UiPreferences, load_or_default, save_ordered};
+use deskhud_runtime::{bootstrap_registry, build_catalog_store};
+use deskhud_ui::{CatalogStore, PrefsWriteOrder, UiPreferences, load_or_default, save_ordered};
 use std::sync::Arc;
 use winit::{
     event::{ElementState, MouseButton, WindowEvent},
@@ -33,6 +33,7 @@ pub(crate) struct WindowManager {
     /// 右键菜单及其子菜单窗口树。
     menu: Option<PetMenu>,
     registry: Arc<EngineRegistry>,
+    catalogs: CatalogStore,
     prefs: UiPreferences,
     frame_rate: u32,
 }
@@ -60,6 +61,7 @@ impl WindowManager {
                 .pet
                 .apply_window_size(info.window_width, info.window_height);
         }
+        let catalogs = build_catalog_store(&bootstrap.discovered, prefs.locale);
         let frame_rate = super::render::frame_rate_for(&prefs.graphics);
         Self {
             proxy,
@@ -68,6 +70,7 @@ impl WindowManager {
             settings: None,
             menu: None,
             registry: Arc::new(bootstrap.registry),
+            catalogs,
             prefs,
             frame_rate,
         }
@@ -96,6 +99,7 @@ impl WindowManager {
                 event_loop,
                 &self.proxy,
                 self.registry.clone(),
+                self.catalogs.clone(),
                 self.prefs.clone(),
             ));
         }

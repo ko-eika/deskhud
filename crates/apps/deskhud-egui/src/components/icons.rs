@@ -3,6 +3,8 @@
 use egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, Ui};
 
 const CHEVRON_DOWN: &[u8] = include_bytes!("../../../../../assets/svg/chevron-down.svg");
+const GRID: &[u8] = include_bytes!("../../../../../assets/svg/grid.svg");
+const LIST: &[u8] = include_bytes!("../../../../../assets/svg/list.svg");
 
 /// Paints a bundled SVG icon without relying on a font glyph being available.
 pub(crate) fn paint(ui: &Ui, name: &'static str, rect: Rect, color: Color32, flip_y: bool) {
@@ -24,6 +26,8 @@ fn texture(ui: &Ui, name: &'static str) -> Option<TextureHandle> {
     }
     let bytes = match name {
         "chevron-down" => CHEVRON_DOWN,
+        "grid" => GRID,
+        "list" => LIST,
         _ => return None,
     };
     let pixmap = rasterize(bytes)?;

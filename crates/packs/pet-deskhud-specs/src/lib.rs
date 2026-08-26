@@ -306,7 +306,7 @@ impl PetKind for BuiltinSpecsPet {
             version: deskhud_engine::ENGINE_PRODUCT_VERSION,
             engine: deskhud_engine::ENGINE_COMPAT_FAMILY,
             display_name: "大眼球",
-            description: "自然眨眼；全局跟鼠标看；键鼠短提示；悬停高亮",
+            description: "会眨眼、跟随鼠标视线的大眼小球。",
             author: "DeskHud",
             homepage: Some("https://github.com/ko-eika/deskhud"),
             window_width: 160.0,

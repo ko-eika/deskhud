@@ -38,6 +38,8 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::SettingsPetWindowSize => "窗口",
         MessageKey::SettingsPetSelected => "使用中",
         MessageKey::SettingsPetOptions => "当前宠物行为",
+        MessageKey::SettingsPetList => "宠物列表",
+        MessageKey::SettingsPetConfig => "宠物配置",
         MessageKey::HudSettingsIntro => {
             "「开启」并「应用」后生效，第三方插件可能读取系统信息或展示内容，存在隐私与安全风险，请仅启用可信来源的插件。"
         }

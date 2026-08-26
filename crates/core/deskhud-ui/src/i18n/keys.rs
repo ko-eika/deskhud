@@ -71,6 +71,10 @@ pub enum MessageKey {
     SettingsPetSelected,
     /// 当前宠物的行为配置区标题。
     SettingsPetOptions,
+    /// 宠物选择器卡片标题。
+    SettingsPetList,
+    /// 当前宠物配置卡片标题。
+    SettingsPetConfig,
     /// 插件页说明（含第三方风险提示）。
     HudSettingsIntro,
     /// 尚无插件贡献。
@@ -182,6 +186,8 @@ impl MessageKey {
         Self::SettingsPetWindowSize,
         Self::SettingsPetSelected,
         Self::SettingsPetOptions,
+        Self::SettingsPetList,
+        Self::SettingsPetConfig,
         Self::HudSettingsIntro,
         Self::HudSettingsEmpty,
         Self::MetaAuthor,

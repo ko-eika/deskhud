@@ -50,7 +50,7 @@ impl PetKind for BuiltinBlobPet {
             version: deskhud_engine::ENGINE_PRODUCT_VERSION,
             engine: deskhud_engine::ENGINE_COMPAT_FAMILY,
             display_name: "蓝点",
-            description: "简洁圆点；拖动/贴边略变形态",
+            description: "简洁圆润的蓝色小球，拖动和贴边时会轻微变形。",
             author: "DeskHud",
             homepage: Some("https://github.com/ko-eika/deskhud"),
             window_width: 96.0,

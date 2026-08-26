@@ -35,13 +35,13 @@ fn merge_builtin_pack_catalogs(store: &mut CatalogStore) {
 }
 
 /// 为当前 UI locale 合并内置包 + 已发现包文案（并尽量补 `en` 回退层）。
-pub fn build_catalog_store(discovered: &[DiscoveredPack], locale: Locale) -> CatalogStore {
+pub fn build_catalog_store(discovered: &[DiscoveredPack], _locale: Locale) -> CatalogStore {
     let mut store = CatalogStore::new();
     merge_builtin_pack_catalogs(&mut store);
-    merge_discovered_into(&mut store, discovered, locale);
-    if locale != Locale::En {
-        merge_discovered_into(&mut store, discovered, Locale::En);
-    }
+    // Settings can switch language before Apply; keep every supported pack layer
+    // available so the preview updates immediately.
+    merge_discovered_into(&mut store, discovered, Locale::ZhCn);
+    merge_discovered_into(&mut store, discovered, Locale::En);
     store
 }
 
@@ -68,5 +68,28 @@ fn merge_discovered_into(store: &mut CatalogStore, discovered: &[DiscoveredPack]
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_catalog_store;
+    use deskhud_ui::Locale;
+
+    #[test]
+    fn builtin_pet_catalogs_are_available_to_settings_in_chinese() {
+        let store = build_catalog_store(&[], Locale::ZhCn);
+        assert_eq!(
+            store.get(Locale::ZhCn, "pet.deskhud.specs.display_name"),
+            Some("大眼球")
+        );
+        assert_eq!(
+            store.get(Locale::ZhCn, "pet.deskhud.blob.display_name"),
+            Some("蓝点")
+        );
+        assert_eq!(
+            store.get(Locale::En, "pet.deskhud.specs.follow_eyes.label"),
+            Some("Pointer tracking")
+        );
     }
 }

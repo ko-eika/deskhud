@@ -30,7 +30,7 @@ pub(crate) fn switch_row(
         egui::pos2(rect.right() - 22.0, rect.center().y),
         Vec2::new(42.0, 24.0),
     );
-    response.union(draw_switch(ui, switch_rect, value))
+    response.union(toggle_switch(ui, switch_rect, value))
 }
 
 /// A styled master switch with an animated, collapsible child area.
@@ -72,8 +72,8 @@ pub(crate) fn switch_group(
         });
 }
 
-fn draw_switch(ui: &mut Ui, rect: egui::Rect, value: &mut bool) -> egui::Response {
-    let response = ui.interact(
+pub(crate) fn toggle_switch(ui: &mut Ui, rect: egui::Rect, value: &mut bool) -> egui::Response {
+    let mut response = ui.interact(
         rect,
         ui.id()
             .with(("switch", rect.top().to_bits(), rect.left().to_bits())),
@@ -81,6 +81,7 @@ fn draw_switch(ui: &mut Ui, rect: egui::Rect, value: &mut bool) -> egui::Respons
     );
     if response.clicked() {
         *value = !*value;
+        response.mark_changed();
     }
     let t = ui.ctx().animate_bool(response.id, *value);
     let mut fill = super::lerp_color(
