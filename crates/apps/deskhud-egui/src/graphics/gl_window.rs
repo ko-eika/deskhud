@@ -34,6 +34,7 @@ impl GlWindow {
         event_loop: &ActiveEventLoop,
         title: &str,
         size: [f64; 2],
+        min_size: Option<[f64; 2]>,
         decorations: bool,
         transparent: bool,
         resizable: bool,
@@ -51,6 +52,12 @@ impl GlWindow {
             .with_decorations(decorations)
             .with_visible(visible)
             .with_resizable(resizable);
+        let window_attributes = if let Some(min_size) = min_size {
+            window_attributes
+                .with_min_inner_size(winit::dpi::LogicalSize::new(min_size[0], min_size[1]))
+        } else {
+            window_attributes
+        };
         #[cfg(target_os = "windows")]
         let window_attributes = window_attributes
             .with_skip_taskbar(skip_taskbar)

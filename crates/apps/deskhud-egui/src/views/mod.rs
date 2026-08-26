@@ -5,7 +5,9 @@
 pub(crate) mod hud;
 pub(crate) mod pet;
 pub(crate) mod setting;
+pub(crate) mod theme;
 
+use deskhud_ui::UiPreferences;
 use egui::FullOutput;
 
 /// egui 视图完成一帧绘制后返回给应用层的结果。
@@ -15,6 +17,8 @@ pub(crate) struct ViewOutput {
     pub full_output: FullOutput,
     /// 请求关闭当前窗口或整个应用。
     pub should_close: bool,
+    /// 设置页点击“应用”后提交的偏好。
+    pub applied_preferences: Option<UiPreferences>,
     /// 请求调整当前窗口的内容尺寸，单位为逻辑像素。
     pub resize_to: Option<[f32; 2]>,
     /// 请求移动当前原生窗口，单位为逻辑像素增量。

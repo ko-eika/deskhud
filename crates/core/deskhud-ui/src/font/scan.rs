@@ -185,14 +185,20 @@ fn add_face(
         .unwrap_or(stem);
     let (family, label, parsed_style, mut aliases) = classify_stem(family_stem);
     let style = container
-        .and_then(|face| face.subfamily)
+        .as_ref()
+        .and_then(|face| face.subfamily.clone())
         .unwrap_or(parsed_style);
+    let localized_names = container
+        .as_ref()
+        .map(|face| face.family_names.clone())
+        .unwrap_or_default();
     aliases.push(label.to_lowercase());
     aliases.push(family.clone());
-    catalog.upsert(
+    catalog.upsert_with_names(
         family,
         label,
         aliases,
+        localized_names,
         FontFace {
             style,
             font_id: id,

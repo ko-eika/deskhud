@@ -7,6 +7,7 @@ pub(crate) mod placement;
 
 pub(crate) use controller::MenuController;
 
+use deskhud_ui::UiTheme;
 use egui::{Align2, Color32, Context, FontId, RawInput, Sense, Stroke, Vec2};
 use winit::{
     dpi::PhysicalPosition,
@@ -177,6 +178,7 @@ impl MenuWindow {
         let viewport_config = ViewportConfig {
             title: config.title,
             size: config.size,
+            min_size: None,
             egui_id: config.egui_id,
             decorations: config.decorations,
             transparent: config.transparent,
@@ -244,6 +246,7 @@ impl MenuWindow {
         &mut self,
         definition: &MenuDefinition,
         highlighted_submenu: Option<usize>,
+        theme: UiTheme,
     ) -> MenuOutput {
         let viewport = self.viewport.render(|context, raw_input| {
             run(
@@ -253,6 +256,7 @@ impl MenuWindow {
                 self.title,
                 self.show_title,
                 highlighted_submenu,
+                theme,
             )
         });
         let selected_item = viewport.selected_menu_item.clone();
@@ -294,11 +298,13 @@ fn run(
     title: &str,
     show_title: bool,
     highlighted_submenu: Option<usize>,
+    theme: UiTheme,
 ) -> ViewOutput {
     let mut output = ViewOutput::default();
     let mut hovered_item = None;
     let mut target_size = [0.0, 0.0];
     let full_output = context.run_ui(raw_input, |ctx| {
+        crate::views::theme::apply(ctx.ctx(), theme);
         let layout = menu_layout(ctx, definition, title, show_title);
         let frame =
             egui::Frame::menu(&ctx.style()).inner_margin(egui::Margin::same(MENU_PADDING as i8));

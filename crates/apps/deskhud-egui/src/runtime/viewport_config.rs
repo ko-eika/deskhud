@@ -8,6 +8,8 @@ pub(crate) struct ViewportConfig {
     pub title: &'static str,
     /// 初始逻辑尺寸 `[宽度, 高度]`。
     pub size: [f64; 2],
+    /// Minimum logical client size, if the viewport is resizable.
+    pub min_size: Option<[f64; 2]>,
     /// egui 使用的视口标识。
     pub egui_id: ViewportId,
     /// 是否显示系统边框和标题栏。
@@ -35,6 +37,7 @@ impl ViewportConfig {
         Self {
             title: "Pet",
             size: [160.0, 160.0],
+            min_size: None,
             egui_id: ViewportId::ROOT,
             decorations: false,
             transparent: true,
@@ -53,6 +56,7 @@ impl ViewportConfig {
         Self {
             title: "HUD",
             size: [360.0, 180.0],
+            min_size: None,
             egui_id: ViewportId::from_hash_of("hud"),
             decorations: false,
             transparent: true,
@@ -70,7 +74,8 @@ impl ViewportConfig {
     pub(crate) fn settings() -> Self {
         Self {
             title: "Settings",
-            size: [480.0, 360.0],
+            size: [1600.0, 900.0],
+            min_size: Some([800.0, 450.0]),
             egui_id: ViewportId::from_hash_of("setting"),
             decorations: true,
             transparent: false,

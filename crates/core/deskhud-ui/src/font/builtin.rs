@@ -55,10 +55,11 @@ pub fn builtin_font_families() -> Vec<FontFamilyEntry> {
 fn add_face(asset: &BuiltinFontAsset, face: FontContainerFace, catalog: &mut FontCatalog) {
     let family_stem = face.family.as_deref().unwrap_or(asset.file_name);
     let (family_key, label, parsed_style, aliases) = super::classify_stem(family_stem);
-    catalog.upsert(
+    catalog.upsert_with_names(
         family_key,
         label,
         aliases,
+        face.family_names.clone(),
         FontFace {
             style: face.subfamily.unwrap_or(parsed_style),
             font_id: format!(

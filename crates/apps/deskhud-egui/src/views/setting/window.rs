@@ -1,6 +1,9 @@
 //! Settings 原生窗口生命周期。
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
+use deskhud_engine::EngineRegistry;
+use deskhud_ui::{SettingsModel, UiPreferences};
+use std::sync::Arc;
 use winit::{
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoopProxy},
@@ -16,19 +19,45 @@ use crate::views as view;
 pub(crate) struct SettingsWindow {
     /// Settings 对应的通用视口运行时。
     viewport: Viewport,
+    registry: Arc<EngineRegistry>,
+    model: SettingsModel,
+    font_signature: Option<(String, u32)>,
 }
 
 impl SettingsWindow {
     /// 创建 Settings 窗口。
-    pub(crate) fn create(event_loop: &ActiveEventLoop, proxy: &EventLoopProxy<UserEvent>) -> Self {
+    pub(crate) fn create(
+        event_loop: &ActiveEventLoop,
+        proxy: &EventLoopProxy<UserEvent>,
+        registry: Arc<EngineRegistry>,
+        prefs: UiPreferences,
+    ) -> Self {
         Self {
-            viewport: Viewport::new(event_loop, ViewportConfig::settings(), proxy),
+            viewport: {
+                let viewport = Viewport::new(event_loop, ViewportConfig::settings(), proxy);
+                let size = prefs.shell.settings_size();
+                viewport.request_inner_size(winit::dpi::PhysicalSize::new(
+                    size[0].round() as u32,
+                    size[1].round() as u32,
+                ));
+                if let Some(position) = prefs.shell.settings_pos() {
+                    viewport.request_outer_position(winit::dpi::PhysicalPosition::new(
+                        position[0].round() as i32,
+                        position[1].round() as i32,
+                    ));
+                }
+                viewport
+            },
+            registry,
+            model: SettingsModel::new(prefs),
+            font_signature: None,
         }
     }
 
     /// 显示 Settings 窗口。
-    pub(crate) fn show(&mut self) {
+    pub(crate) fn show(&mut self, prefs: &UiPreferences) {
         // 显示由渲染线程发起，具体的原生窗口调用会转回 winit 线程。
+        self.model.open(prefs);
         self.viewport.set_visible(true);
     }
 
@@ -57,9 +86,41 @@ impl SettingsWindow {
         self.viewport.handle_event(event);
     }
 
+    pub(crate) fn preferences(&mut self) -> &UiPreferences {
+        self.sync_geometry();
+        &self.model.draft
+    }
+
+    pub(crate) fn preferences_mut(&mut self) -> &mut UiPreferences {
+        &mut self.model.draft
+    }
+
     /// 绘制一帧并返回 UI 是否请求关闭。
-    pub(crate) fn should_close(&mut self) -> bool {
-        self.viewport.render(view::setting::run).should_close
+    pub(crate) fn render(&mut self) -> (bool, Option<UiPreferences>) {
+        self.viewport
+            .set_titlebar_theme(self.model.draft.shell.ui_theme);
+        let output = self.viewport.render(|context, raw_input| {
+            view::setting::run(
+                context,
+                raw_input,
+                &self.registry,
+                &mut self.model,
+                &mut self.font_signature,
+            )
+        });
+        (output.should_close, output.applied_preferences)
+    }
+
+    fn sync_geometry(&mut self) {
+        let size = self.viewport.window().inner_size();
+        if let Ok(position) = self.viewport.window().outer_position() {
+            self.model.draft.shell.set_settings_geometry(
+                size.width as f32,
+                size.height as f32,
+                position.x as f32,
+                position.y as f32,
+            );
+        }
     }
 
     /// 释放 Settings 的 OpenGL 资源。

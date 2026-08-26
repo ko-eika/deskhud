@@ -14,6 +14,7 @@ use winit::{
 
 use super::{MenuConfig, MenuDefinition, MenuWindow, placement};
 use crate::runtime::viewport::UserEvent;
+use deskhud_ui::UiTheme;
 
 /// 可复用的菜单树窗口控制器。
 pub(crate) struct MenuController {
@@ -156,10 +157,14 @@ impl MenuController {
     }
 
     /// 驱动菜单树的一帧渲染，并返回被点击的菜单项标识和关闭请求。
-    pub(crate) fn render(&mut self, definition: &MenuDefinition) -> (Option<String>, bool) {
-        let root_output = self
-            .window
-            .render(&definition, self.submenu_path.first().copied());
+    pub(crate) fn render(
+        &mut self,
+        definition: &MenuDefinition,
+        theme: UiTheme,
+    ) -> (Option<String>, bool) {
+        let root_output =
+            self.window
+                .render(&definition, self.submenu_path.first().copied(), theme);
         if root_output.hovered_item.is_some() {
             self.focus_lost_at = None;
         }
@@ -274,6 +279,7 @@ impl MenuController {
                 let child_output = submenu.render(
                     submenu_definition,
                     self.submenu_path.get(depth + 1).copied(),
+                    theme,
                 );
                 let child_size = child_output
                     .viewport

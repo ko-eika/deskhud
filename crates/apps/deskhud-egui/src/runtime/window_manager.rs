@@ -4,6 +4,10 @@
 //! 本模块只负责视口之间的协调和生命周期管理。
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
+use deskhud_engine::EngineRegistry;
+use deskhud_runtime::bootstrap_registry;
+use deskhud_ui::{PrefsWriteOrder, UiPreferences, load_or_default, save_ordered};
+use std::sync::Arc;
 use winit::{
     event::{ElementState, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoopProxy},
@@ -28,29 +32,64 @@ pub(crate) struct WindowManager {
     settings: Option<SettingsWindow>,
     /// 右键菜单及其子菜单窗口树。
     menu: Option<PetMenu>,
+    registry: Arc<EngineRegistry>,
+    prefs: UiPreferences,
 }
 
 impl WindowManager {
     pub(crate) fn new(proxy: EventLoopProxy<UserEvent>) -> Self {
+        let bootstrap = bootstrap_registry();
+        let mut prefs = load_or_default();
+        if !bootstrap
+            .registry
+            .pets()
+            .iter()
+            .any(|pet| pet.info().id == prefs.pet.kind)
+        {
+            prefs.pet.kind = bootstrap.registry.active_pet_id().to_owned();
+        }
+        if let Some(pet) = bootstrap
+            .registry
+            .pets()
+            .into_iter()
+            .find(|pet| pet.info().id == prefs.pet.kind)
+        {
+            let info = pet.info();
+            prefs
+                .pet
+                .apply_window_size(info.window_width, info.window_height);
+        }
         Self {
             proxy,
             pet: None,
             hud: None,
             settings: None,
             menu: None,
+            registry: Arc::new(bootstrap.registry),
+            prefs,
         }
     }
 
     pub(crate) fn create_pet(&mut self, event_loop: &ActiveEventLoop) {
         // 所有视口随应用一起创建，显示和隐藏只改变原生窗口的可见状态。
         if self.pet.is_none() {
-            self.pet = Some(PetWindow::create(event_loop, &self.proxy));
+            self.pet = Some(PetWindow::create(
+                event_loop,
+                &self.proxy,
+                self.registry.clone(),
+                self.prefs.clone(),
+            ));
         }
         if self.hud.is_none() {
             self.hud = Some(HudWindow::create(event_loop, &self.proxy));
         }
         if self.settings.is_none() {
-            self.settings = Some(SettingsWindow::create(event_loop, &self.proxy));
+            self.settings = Some(SettingsWindow::create(
+                event_loop,
+                &self.proxy,
+                self.registry.clone(),
+                self.prefs.clone(),
+            ));
         }
         if self.menu.is_none() {
             self.menu = Some(PetMenu::create(event_loop, &self.proxy));
@@ -90,7 +129,7 @@ impl WindowManager {
             .settings
             .as_mut()
             .expect("settings viewport disappeared");
-        settings.show();
+        settings.show(&self.prefs);
         #[cfg(target_os = "macos")]
         self.set_dock_icon(true);
     }
@@ -103,10 +142,54 @@ impl WindowManager {
 
     fn hide_settings(&mut self) {
         if let Some(settings) = self.settings.as_mut() {
+            // 几何信息由设置窗口在读取 prefs 前同步回草稿。
+            self.prefs = settings.preferences().clone();
+        }
+        self.commit_preferences(self.prefs.clone());
+        if let Some(settings) = self.settings.as_mut() {
             settings.hide();
         }
         #[cfg(target_os = "macos")]
         self.set_dock_icon(false);
+    }
+
+    fn commit_preferences(&mut self, prefs: deskhud_ui::UiPreferences) {
+        self.prefs = prefs;
+        let order = PrefsWriteOrder {
+            pet_ids: self
+                .registry
+                .pet_infos()
+                .into_iter()
+                .map(|p| p.id.to_owned())
+                .collect(),
+            pet_option_keys: self
+                .registry
+                .pets()
+                .into_iter()
+                .map(|p| {
+                    (
+                        p.info().id.to_owned(),
+                        p.config_options()
+                            .iter()
+                            .map(|o| o.key.to_owned())
+                            .collect(),
+                    )
+                })
+                .collect(),
+            plugin_ids: self
+                .registry
+                .plugin_infos()
+                .into_iter()
+                .map(|p| p.id.to_owned())
+                .collect(),
+            plugin_contrib_ids: Vec::new(),
+        };
+        if let Err(error) = save_ordered(&self.prefs, &order) {
+            tracing::warn!(%error, "save preferences failed");
+        }
+        if let Some(pet) = self.pet.as_mut() {
+            pet.apply_preferences(&self.registry, self.prefs.clone());
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -275,16 +358,22 @@ impl WindowManager {
                 false
             }
             ViewportKind::Settings => {
-                if self
+                let (should_close, applied) = if self
                     .settings
                     .as_ref()
                     .is_some_and(SettingsWindow::is_visible)
-                    && self
-                        .settings
+                {
+                    self.settings
                         .as_mut()
                         .expect("settings viewport disappeared")
-                        .should_close()
-                {
+                        .render()
+                } else {
+                    (false, None)
+                };
+                if let Some(prefs) = applied {
+                    self.commit_preferences(prefs);
+                }
+                if should_close {
                     self.hide_settings();
                 }
                 false
@@ -302,6 +391,7 @@ impl WindowManager {
                             HudWindow::window_layer,
                         ),
                         self.hud.as_ref().is_some_and(HudWindow::is_visible),
+                        self.prefs.shell.ui_theme,
                     );
                 if should_close {
                     self.hide_menu();
@@ -359,6 +449,10 @@ impl WindowManager {
             PetMenuAction::ToggleAlwaysOnTop => {
                 let pet = self.pet.as_mut().expect("pet viewport disappeared");
                 pet.toggle_always_on_top();
+                self.prefs.shell.topmost = pet.is_always_on_top();
+                if let Some(settings) = self.settings.as_mut() {
+                    settings.preferences_mut().shell.topmost = self.prefs.shell.topmost;
+                }
             }
             PetMenuAction::OpenSettings => self.show_settings(),
             PetMenuAction::OpenHud => {

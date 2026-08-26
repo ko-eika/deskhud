@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use deskhud_ui::{SystemTheme, UiTheme, resolve_theme};
 use egui::{Color32, Context, RawInput};
 use egui_glow::Painter;
 use egui_winit::State;
@@ -27,6 +28,8 @@ use super::{
 pub(crate) struct ViewportOutput {
     /// UI 请求关闭当前窗口或整个应用。
     pub should_close: bool,
+    /// UI 提交的偏好变更。
+    pub applied_preferences: Option<deskhud_ui::UiPreferences>,
     /// UI 请求的逻辑尺寸。
     pub resize_to: Option<[f32; 2]>,
     /// 菜单点击返回的业务标识。
@@ -90,6 +93,7 @@ impl Viewport {
                 event_loop,
                 config.title,
                 config.size,
+                config.min_size,
                 config.decorations,
                 config.transparent,
                 config.resizable,
@@ -169,6 +173,53 @@ impl Viewport {
         self.gl_window.window()
     }
 
+    /// Synchronizes the native decorated title bar with the application theme.
+    pub(crate) fn set_titlebar_theme(&self, theme: UiTheme) {
+        let resolved = resolve_theme(theme, None);
+        let native_theme = match resolved {
+            SystemTheme::Light => Some(winit::window::Theme::Light),
+            SystemTheme::Dark => Some(winit::window::Theme::Dark),
+        };
+        self.gl_window.window().set_theme(native_theme);
+
+        #[cfg(target_os = "windows")]
+        {
+            use core::ffi::c_void;
+            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+            unsafe extern "system" {
+                fn DwmSetWindowAttribute(
+                    hwnd: *mut c_void,
+                    attribute: u32,
+                    value: *const c_void,
+                    size: u32,
+                ) -> i32;
+            }
+
+            let Ok(window_handle) = self.gl_window.window().window_handle() else {
+                return;
+            };
+            let RawWindowHandle::Win32(handle) = window_handle.as_raw() else {
+                return;
+            };
+            let dark = matches!(resolved, SystemTheme::Dark);
+            let value = i32::from(dark);
+            // Windows 10 and 11 use different attribute IDs in the wild.
+            for attribute in [19_u32, 20_u32] {
+                let _ = unsafe {
+                    DwmSetWindowAttribute(
+                        handle.hwnd.get() as *mut c_void,
+                        attribute,
+                        (&value as *const i32).cast(),
+                        core::mem::size_of::<i32>() as u32,
+                    )
+                };
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        let _ = theme;
+    }
+
     pub(crate) fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
         self.gl_window.window().set_visible(visible);
@@ -240,6 +291,7 @@ impl Viewport {
         if size.width == 0 || size.height == 0 {
             return ViewportOutput {
                 should_close: false,
+                applied_preferences: None,
                 resize_to: None,
                 selected_menu_item: None,
                 open_submenu: None,
@@ -259,6 +311,7 @@ impl Viewport {
         let move_by = ui_output.move_by;
         let result = ViewportOutput {
             should_close: ui_output.should_close,
+            applied_preferences: ui_output.applied_preferences,
             resize_to: ui_output.resize_to,
             selected_menu_item: ui_output.selected_menu_item,
             open_submenu: ui_output.open_submenu,

@@ -5,6 +5,7 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 mod area;
+mod components;
 mod fonts;
 mod graphics;
 mod menu;

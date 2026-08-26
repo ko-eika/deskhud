@@ -24,6 +24,23 @@ pub struct FontContainerFace {
     pub subfamily: Option<String>,
     /// PostScript name from the font `name` table.
     pub postscript: Option<String>,
+    /// All localized family names from the font `name` table.
+    pub family_names: Vec<FontNameRecord>,
+    /// All localized subfamily names from the font `name` table.
+    pub subfamily_names: Vec<FontNameRecord>,
+}
+
+/// A localized string from an OpenType `name` table record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FontNameRecord {
+    /// OpenType name table identifier, for example 1 or 16.
+    pub name_id: u16,
+    /// OpenType platform identifier.
+    pub platform_id: u16,
+    /// Platform-specific language identifier.
+    pub language_id: u16,
+    /// Decoded name value.
+    pub value: String,
 }
 
 /// A font face usable by a UI backend.
@@ -48,6 +65,8 @@ pub struct FontFamilyEntry {
     pub search_terms: Vec<String>,
     /// Available faces.
     pub faces: Vec<FontFace>,
+    /// Localized family names collected from all faces in the family.
+    pub localized_names: Vec<FontNameRecord>,
 }
 
 /// Platform-neutral font family catalog used by scanners and UI adapters.
@@ -65,6 +84,18 @@ impl FontCatalog {
         aliases: impl IntoIterator<Item = String>,
         face: FontFace,
     ) {
+        self.upsert_with_names(family_key, label, aliases, [], face);
+    }
+
+    /// Adds a face and its localized family names from font metadata.
+    pub fn upsert_with_names(
+        &mut self,
+        family_key: String,
+        label: String,
+        aliases: impl IntoIterator<Item = String>,
+        names: impl IntoIterator<Item = FontNameRecord>,
+        face: FontFace,
+    ) {
         let entry = self
             .families
             .entry(family_key.clone())
@@ -73,9 +104,19 @@ impl FontCatalog {
                 label: label.clone(),
                 search_terms: Vec::new(),
                 faces: Vec::new(),
+                localized_names: Vec::new(),
             });
         if entry.label.is_empty() {
             entry.label = label;
+        }
+        for name in names {
+            if !entry
+                .localized_names
+                .iter()
+                .any(|existing| existing == &name)
+            {
+                entry.localized_names.push(name);
+            }
         }
         entry.upsert_face(face, aliases);
     }
@@ -85,10 +126,11 @@ impl FontCatalog {
     pub fn extend(&mut self, families: impl IntoIterator<Item = FontFamilyEntry>) {
         for family in families {
             for face in family.faces {
-                self.upsert(
+                self.upsert_with_names(
                     family.family_key.clone(),
                     family.label.clone(),
                     family.search_terms.clone(),
+                    family.localized_names.clone(),
                     face,
                 );
             }
@@ -295,6 +337,63 @@ impl FontFamilyEntry {
         styles.dedup();
         styles
     }
+
+    /// Selects the closest localized family name, then falls back to the first
+    /// metadata name and finally the existing display label.
+    pub fn label_for_locale(&self, locale: &crate::LanguageTag) -> String {
+        self.localized_names
+            .iter()
+            .filter_map(|name| {
+                language_match_score(name, locale).map(|score| (score, name.name_id, &name.value))
+            })
+            .max_by_key(|(score, name_id, value)| {
+                (
+                    *score,
+                    *name_id == 16,
+                    std::cmp::Reverse(value.chars().count()),
+                )
+            })
+            .map(|(_, _, value)| value.clone())
+            .or_else(|| self.localized_names.first().map(|name| name.value.clone()))
+            .unwrap_or_else(|| self.label.clone())
+    }
+}
+
+fn language_match_score(name: &FontNameRecord, locale: &crate::LanguageTag) -> Option<u8> {
+    if name.platform_id == 0 {
+        return Some(1);
+    }
+    if name.platform_id != 3 {
+        return None;
+    }
+    let primary = name.language_id & 0x03ff;
+    let wanted = match locale.language.as_str() {
+        "en" => 0x09,
+        "zh" => 0x04,
+        "ja" => 0x11,
+        "ko" => 0x12,
+        "de" => 0x07,
+        "fr" => 0x0c,
+        "es" => 0x0a,
+        "ru" => 0x19,
+        _ => return Some(1),
+    };
+    if primary != wanted {
+        return None;
+    }
+    let region_match = match locale.region.as_deref() {
+        Some("US") => name.language_id == 0x0409,
+        Some("GB") => name.language_id == 0x0809,
+        Some("CN") => name.language_id == 0x0804,
+        Some("TW") => name.language_id == 0x0404,
+        Some("HK") => name.language_id == 0x0c04,
+        _ => false,
+    };
+    // Typographic Family Name (16) is the family grouping used when a font
+    // separates weight/style into Subfamily (17). Legacy Family Name (1) may
+    // contain the style itself, e.g. "Family Light".
+    let family_name_bonus = if name.name_id == 16 { 2 } else { 1 };
+    Some((if region_match { 3 } else { 2 }) * 3 + family_name_bonus)
 }
 
 fn normalize_style(style: &str) -> String {
@@ -422,7 +521,13 @@ pub fn style_sort_key(style: &str) -> (u8, u8) {
     (weight, italic)
 }
 
-type FontNames = (Option<String>, Option<String>, Option<String>);
+struct FontNames {
+    family: Option<String>,
+    subfamily: Option<String>,
+    postscript: Option<String>,
+    family_names: Vec<FontNameRecord>,
+    subfamily_names: Vec<FontNameRecord>,
+}
 
 /// Reads font-container metadata without loading glyph data or depending on a UI toolkit.
 pub fn inspect_font_file(path: impl AsRef<Path>) -> std::io::Result<Vec<FontContainerFace>> {
@@ -449,12 +554,14 @@ pub fn inspect_font_bytes(bytes: &[u8]) -> Result<Vec<FontContainerFace>, String
             let name = tables
                 .get(b"name".as_slice())
                 .ok_or("font has no name table")?;
-            let (family, subfamily, postscript) = read_names(bytes, name.0, name.1)?;
+            let names = read_names(bytes, name.0, name.1)?;
             Ok(FontContainerFace {
                 face_index: index as u32,
-                family,
-                subfamily,
-                postscript,
+                family: names.family,
+                subfamily: names.subfamily,
+                postscript: names.postscript,
+                family_names: names.family_names,
+                subfamily_names: names.subfamily_names,
             })
         })
         .collect()
@@ -511,6 +618,8 @@ fn read_names(bytes: &[u8], offset: u32, length: u32) -> Result<FontNames, Strin
     // legacy family/subfamily names (1/2) intentionally collapse them.
     let mut values: [Option<String>; 3] = [None, None, None];
     let mut legacy: [Option<String>; 3] = [None, None, None];
+    let mut family_names = Vec::new();
+    let mut subfamily_names = Vec::new();
     for i in 0..count {
         let at = offset + 6 + i * 12;
         let platform = be_u16(bytes, at)?;
@@ -531,6 +640,19 @@ fn read_names(bytes: &[u8], offset: u32, length: u32) -> Result<FontNames, Strin
         } else {
             String::from_utf8_lossy(raw).into_owned()
         };
+        if !text.is_empty() {
+            let record = FontNameRecord {
+                name_id,
+                platform_id: platform,
+                language_id: be_u16(bytes, at + 4)?,
+                value: text.clone(),
+            };
+            if name_id == 1 || name_id == 16 {
+                family_names.push(record);
+            } else if name_id == 2 || name_id == 17 {
+                subfamily_names.push(record);
+            }
+        }
         let (slot, target) = match name_id {
             1 => (0, &mut legacy),
             2 => (1, &mut legacy),
@@ -549,7 +671,13 @@ fn read_names(bytes: &[u8], offset: u32, length: u32) -> Result<FontNames, Strin
     if values[1].is_none() {
         values[1] = legacy[1].take();
     }
-    Ok((values[0].take(), values[1].take(), values[2].take()))
+    Ok(FontNames {
+        family: values[0].take().or_else(|| legacy[0].take()),
+        subfamily: values[1].take().or_else(|| legacy[1].take()),
+        postscript: values[2].take(),
+        family_names,
+        subfamily_names,
+    })
 }
 
 fn decode_utf16(raw: &[u8]) -> String {
@@ -621,6 +749,7 @@ mod tests {
                     font_id: "latin".into(),
                     builtin: true,
                 }],
+                localized_names: vec![],
             },
             FontFamilyEntry {
                 family_key: "notosanssc".into(),
@@ -631,6 +760,7 @@ mod tests {
                     font_id: "noto".into(),
                     builtin: true,
                 }],
+                localized_names: vec![],
             },
         ];
         let selection =

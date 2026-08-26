@@ -87,6 +87,7 @@
 | 2026-08-16 | Windows App SDK Runtime 2.4.0 已安装并核验；`deskhud-platform-windows` 已切换到 `windows-rs` WinUI 3 Host 接入骨架，尚待依赖获取和首次编译验证 | Runtime 已具备，未将网络获取超时误记为 Host 已验收 |
 | 2026-08-16 | 依赖管理约定固定：workspace 只集中管理依赖版本与依赖配置，不自动引入依赖；成员 crate 按需使用 `{ workspace = true }` 继承 | 保持版本单一来源，同时避免成员无意间获得未使用依赖 |
 | 2026-08-25 | 产品版本 PATCH 升至 `0.6.12`，engine 兼容族保持 `0.6`；内置字体资源、扫描与语言筛选统一收口到 `deskhud-ui`，egui 仅负责注册渲染字体 | 修复设置页未按地区/语言筛选字体的问题，并避免字体扫描与 glyph 检查在每帧重复执行 |
+| 2026-08-26 | 产品版本 PATCH 升至 `0.6.13`，engine 兼容族保持 `0.6`；记录菜单、HUD、设置窗口隐藏后渲染资源仍长期持有的内存占用问题 | 已完成现状排查，确认窗口、egui Context、Painter、OpenGL Context/Surface 和字体图集存在按需创建后只隐藏不释放的路径；修复留待后续提交 |
 
 ## 已知上游限制（勿当「本仓库可修」）
 

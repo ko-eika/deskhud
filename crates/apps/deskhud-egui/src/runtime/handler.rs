@@ -210,4 +210,4 @@ fn set_macos_dock_icon(visible: bool) {
 }
 
 #[cfg(target_os = "macos")]
-const APP_ICON_PNG: &[u8] = include_bytes!("../../assets/AppIcon.png");
+const APP_ICON_PNG: &[u8] = include_bytes!("../../../../../assets/icon.png");
