@@ -23,9 +23,9 @@
 | Cursor 自动注入摘要 | `.cursor/rules/*.mdc` | 薄指针 → AGENTS / CONSTRAINTS |
 | Cursor 旧记忆路径 | `.cursor/MEMORY.md` | 仅跳转到 `MEMORY.md` |
 
-## 迁移路线图与验收状态
+## 当前路线图与验收状态
 
-窗口迁移计划、里程碑状态和验收记录统一放在 [`roadmap/`](./roadmap/README.md)。不要在 `tasks/` 下新增计划文件。
+宠物引擎计划、里程碑状态和验收记录统一放在 [`roadmap/`](./roadmap/README.md)。不要在 `tasks/` 下新增计划文件。
 
 ## 历史任务索引
 

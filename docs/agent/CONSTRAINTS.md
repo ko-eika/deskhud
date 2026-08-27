@@ -16,7 +16,7 @@
 
 ## 分层边界（不可跨越）
 
-- `deskhud-egui` 是当前唯一的设置页实现；迁移期间 `winit + egui_glow` 仅作为 legacy 控制 UI 保留。禁止新增第二套 egui UI、托盘、或 UI 依赖 `git2`；迁移完成后设置页改由各平台原生后端提供。
+- `deskhud-egui` 是当前第一版运行态和设置页实现，用于验证宠物引擎；禁止新增第二套 egui UI、托盘、或 UI 依赖 `git2`。原生平台后端后置评估，不是当前宠物引擎前置条件。
 - `deskhud-engine` 仅契约，禁止依赖 `deskhud-sdk`。
 - `deskhud-runtime` 发现/加载/注册；`deskhud-package` manifest/IO/包内 i18n；`deskhud-ui` 零 egui。
 - 内置 = 原生 crate；社区 = WASM + `deskhud-sdk`（仅 examples/社区包）。
@@ -26,7 +26,7 @@
 - UI 组件必须遵循统一的视觉与交互风格：布局、间距、字号、颜色、控件状态和反馈优先复用现有组件/样式，不为单个页面另起一套风格。
 - 所有用户可见 UI 文案必须国际化；“关于”页及版本、作者、许可证、技术栈、主页等真实信息也必须通过国际化目录提供对应语言，不得把面向用户的语言硬编码在页面逻辑中。新增 UI 文案必须同时补齐中英文（或当前支持的全部语言）目录与缺键回退。
 - 设置侧栏顺序：**常规 / 宠物 / 插件 / 关于**，默认常规；宠尺寸来自 `PetKindInfo`；设置预览用静态 `preview`/`icon`，不实时 `paint`。
-- 设置页暂由 `winit + egui_glow` 直接托管不透明控制窗，属于迁移期 legacy；菜单迁移到平台原生菜单实现。宠物 / 气泡 / HUD / 布局编辑与菜单由平台窗口后端实现。禁止恢复 eframe、deferred viewport 或第二套 egui 菜单 UI。
+- 第一版由 `winit + egui_glow` 托管运行态宠物和设置页；宠物绘制必须解释平台无关的 `PetScene`，不得由 egui 绘制器内置宠物特征。禁止恢复 eframe、deferred viewport 或第二套 egui 菜单 UI。
 - 原生菜单无边框、不可缩放、由平台负责层级与失焦关闭；设置页暂由 egui 控制窗承载，有边框、可缩放、保存几何且**始终是普通非置顶窗口**。菜单不得复用设置控制窗。
 - 透明命中不能靠全屏 UI 窗、窗口 RGN 或 `ExtendFrame(-1)` 模拟；Windows 覆盖层使用 DirectComposition，拖动和命中留在平台壳。
 - **铁律**：宠物置顶只跟 prefs；设置窗不跟随置顶，菜单显示期间可以临时处于宠物之上；勿用 owner 或临时取消宠物置顶形成循环。
@@ -40,7 +40,7 @@
 - 对话气泡使用**宿主管理的独立透明工具窗**（逻辑子窗，不是受父客户区裁剪的 `WS_CHILD`）；包只通过后续 `PetFrame` 中性契约描述位置、皮肤、透明度、尾巴与文字，禁止接触 HWND。壳负责屏幕避让、层级、穿透和生命周期，不以频繁扩缩宠物窗代替。
 - i18n：`shell.*` / `pet.<id>.*` / `plugin.<id>.*`；ID：`pet|hud.<组织>.<标识>`。
 - 跨平台编码铁律：平台专属符号必须用**正确且互补**的 cfg 门。macOS 专属项唯一正确的泛化目标是 `#[cfg(not(windows))]`（macOS ⊆ not(windows)，其调用点多在 not(windows) 分支内）；新增平台几何等边界符号（如 `main_display_bounds_px`/`main_display_work_area_px`）时必须为 `platform/fallback.rs`（或对应平台）补齐同签名实现并在 `platform/mod.rs` 按平台 re-export，保证任一平台 `cargo check --workspace --all-targets` 通过、不被其它平台写的代码打破。禁止只加 `#[cfg(target_os = "macos")]` / `#[cfg(windows)]` 而遗漏互补平台的调用点。
-- 原生桌面覆盖层迁移以 `deskhud-engine::overlay` 的平台无关契约为边界；包、插件和引擎契约不得出现 HWND 或任一 OS 专有类型。正式能力以平台后端报告为准，见 [`docs/overlay-migration.md`](../overlay-migration.md)。
+- 后续原生桌面覆盖层以 `deskhud-engine::overlay` 和 `PetScene` 的平台无关契约为边界；包、插件和引擎契约不得出现 HWND 或任一 OS 专有类型。原生实现须等宠物引擎场景协议稳定后再评估。
 
 ## 透明合成边界
 

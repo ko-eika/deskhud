@@ -5,6 +5,8 @@
 
 ## 决策
 
+| 2026-08-27 | 清理原生 UI、平台窗口和插件包旧路线图，宠物引擎改为当前唯一主动路线；第一版运行态使用 `deskhud-egui` 验证 `PetScene`，原生平台后端仅在中性协议稳定后评估 | 避免在引擎核心未稳定前并行维护多套窗口与渲染路径；宠物包先获得统一的跨后端契约 |
+
 | 2026-08-14 | 内置字体收敛为单个 `Inter.ttc`，替换 JetBrains Mono 与 Noto Sans SC；保留旧 prefs 字体 ID 到 Inter 的回退映射 | epaint/egui 当前字体解析链支持 TrueType Collection，Inter 覆盖中英文并显著减少字体文件数量 |
 | 2026-08-14 | 外壳翻译改用根目录 `locales/en.toml` 与 `locales/zh-CN.toml`；`.po/.mo` 支持延期 | TOML 与现有包内 i18n 格式一致，先保持轻量编译与运行时链路 |
 
