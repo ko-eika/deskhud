@@ -38,7 +38,6 @@ pub(super) fn text(key: MessageKey) -> &'static str {
             "Takes effect after you Select and Apply. Third-party pets may monitor keyboard/mouse input and pose privacy or security risks—only install packs from sources you trust."
         }
         MessageKey::SettingsPetWindowSize => "Window",
-        MessageKey::SettingsPetSelected => "In use",
         MessageKey::SettingsPetOptions => "Active pet behavior",
         MessageKey::SettingsPetList => "Pet list",
         MessageKey::SettingsPetConfig => "Pet configuration",
@@ -47,6 +46,8 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         }
         MessageKey::HudSettingsEmpty => "No plugin contributions available.",
         MessageKey::MetaAuthor => "Author",
+        MessageKey::MetaVersion => "Version",
+        MessageKey::MetaEngine => "Engine",
         MessageKey::HudItemsEnabled => "enabled",
         MessageKey::MetaHomepage => "Homepage",
         MessageKey::SettingsLocale => "Language",

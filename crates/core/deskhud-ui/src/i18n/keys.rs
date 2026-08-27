@@ -67,8 +67,6 @@ pub enum MessageKey {
     SettingsPetIntro,
     /// 窗尺寸标签。
     SettingsPetWindowSize,
-    /// 当前选中标记。
-    SettingsPetSelected,
     /// 当前宠物的行为配置区标题。
     SettingsPetOptions,
     /// 宠物选择器卡片标题。
@@ -81,6 +79,10 @@ pub enum MessageKey {
     HudSettingsEmpty,
     /// 元数据：作者前缀。
     MetaAuthor,
+    /// 元数据：版本前缀。
+    MetaVersion,
+    /// 元数据：引擎前缀。
+    MetaEngine,
     /// 「N/M 条开启」后缀。
     HudItemsEnabled,
     /// 主页链接标签。
@@ -184,13 +186,14 @@ impl MessageKey {
         Self::SettingsAboutStack,
         Self::SettingsPetIntro,
         Self::SettingsPetWindowSize,
-        Self::SettingsPetSelected,
         Self::SettingsPetOptions,
         Self::SettingsPetList,
         Self::SettingsPetConfig,
         Self::HudSettingsIntro,
         Self::HudSettingsEmpty,
         Self::MetaAuthor,
+        Self::MetaVersion,
+        Self::MetaEngine,
         Self::HudItemsEnabled,
         Self::MetaHomepage,
         Self::SettingsLocale,

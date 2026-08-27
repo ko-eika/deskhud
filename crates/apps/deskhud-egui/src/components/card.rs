@@ -72,7 +72,7 @@ pub(crate) fn centered_label(
         .map_or(14.0, |font| font.size);
     // Small/Body are both normalized to the user's configured size, so use an
     // explicit scale to keep descriptions visibly subordinate to their labels.
-    let description_size = (body_size * 0.78).max(10.0);
+    let description_size = body_size * 0.78;
     let description_height = description
         .as_ref()
         .map(|_| ui.text_style_height(&egui::TextStyle::Small) * description_size / body_size)
@@ -118,7 +118,13 @@ pub(crate) fn config_row(
 ) {
     let title = title.into();
     let description = description.map(Into::into);
-    let row_height = if description.is_some() { 48.0 } else { 40.0 };
+    let body_height = ui.text_style_height(&egui::TextStyle::Body);
+    let small_height = ui.text_style_height(&egui::TextStyle::Small);
+    let row_height = if description.is_some() {
+        (body_height + small_height + 12.0).max(body_height * 2.6)
+    } else {
+        (body_height + 12.0).max(body_height * 1.9)
+    };
     let width = ui.available_width();
     ui.allocate_ui_with_layout(
         Vec2::new(width, row_height),

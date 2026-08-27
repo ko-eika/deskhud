@@ -263,6 +263,11 @@ impl Viewport {
         self.gl_window.window().set_visible(visible);
         if visible {
             let _ = self.gl_window.window().set_cursor_hittest(true);
+            // A viewport created hidden may not receive an initial redraw on
+            // every window system. Explicitly request the first frame after
+            // showing it so settings cannot appear blank.
+            self.gl_window.window().request_redraw();
+            let _ = self.proxy.send_event(UserEvent::Repaint);
         }
     }
 
@@ -271,6 +276,8 @@ impl Viewport {
         self.gl_window.window().set_visible(visible);
         if visible {
             let _ = self.gl_window.window().set_cursor_hittest(true);
+            self.gl_window.window().request_redraw();
+            let _ = self.proxy.send_event(UserEvent::Repaint);
         }
     }
 

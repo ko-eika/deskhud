@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::components;
+use crate::{components, fonts};
 use deskhud_engine::EngineRegistry;
 use deskhud_ui::{
     AnimationQuality, CatalogStore, FpsLimit, Locale, MessageKey, PowerMode, SettingsCommand,
@@ -25,7 +25,7 @@ pub(super) fn draw(
     let locale = model.draft.locale;
 
     Panel::left("settings_nav")
-        .exact_size(168.0)
+        .exact_size(220.0)
         .resizable(false)
         .frame(
             Frame::NONE
@@ -124,10 +124,12 @@ fn ensure_font_compatible_with_locale(ui: &mut Ui, model: &mut SettingsModel) {
 }
 
 fn draw_navigation(ui: &mut egui::Ui, model: &mut SettingsModel, locale: Locale) {
-    ui.heading(RichText::new(text(model, MessageKey::SettingsTitle)).size(20.0));
+    ui.heading(
+        RichText::new(text(model, MessageKey::SettingsTitle)).font(fonts::scaled_font(ui, 1.43)),
+    );
     ui.label(
         RichText::new(text(model, MessageKey::AppName))
-            .size(12.0)
+            .font(fonts::scaled_font(ui, 0.86))
             .color(Color32::from_gray(165)),
     );
     ui.add_space(22.0);
@@ -147,7 +149,7 @@ fn draw_navigation(ui: &mut egui::Ui, model: &mut SettingsModel, locale: Locale)
 }
 
 fn nav_button(ui: &mut egui::Ui, tab: SettingsTab, selected: bool, label: &str) -> egui::Response {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(144.0, 36.0), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 36.0), Sense::hover());
     let response = ui.interact(rect, ui.id().with(tab.nav_message()), Sense::click());
     let hovered = response.hovered() || ui.rect_contains_pointer(rect);
     if selected {
@@ -171,15 +173,21 @@ fn nav_button(ui: &mut egui::Ui, tab: SettingsTab, selected: bool, label: &str) 
     } else {
         ui.visuals().text_color()
     };
+    let label_font = fonts::scaled_font(ui, 1.0);
+    let display_label = truncate_ui_text(ui, label, label_font.clone(), rect.width() - 54.0);
     draw_nav_icon(ui, rect.left_center() + Vec2::new(18.0, 0.0), tab, color);
     ui.painter().text(
         Pos2::new(rect.left() + 42.0, rect.center().y),
         egui::Align2::LEFT_CENTER,
-        label,
-        egui::FontId::proportional(14.0),
+        display_label.as_str(),
+        label_font,
         color,
     );
-    response
+    if display_label != label {
+        response.on_hover_text(label)
+    } else {
+        response
+    }
 }
 
 fn draw_nav_icon(ui: &egui::Ui, center: Pos2, tab: SettingsTab, color: Color32) {
@@ -226,7 +234,7 @@ fn draw_nav_icon(ui: &egui::Ui, center: Pos2, tab: SettingsTab, color: Color32) 
                 center + Vec2::new(0.0, 0.5),
                 egui::Align2::CENTER_CENTER,
                 "i",
-                egui::FontId::proportional(11.0),
+                fonts::scaled_font(ui, 0.78),
                 color,
             );
         }
@@ -234,7 +242,10 @@ fn draw_nav_icon(ui: &egui::Ui, center: Pos2, tab: SettingsTab, color: Color32) 
 }
 
 fn draw_general(ui: &mut egui::Ui, model: &mut SettingsModel) {
-    ui.heading(RichText::new(text(model, MessageKey::SettingsNavGeneral)).size(24.0));
+    ui.heading(
+        RichText::new(text(model, MessageKey::SettingsNavGeneral))
+            .font(fonts::scaled_font(ui, 1.71)),
+    );
     ui.add_space(18.0);
     components::config_card(
         ui,
@@ -282,7 +293,10 @@ fn draw_general(ui: &mut egui::Ui, model: &mut SettingsModel) {
 }
 
 fn draw_performance(ui: &mut egui::Ui, model: &mut SettingsModel) {
-    ui.heading(RichText::new(text(model, MessageKey::SettingsNavPerformance)).size(24.0));
+    ui.heading(
+        RichText::new(text(model, MessageKey::SettingsNavPerformance))
+            .font(fonts::scaled_font(ui, 1.71)),
+    );
     ui.add_space(8.0);
     ui.label(
         RichText::new(text(model, MessageKey::SettingsPerformanceIntro))
@@ -436,7 +450,9 @@ fn draw_pet(
     catalogs: &CatalogStore,
     model: &mut SettingsModel,
 ) {
-    ui.heading(RichText::new(text(model, MessageKey::SettingsNavPet)).size(24.0));
+    ui.heading(
+        RichText::new(text(model, MessageKey::SettingsNavPet)).font(fonts::scaled_font(ui, 1.71)),
+    );
     // Match the standard settings page title → description rhythm.
     ui.add_space(8.0);
     ui.label(
@@ -459,7 +475,10 @@ fn draw_pet(
         ui.add_space(12.0);
         match mode {
             deskhud_ui::PetPickerMode::Grid => {
-                let card_layout = deskhud_ui::pet_card_layout(ui.available_width());
+                let card_layout = deskhud_ui::pet_card_layout_with_font(
+                    ui.available_width(),
+                    fonts::base_size(ui),
+                );
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
                     for info in &infos {
@@ -526,21 +545,20 @@ fn draw_pet(
                     option.description,
                 );
                 let mut changed = false;
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label(RichText::new(label).strong());
-                        ui.label(
-                            RichText::new(description)
-                                .small()
-                                .color(ui.visuals().weak_text_color()),
-                        );
-                    });
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                components::config_row(
+                    ui,
+                    RichText::new(label).strong(),
+                    Some(
+                        RichText::new(description)
+                            .small()
+                            .color(ui.visuals().weak_text_color()),
+                    ),
+                    |ui| {
                         let (rect, _) =
                             ui.allocate_exact_size(Vec2::new(42.0, 24.0), Sense::hover());
                         changed = components::toggle_switch(ui, rect, &mut enabled).changed();
-                    });
-                });
+                    },
+                );
                 if changed {
                     model.draft.pet.set_option(&active_id, option.key, enabled);
                 }
@@ -726,22 +744,6 @@ fn draw_pet_choice(
         egui::FontId::proportional(small_size * 0.9),
         ui.visuals().weak_text_color(),
     );
-    if selected {
-        ui.painter().text(
-            egui::pos2(
-                rect.right() - 14.0,
-                if list {
-                    rect.center().y
-                } else {
-                    rect.bottom() - 14.0
-                },
-            ),
-            egui::Align2::RIGHT_CENTER,
-            text(model, MessageKey::SettingsPetSelected),
-            egui::FontId::proportional(small_size),
-            ui.visuals().selection.stroke.color,
-        );
-    }
     if response.clicked() {
         let picker_mode = model.draft.pet.picker_mode;
         deskhud_ui::apply_pet_selection(&mut model.draft, info.id.to_string(), picker_mode);
@@ -759,7 +761,8 @@ fn draw_pet_grid_card(
     info: &deskhud_engine::PetKindInfo,
     layout: deskhud_ui::PetCardLayout,
 ) {
-    const PAD: f32 = 12.0;
+    let scale = layout.content_scale;
+    let pad = 12.0 * scale;
     let selected = model.draft.pet.kind == info.id;
     let (rect, response) = ui.allocate_exact_size(
         Vec2::new(layout.card_width, layout.card_height),
@@ -779,14 +782,14 @@ fn draw_pet_grid_card(
         "description",
         info.description,
     );
-    let response = pet_tooltip(response, info, &name, &description);
+    let response = pet_tooltip(response, info, &name, &description, model.draft.locale);
     let draw = rect.shrink(1.0);
     let fill = if selected {
-        ui.visuals().selection.bg_fill.gamma_multiply(0.28)
+        ui.visuals().selection.bg_fill.gamma_multiply(0.18)
     } else if response.hovered() {
         ui.visuals().widgets.hovered.bg_fill
     } else {
-        ui.visuals().faint_bg_color
+        ui.visuals().extreme_bg_color
     };
     let stroke = if selected {
         Stroke::new(
@@ -801,68 +804,72 @@ fn draw_pet_grid_card(
         Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color)
     };
     ui.painter()
-        .rect(draw, 12.0, fill, stroke, egui::StrokeKind::Inside);
+        .rect(draw, 12.0 * scale, fill, stroke, egui::StrokeKind::Inside);
 
     let stage = egui::Rect::from_center_size(
         egui::pos2(
             draw.center().x,
-            draw.top() + PAD + layout.preview_side * 0.5,
+            draw.top() + pad + layout.preview_side * 0.5,
         ),
         Vec2::splat(layout.preview_side),
     );
-    ui.painter()
-        .rect_filled(stage, 10.0, ui.visuals().extreme_bg_color);
+    let preview = pet_preview_rect(stage);
+    paint_preview_frame(ui, preview, scale);
     if let Some(texture) = pet_preview_texture(ui, info) {
-        paint_preview_cover(ui, stage, &texture);
+        paint_preview_contain(ui, preview, &texture);
     }
 
-    let body = ui.text_style_height(&egui::TextStyle::Body);
-    let small = ui.text_style_height(&egui::TextStyle::Small);
-    let left = draw.left() + PAD;
-    let top = stage.bottom() + PAD;
+    let title = ui.text_style_height(&egui::TextStyle::Body) * scale * 1.08;
+    let small = ui.text_style_height(&egui::TextStyle::Small) * scale;
+    // Use a more breathable baseline gap inside the bottom information group;
+    // it still scales with the rest of the card content.
+    let line_gap = 8.0 * scale;
+    let left = draw.left() + pad;
+    // Keep the information group bottom-anchored. This makes the preview and
+    // the text two stable vertical groups instead of a chain whose gaps vary
+    // with the amount of text in each card.
+    let description_bottom = draw.bottom() - pad;
+    let metadata_bottom = description_bottom - small - line_gap;
+    let title_bottom = metadata_bottom - small - line_gap;
     ui.painter().text(
-        egui::pos2(left, top),
-        egui::Align2::LEFT_TOP,
+        egui::pos2(left, title_bottom),
+        egui::Align2::LEFT_BOTTOM,
         truncate_ui_text(
             ui,
             &name,
-            egui::FontId::proportional(body),
-            draw.width() - PAD * 2.0,
+            egui::FontId::proportional(title),
+            draw.width() - pad * 2.0,
         ),
-        egui::FontId::proportional(body),
+        egui::FontId::proportional(title),
         ui.visuals().text_color(),
     );
     ui.painter().text(
-        egui::pos2(left, top + body + 4.0),
-        egui::Align2::LEFT_TOP,
+        egui::pos2(left, metadata_bottom),
+        egui::Align2::LEFT_BOTTOM,
+        truncate_ui_text(
+            ui,
+            &format!(
+                "{}  ·  {:.0}×{:.0}",
+                info.author, info.window_width, info.window_height
+            ),
+            egui::FontId::proportional(small),
+            draw.width() - pad * 2.0,
+        ),
+        egui::FontId::proportional(small),
+        ui.visuals().weak_text_color(),
+    );
+    ui.painter().text(
+        egui::pos2(left, description_bottom),
+        egui::Align2::LEFT_BOTTOM,
         truncate_ui_text(
             ui,
             &description,
             egui::FontId::proportional(small),
-            draw.width() - PAD * 2.0,
+            draw.width() - pad * 2.0,
         ),
         egui::FontId::proportional(small),
         ui.visuals().weak_text_color(),
     );
-    ui.painter().text(
-        egui::pos2(left, draw.bottom() - PAD),
-        egui::Align2::LEFT_BOTTOM,
-        format!(
-            "{}  ·  {:.0}×{:.0}",
-            info.author, info.window_width, info.window_height
-        ),
-        egui::FontId::proportional(small),
-        ui.visuals().weak_text_color(),
-    );
-    if selected {
-        ui.painter().text(
-            egui::pos2(draw.right() - PAD, draw.bottom() - PAD),
-            egui::Align2::RIGHT_BOTTOM,
-            text(model, MessageKey::SettingsPetSelected),
-            egui::FontId::proportional(small),
-            ui.visuals().selection.stroke.color,
-        );
-    }
     if response.clicked() {
         let mode = model.draft.pet.picker_mode;
         deskhud_ui::apply_pet_selection(&mut model.draft, info.id.to_string(), mode);
@@ -883,9 +890,11 @@ fn draw_pet_list_row(
     let selected = model.draft.pet.kind == info.id;
     let body = ui.text_style_height(&egui::TextStyle::Body);
     let small = ui.text_style_height(&egui::TextStyle::Small);
-    const LINE_GAP: f32 = 4.0;
-    let text_block_height = body + small * 3.0 + LINE_GAP * 3.0;
-    let thumb_side = text_block_height.max(72.0);
+    const LINE_GAP: f32 = 8.0;
+    let text_block_height = body + small * 2.0 + LINE_GAP * 2.0;
+    // The preview square exactly matches the complete three-line text group:
+    // title, metadata, description, plus the two scaled vertical gaps.
+    let thumb_side = text_block_height;
     let (rect, response) = ui.allocate_exact_size(
         Vec2::new(ui.available_width(), thumb_side + PAD * 2.0),
         Sense::click(),
@@ -904,14 +913,14 @@ fn draw_pet_list_row(
         "description",
         info.description,
     );
-    let response = pet_tooltip(response, info, &name, &description);
+    let response = pet_tooltip(response, info, &name, &description, model.draft.locale);
     let draw = rect.shrink(0.5);
     let fill = if selected {
-        ui.visuals().selection.bg_fill.gamma_multiply(0.28)
+        ui.visuals().selection.bg_fill.gamma_multiply(0.18)
     } else if response.hovered() {
         ui.visuals().widgets.hovered.bg_fill
     } else {
-        ui.visuals().faint_bg_color
+        ui.visuals().extreme_bg_color
     };
     let stroke = if selected {
         Stroke::new(
@@ -928,13 +937,15 @@ fn draw_pet_list_row(
     ui.painter()
         .rect(draw, 10.0, fill, stroke, egui::StrokeKind::Inside);
     let thumb = egui::Rect::from_min_size(draw.min + Vec2::splat(PAD), Vec2::splat(thumb_side));
-    ui.painter()
-        .rect_filled(thumb, 8.0, ui.visuals().extreme_bg_color);
+    let preview = pet_preview_rect(thumb);
+    paint_preview_frame(ui, preview, 1.0);
     if let Some(texture) = pet_preview_texture(ui, info) {
-        paint_preview_cover(ui, thumb, &texture);
+        paint_preview_contain(ui, preview, &texture);
     }
     let left = thumb.right() + PAD;
-    let top = thumb.top() + ((thumb_side - text_block_height) * 0.5).max(0.0);
+    let top = thumb.top();
+    let description_bottom = thumb.bottom();
+    let metadata_top = top + body + LINE_GAP;
     ui.painter().text(
         egui::pos2(left, top),
         egui::Align2::LEFT_TOP,
@@ -948,8 +959,23 @@ fn draw_pet_list_row(
         ui.visuals().text_color(),
     );
     ui.painter().text(
-        egui::pos2(left, top + body + LINE_GAP),
+        egui::pos2(left, metadata_top),
         egui::Align2::LEFT_TOP,
+        truncate_ui_text(
+            ui,
+            &format!(
+                "{}  ·  {:.0}×{:.0}",
+                info.author, info.window_width, info.window_height
+            ),
+            egui::FontId::proportional(small),
+            draw.right() - left - PAD,
+        ),
+        egui::FontId::proportional(small),
+        ui.visuals().weak_text_color(),
+    );
+    ui.painter().text(
+        egui::pos2(left, description_bottom),
+        egui::Align2::LEFT_BOTTOM,
         truncate_ui_text(
             ui,
             &description,
@@ -959,29 +985,6 @@ fn draw_pet_list_row(
         egui::FontId::proportional(small),
         ui.visuals().weak_text_color(),
     );
-    ui.painter().text(
-        egui::pos2(left, top + body + small + LINE_GAP * 2.0),
-        egui::Align2::LEFT_TOP,
-        info.author,
-        egui::FontId::proportional(small),
-        ui.visuals().weak_text_color(),
-    );
-    ui.painter().text(
-        egui::pos2(left, top + body + small * 2.0 + LINE_GAP * 3.0),
-        egui::Align2::LEFT_TOP,
-        format!("{:.0}×{:.0}", info.window_width, info.window_height),
-        egui::FontId::proportional(small),
-        ui.visuals().weak_text_color(),
-    );
-    if selected {
-        ui.painter().text(
-            egui::pos2(draw.right() - PAD, draw.center().y),
-            egui::Align2::RIGHT_CENTER,
-            text(model, MessageKey::SettingsPetSelected),
-            egui::FontId::proportional(small),
-            ui.visuals().selection.stroke.color,
-        );
-    }
     if response.clicked() {
         let mode = model.draft.pet.picker_mode;
         deskhud_ui::apply_pet_selection(&mut model.draft, info.id.to_string(), mode);
@@ -1009,12 +1012,28 @@ fn pet_preview_texture(ui: &Ui, info: &deskhud_engine::PetKindInfo) -> Option<eg
     Some(texture)
 }
 
-fn paint_preview_cover(ui: &Ui, stage: egui::Rect, texture: &egui::TextureHandle) {
+fn pet_preview_rect(container: egui::Rect) -> egui::Rect {
+    // Keep the preview window identical for every card. The pet artwork is
+    // fitted inside it using its own standard window ratio below.
+    container
+}
+
+fn paint_preview_frame(ui: &Ui, preview: egui::Rect, scale: f32) {
+    ui.painter().rect(
+        preview,
+        CornerRadius::same((10.0 * scale).round() as u8),
+        ui.visuals().faint_bg_color,
+        Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color),
+        egui::StrokeKind::Inside,
+    );
+}
+
+fn paint_preview_contain(ui: &Ui, stage: egui::Rect, texture: &egui::TextureHandle) {
     let size = texture.size_vec2();
     if size.x <= 0.0 || size.y <= 0.0 {
         return;
     }
-    let scale = (stage.width() / size.x).max(stage.height() / size.y);
+    let scale = (stage.width() / size.x).min(stage.height() / size.y);
     let image_rect = egui::Rect::from_center_size(stage.center(), size * scale);
     ui.painter().with_clip_rect(stage).image(
         texture.id(),
@@ -1074,52 +1093,84 @@ fn pet_tooltip(
     info: &deskhud_engine::PetKindInfo,
     name: &str,
     description: &str,
+    locale: Locale,
 ) -> egui::Response {
     let name = name.to_owned();
     let description = description.to_owned();
     response.on_hover_ui(|ui| {
-        ui.set_max_width(300.0);
+        let base = fonts::base_size(ui);
+        let scale = (base / 14.0).clamp(0.8, 1.35);
+        let max_width = 320.0 * scale;
+        ui.set_min_width(250.0 * scale);
+        ui.set_max_width(max_width);
         ui.scope(|ui| {
-            ui.style_mut()
-                .text_styles
-                .insert(egui::TextStyle::Body, egui::FontId::proportional(12.0));
-            ui.style_mut()
-                .text_styles
-                .insert(egui::TextStyle::Small, egui::FontId::proportional(11.0));
-            ui.label(RichText::new(&name).size(14.0).strong());
-            ui.add_space(4.0);
+            ui.spacing_mut().item_spacing.y = fonts::scaled_size(ui, 0.24);
+            ui.spacing_mut().item_spacing.x = fonts::scaled_size(ui, 0.55);
+            ui.label(
+                RichText::new(&name)
+                    .font(fonts::scaled_font(ui, 1.15))
+                    .strong(),
+            );
+            ui.add_space(fonts::scaled_size(ui, 0.25));
             ui.label(
                 RichText::new(&description)
-                    .size(12.5)
+                    .font(fonts::scaled_font(ui, 0.9))
                     .color(ui.visuals().weak_text_color()),
             );
-            ui.add_space(8.0);
+            ui.add_space(fonts::scaled_size(ui, 0.55));
             ui.separator();
-            ui.add_space(6.0);
-            ui.label(RichText::new(info.id).small());
-            ui.label(
-                RichText::new(format!("{}  ·  v{}", info.author, info.version))
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-            );
-            ui.label(
-                RichText::new(format!(
-                    "{}  ·  {:.0}×{:.0}",
-                    info.engine, info.window_width, info.window_height
-                ))
-                .small()
-                .color(ui.visuals().weak_text_color()),
+            ui.add_space(fonts::scaled_size(ui, 0.4));
+            ui.label(RichText::new(info.id).font(fonts::scaled_font(ui, 0.86)));
+            tooltip_meta_row(ui, locale, MessageKey::MetaAuthor, info.author);
+            tooltip_meta_row(ui, locale, MessageKey::MetaVersion, info.version);
+            tooltip_meta_row(ui, locale, MessageKey::MetaEngine, info.engine);
+            tooltip_meta_row(
+                ui,
+                locale,
+                MessageKey::SettingsPetWindowSize,
+                &format!("{:.0}×{:.0}", info.window_width, info.window_height),
             );
             if let Some(homepage) = info.homepage {
-                ui.add_space(2.0);
-                ui.hyperlink_to("↗", homepage).on_hover_text(homepage);
+                ui.add_space(fonts::scaled_size(ui, 0.15));
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(text_for_locale(locale, MessageKey::MetaHomepage))
+                            .font(fonts::scaled_font(ui, 0.82))
+                            .color(ui.visuals().weak_text_color()),
+                    );
+                    let link_font = fonts::scaled_font(ui, 0.86);
+                    let link = truncate_ui_text(
+                        ui,
+                        homepage,
+                        link_font.clone(),
+                        (max_width - fonts::scaled_size(ui, 5.0)).max(80.0),
+                    );
+                    ui.add(egui::Hyperlink::from_label_and_url(
+                        RichText::new(link).font(link_font),
+                        homepage,
+                    ))
+                    .on_hover_text(homepage);
+                });
             }
         });
     })
 }
 
+fn tooltip_meta_row(ui: &mut Ui, locale: Locale, key: MessageKey, value: &str) {
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(text_for_locale(locale, key))
+                .font(fonts::scaled_font(ui, 0.82))
+                .color(ui.visuals().weak_text_color()),
+        );
+        ui.label(RichText::new(value).font(fonts::scaled_font(ui, 0.86)));
+    });
+}
+
 fn draw_hud(ui: &mut egui::Ui, registry: &Arc<EngineRegistry>, model: &mut SettingsModel) {
-    ui.heading(RichText::new(text(model, MessageKey::SettingsNavHud)).size(24.0));
+    ui.heading(
+        RichText::new(text(model, MessageKey::SettingsNavHud)).font(fonts::scaled_font(ui, 1.71)),
+    );
     ui.add_space(8.0);
     ui.label(
         RichText::new(text(model, MessageKey::HudSettingsIntro))
@@ -1131,7 +1182,7 @@ fn draw_hud(ui: &mut egui::Ui, registry: &Arc<EngineRegistry>, model: &mut Setti
     components::switch_group(
         ui,
         "hud.master",
-        RichText::new(text(model, MessageKey::HudMasterEnable)).size(15.0),
+        RichText::new(text(model, MessageKey::HudMasterEnable)).font(fonts::scaled_font(ui, 1.07)),
         Some(
             RichText::new(if model.draft.hud.is_master_enabled() {
                 text(model, MessageKey::HudMasterEnableHint)
@@ -1163,7 +1214,7 @@ fn draw_hud(ui: &mut egui::Ui, registry: &Arc<EngineRegistry>, model: &mut Setti
                 components::switch_group(
                     ui,
                     egui::Id::new(("hud.plugin", plugin_id)),
-                    RichText::new(plugin.display_name).size(14.0),
+                    RichText::new(plugin.display_name).font(fonts::scaled_font(ui, 1.0)),
                     Some(RichText::new(format!("{} · {}", plugin.author, plugin.version)).small()),
                     &mut plugin_enabled,
                     |ui| {
@@ -1209,12 +1260,12 @@ fn draw_hud(ui: &mut egui::Ui, registry: &Arc<EngineRegistry>, model: &mut Setti
 
 fn draw_font_section(ui: &mut egui::Ui, model: &mut SettingsModel) {
     let preview_text = text(model, MessageKey::SettingsUiFontPreview);
-    let preview_size = model.draft.shell.ui_font_size.clamp(11.0, 22.0);
+    let preview_size = fonts::scaled_size(ui, 1.0);
     components::config_card(
         ui,
         Some(
             RichText::new(text(model, MessageKey::SettingsUiFont))
-                .size(16.0)
+                .font(fonts::scaled_font(ui, 1.14))
                 .into(),
         ),
         |ui| {
@@ -1338,7 +1389,7 @@ fn draw_font_section(ui: &mut egui::Ui, model: &mut SettingsModel) {
             );
         },
         Some(Box::new(move |ui: &mut egui::Ui| {
-            ui.label(RichText::new(preview_text).size(preview_size));
+            ui.label(RichText::new(preview_text).font(egui::FontId::proportional(preview_size)));
         })),
     );
 }
@@ -1370,7 +1421,8 @@ fn preferred_default_face(
 
 fn draw_placeholder(ui: &mut egui::Ui, model: &SettingsModel) {
     ui.heading(
-        RichText::new(text_for_locale(model.draft.locale, model.tab.nav_message())).size(24.0),
+        RichText::new(text_for_locale(model.draft.locale, model.tab.nav_message()))
+            .font(fonts::scaled_font(ui, 1.71)),
     );
     ui.add_space(18.0);
     let intro = match model.tab {
@@ -1446,7 +1498,7 @@ fn footer_button(
     fill: Color32,
     _hover_fill: Color32,
 ) -> egui::Response {
-    let button = egui::Button::new(RichText::new(label).size(14.0))
+    let button = egui::Button::new(RichText::new(label).font(fonts::scaled_font(ui, 1.0)))
         .min_size(Vec2::new(88.0, 32.0))
         .fill(fill)
         .corner_radius(CornerRadius::same(8));

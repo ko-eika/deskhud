@@ -36,7 +36,6 @@ pub(super) fn text(key: MessageKey) -> &'static str {
             "「选择」并「应用」后生效，第三方宠物可能监听键鼠等输入，存在隐私与安全风险，请仅安装可信来源的包。"
         }
         MessageKey::SettingsPetWindowSize => "窗口",
-        MessageKey::SettingsPetSelected => "使用中",
         MessageKey::SettingsPetOptions => "当前宠物行为",
         MessageKey::SettingsPetList => "宠物列表",
         MessageKey::SettingsPetConfig => "宠物配置",
@@ -45,6 +44,8 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         }
         MessageKey::HudSettingsEmpty => "当前没有可配置的插件贡献。",
         MessageKey::MetaAuthor => "作者",
+        MessageKey::MetaVersion => "版本",
+        MessageKey::MetaEngine => "引擎",
         MessageKey::HudItemsEnabled => "条开启",
         MessageKey::MetaHomepage => "主页",
         MessageKey::SettingsLocale => "语言",

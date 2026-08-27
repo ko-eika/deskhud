@@ -75,8 +75,12 @@ pub struct PetCardLayout {
     pub card_width: f32,
     /// Card height.
     pub card_height: f32,
-    /// Preview square side length.
+    /// Preview area side length. The preview is always square.
     pub preview_side: f32,
+    /// Preview area side length, kept for the renderer's layout contract.
+    pub preview_height: f32,
+    /// Shared scale for all content inside a grid card.
+    pub content_scale: f32,
 }
 
 /// Product information displayed by an about page.
@@ -94,34 +98,46 @@ pub struct AboutInfo {
     pub homepage: String,
 }
 
-/// Calculates pet picker card geometry without UI toolkit types.
+/// Calculates pet picker card geometry using the configured base font size.
 pub fn pet_card_layout(available_width: f32) -> PetCardLayout {
+    pet_card_layout_with_font(available_width, 14.0)
+}
+
+/// Calculates pet picker card geometry with typography-aware content spacing.
+pub fn pet_card_layout_with_font(available_width: f32, base_font_size: f32) -> PetCardLayout {
     let gap = 12.0;
-    let min = 156.0;
     let max = 280.0;
     let pad = 12.0;
-    let text = 78.0;
-    let avail = available_width.max(min);
-    let mut columns = 1;
-    for count in 2..=5 {
-        if (avail - gap * (count - 1) as f32) / (count as f32) < min {
-            break;
-        }
-        columns = count;
-    }
-    let raw = (avail - gap * (columns - 1) as f32) / columns as f32;
-    let card_width = if columns == 1 {
-        raw.clamp(min, max)
-    } else {
-        raw.max(min)
-    };
-    let preview_side = (card_width - 2.0 - pad * 2.0).max(96.0);
-    let card_height = 2.0 + pad + preview_side + pad + text + pad;
+    let base_font_size = base_font_size.max(8.0);
+    // Grid mode is intentionally a five-column layout. Cards may become
+    // narrower with the window, but they must remain in the same row.
+    let columns = 5;
+    let raw = (available_width.max(gap * (columns - 1) as f32 + 1.0) - gap * (columns - 1) as f32)
+        / columns as f32;
+    let card_width = raw.clamp(1.0, max);
+    // Keep the outer card at a strict poker-card ratio. The available room
+    // and the configured base font both contribute to the scale of everything
+    // inside it, so a large font cannot stretch the card or push text out.
+    let width_scale = card_width / 220.0;
+    let font_scale = 14.0 / base_font_size;
+    let content_scale = width_scale.min(font_scale).clamp(0.25, 1.0);
+    // Use the familiar 5:7 playing-card ratio. The card dimensions remain
+    // derived from its width, so resizing the settings window cannot distort
+    // the card shape or make adjacent cards overlap.
+    let card_height = card_width * 7.0 / 5.0;
+    let scaled_pad = pad * content_scale;
+    let content_width = (card_width - 2.0 - scaled_pad * 2.0).max(1.0);
+    // The preview group is top-anchored. The information group is
+    // bottom-anchored by the renderer, with the remaining space between them.
+    let preview_side = content_width;
+    let preview_height = preview_side;
     PetCardLayout {
         columns,
         card_width,
         card_height,
         preview_side,
+        preview_height,
+        content_scale,
     }
 }
 
@@ -375,8 +391,17 @@ mod tests {
     fn pet_card_layout_has_minimums() {
         let layout = pet_card_layout(900.0);
         assert!(layout.columns >= 1);
-        assert!(layout.card_width >= 156.0);
+        assert_eq!(layout.columns, 5);
+        assert!(layout.card_width > 0.0);
         assert!(layout.preview_side >= 96.0);
+    }
+
+    #[test]
+    fn pet_card_layout_keeps_poker_ratio_when_font_grows() {
+        let layout = pet_card_layout_with_font(400.0, 20.0);
+        assert!((layout.card_height / layout.card_width - 1.4).abs() < 0.001);
+        assert!(layout.content_scale < 1.0);
+        assert!((layout.preview_side - layout.preview_height).abs() < 0.001);
     }
 
     #[test]

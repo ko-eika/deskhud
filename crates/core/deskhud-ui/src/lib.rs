@@ -30,7 +30,7 @@ pub use prefs::{UiPreferences, migrate_pet_id};
 pub use settings::{
     AboutInfo, PetCardLayout, SettingsCommand, SettingsEffect, SettingsModel, SettingsTab,
     apply_general_preferences, apply_graphics_preferences, apply_pet_selection, draft_is_dirty,
-    pet_card_layout,
+    pet_card_layout, pet_card_layout_with_font,
 };
 pub use shell::{
     AnimationQuality, DEFAULT_UI_FONT_FAMILY, DEFAULT_UI_FONT_ID, DEFAULT_UI_FONT_SIZE,

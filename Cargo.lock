@@ -306,7 +306,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
 name = "deskhud-egui"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "deskhud-engine",
  "deskhud-runtime",
@@ -325,11 +325,11 @@ dependencies = [
 
 [[package]]
 name = "deskhud-engine"
-version = "0.6.17"
+version = "0.6.18"
 
 [[package]]
 name = "deskhud-native"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "deskhud-platform-linux-gtk",
  "deskhud-platform-macos",
@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "deskhud-package"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "serde",
  "thiserror 2.0.20",
@@ -348,11 +348,11 @@ dependencies = [
 
 [[package]]
 name = "deskhud-platform"
-version = "0.6.17"
+version = "0.6.18"
 
 [[package]]
 name = "deskhud-platform-linux-gtk"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "deskhud-platform",
  "winit",
@@ -360,7 +360,7 @@ dependencies = [
 
 [[package]]
 name = "deskhud-platform-macos"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "deskhud-platform",
  "winit",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "deskhud-platform-windows"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "deskhud-platform",
  "windows",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "deskhud-runtime"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "deskhud-engine",
  "deskhud-package",
@@ -390,11 +390,11 @@ dependencies = [
 
 [[package]]
 name = "deskhud-sdk"
-version = "0.6.17"
+version = "0.6.18"
 
 [[package]]
 name = "deskhud-ui"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "serde",
  "thiserror 2.0.20",
@@ -405,7 +405,7 @@ dependencies = [
 
 [[package]]
 name = "deskhud-xtask"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "deskhud-package",
 ]
@@ -903,7 +903,7 @@ checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 
 [[package]]
 name = "hud-deskhud-demo"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "deskhud-engine",
 ]
@@ -1649,14 +1649,14 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pet-deskhud-blob"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "deskhud-engine",
 ]
 
 [[package]]
 name = "pet-deskhud-specs"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "deskhud-engine",
 ]

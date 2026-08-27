@@ -172,6 +172,25 @@ pub(crate) fn configure_context_for(context: &egui::Context, font_id: &str, size
     }
 }
 
+/// Returns the configured base UI size used by all settings typography.
+pub(crate) fn base_size(ui: &egui::Ui) -> f32 {
+    ui.style()
+        .text_styles
+        .get(&egui::TextStyle::Body)
+        .map_or(14.0, |font| font.size)
+        .max(1.0)
+}
+
+/// Scales a settings font size from the configured base body size.
+pub(crate) fn scaled_size(ui: &egui::Ui, ratio: f32) -> f32 {
+    base_size(ui) * ratio
+}
+
+/// Builds a proportional settings font from the configured base body size.
+pub(crate) fn scaled_font(ui: &egui::Ui, ratio: f32) -> egui::FontId {
+    egui::FontId::proportional(scaled_size(ui, ratio))
+}
+
 /// Adds one lazily loaded CJK-capable fallback after the user's selected face.
 /// egui then keeps the selected font for normal text and only falls back when a
 /// glyph is missing, such as the Chinese locale name in the language picker.

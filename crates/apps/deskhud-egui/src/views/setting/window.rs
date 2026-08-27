@@ -5,6 +5,7 @@ use deskhud_engine::EngineRegistry;
 use deskhud_ui::{CatalogStore, SettingsModel, UiPreferences};
 use std::sync::Arc;
 use winit::{
+    dpi::PhysicalPosition,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoopProxy},
     window::WindowId,
@@ -59,7 +60,13 @@ impl SettingsWindow {
     pub(crate) fn show(&mut self, prefs: &UiPreferences) {
         // 显示由渲染线程发起，具体的原生窗口调用会转回 winit 线程。
         self.model.open(prefs);
+        // A decorated window may remain minimized while its taskbar button is
+        // still present. Restore it before making it active so opening Settings
+        // always produces a visible window.
+        self.viewport.window().set_minimized(false);
+        self.restore_if_offscreen();
         self.viewport.set_visible(true);
+        self.viewport.window().focus_window();
     }
 
     /// 隐藏 Settings 窗口。
@@ -140,5 +147,41 @@ impl SettingsWindow {
     /// 释放 Settings 的 OpenGL 资源。
     pub(crate) fn destroy(&mut self) {
         self.viewport.destroy();
+    }
+
+    /// Moves a previously saved settings window back onto the current monitor
+    /// when its old monitor was disconnected or its saved position is invalid.
+    fn restore_if_offscreen(&self) {
+        let window = self.viewport.window();
+        let Some(monitor) = window.current_monitor() else {
+            return;
+        };
+        let Ok(position) = window.outer_position() else {
+            return;
+        };
+        let monitor_position = monitor.position();
+        let monitor_size = monitor.size();
+        let window_size = window.outer_size();
+        let left = i64::from(position.x);
+        let top = i64::from(position.y);
+        let right = left + i64::from(window_size.width);
+        let bottom = top + i64::from(window_size.height);
+        let monitor_left = i64::from(monitor_position.x);
+        let monitor_top = i64::from(monitor_position.y);
+        let monitor_right = monitor_left + i64::from(monitor_size.width);
+        let monitor_bottom = monitor_top + i64::from(monitor_size.height);
+        let visible = right > monitor_left
+            && left < monitor_right
+            && bottom > monitor_top
+            && top < monitor_bottom;
+        if visible {
+            return;
+        }
+        let x =
+            monitor_position.x + (monitor_size.width.saturating_sub(window_size.width) / 2) as i32;
+        let y = monitor_position.y
+            + (monitor_size.height.saturating_sub(window_size.height) / 2) as i32;
+        self.viewport
+            .request_outer_position(PhysicalPosition::new(x, y));
     }
 }
