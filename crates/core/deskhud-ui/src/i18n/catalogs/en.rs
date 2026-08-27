@@ -44,6 +44,14 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::SettingsPetGlobal => "Global configuration",
         MessageKey::SettingsPetBubbles => "Message bubbles",
         MessageKey::SettingsPetBubblesHint => "Show message bubbles for the pet.",
+        MessageKey::SettingsPetKeyboardInput => "Global keyboard input",
+        MessageKey::SettingsPetKeyboardInputHint => {
+            "Allow the active pet to receive desktop-wide keyboard events."
+        }
+        MessageKey::SettingsPetMouseInput => "Global mouse input",
+        MessageKey::SettingsPetMouseInputHint => {
+            "Allow the active pet to receive desktop-wide mouse events."
+        }
         MessageKey::HudSettingsIntro => {
             "Takes effect after you Enable and Apply. Third-party plugins may read system info or show content and pose privacy or security risks—only enable plugins from sources you trust."
         }

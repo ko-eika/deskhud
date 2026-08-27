@@ -54,6 +54,13 @@ pub enum PetEvent {
         /// 修饰键。
         modifiers: PetModifiers,
     },
+    /// 鼠标滚轮（宠物窗口局部输入；delta 正=向上，负=向下）。
+    MouseWheel {
+        /// 归一化滚轮刻度。
+        delta: i8,
+        /// 修饰键。
+        modifiers: PetModifiers,
+    },
     /// 全局鼠标键按下（不要求指针在宠上；与 `pointer_dir` 同属桌面采样）。
     GlobalMousePressed {
         /// 按键。

@@ -2,7 +2,10 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use deskhud_engine::{PetConfigBag, PetConfigOption, PetKind, PetKindInfo, PetPaint, PetPaintCtx};
+use deskhud_engine::{
+    PetConfigBag, PetConfigOption, PetKind, PetKindInfo, PetPaint, PetPaintCtx, PetScene,
+    SceneItem, SceneNode, Shape, Transform2D,
+};
 
 /// `pet.deskhud.blob`。
 #[derive(Debug)]
@@ -73,21 +76,12 @@ impl PetKind for BuiltinBlobPet {
     }
 
     fn paint(&self, ctx: PetPaintCtx<'_>) -> PetPaint {
-        let hover_pulse = ctx.config.get("hover_pulse", true);
+        let _hover_pulse = ctx.config.get("hover_pulse", true);
         let dock_tint = ctx.config.get("dock_tint", true);
         let drag_react = ctx.config.get("drag_react", true);
 
         let dock = ctx.dock;
         let dragging = ctx.drag.is_dragging();
-        let bounce = if dragging && drag_react {
-            1.06 + (ctx.time_secs * 4.0).sin() as f32 * 0.035
-        } else if hover_pulse && ctx.mouse.hovering {
-            1.03 + (ctx.time_secs * 2.2).sin() as f32 * 0.02
-        } else if dock.is_free() {
-            1.0 + (ctx.time_secs * 1.6).sin() as f32 * 0.02
-        } else {
-            0.96 + (ctx.time_secs * 1.2).sin() as f32 * 0.012
-        };
         let mut body = [0.25, 0.55, 0.95];
         if dock_tint {
             body = match (dock.left, dock.right, dock.top, dock.bottom) {
@@ -107,13 +101,39 @@ impl PetKind for BuiltinBlobPet {
         }
         PetPaint {
             body_rgb: body,
-            eye_rgb: [0.98, 0.98, 0.98],
-            bounce,
-            pupil_offset: [0.0, 0.0],
-            draw_eyes: true,
-            eye_open: 1.0,
             bubble_text: None,
             bubble_style: Default::default(),
+        }
+    }
+
+    fn scene(&self, ctx: PetPaintCtx<'_>) -> PetScene {
+        let paint = self.paint(ctx);
+        let radius = if ctx.drag.active && self.drag_react.load(Ordering::Relaxed) {
+            1.06
+        } else {
+            1.0
+        };
+        PetScene {
+            items: vec![
+                SceneItem {
+                    transform: Transform2D {
+                        scale: [radius, radius],
+                        ..Transform2D::default()
+                    },
+                    z_index: 0,
+                    node: SceneNode::Shape {
+                        shape: Shape::Circle { radius: 1.0 },
+                        color: [paint.body_rgb[0], paint.body_rgb[1], paint.body_rgb[2], 1.0],
+                    },
+                },
+                SceneItem {
+                    transform: Transform2D::default(),
+                    z_index: -1,
+                    node: SceneNode::HitRegion {
+                        shape: Shape::Circle { radius: 1.0 },
+                    },
+                },
+            ],
         }
     }
 }

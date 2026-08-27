@@ -33,6 +33,12 @@ pub struct PetPrefs {
     /// 是否显示聊天气泡。
     #[serde(default = "default_true")]
     pub bubbles: bool,
+    /// 是否允许向宠物包派发桌面全局键盘事件；默认关闭以保护隐私。
+    #[serde(default)]
+    pub global_keyboard_input: bool,
+    /// 是否允许向宠物包派发桌面全局鼠标事件；默认关闭以保护隐私。
+    #[serde(default)]
+    pub global_mouse_input: bool,
     /// 包自定义布尔选项（扁平键，如 `pet.deskhud.specs.follow_eyes`）。
     #[serde(default, flatten)]
     pub options: HashMap<String, bool>,
@@ -79,6 +85,8 @@ impl Default for PetPrefs {
             picker_mode: PetPickerMode::Grid,
             layer: LayerPreference::default(),
             bubbles: true,
+            global_keyboard_input: false,
+            global_mouse_input: false,
             options: HashMap::new(),
         }
     }
@@ -116,6 +124,10 @@ impl PetPrefs {
     pub const GLOBAL_LAYER_KEY: &'static str = "pet.global.layer";
     /// 聊天气泡开关键：`pet.global.bubbles`。
     pub const GLOBAL_BUBBLES_KEY: &'static str = "pet.global.bubbles";
+    /// 全局键盘事件开关键：`pet.global.keyboard_input`。
+    pub const GLOBAL_KEYBOARD_INPUT_KEY: &'static str = "pet.global.keyboard_input";
+    /// 全局鼠标事件开关键：`pet.global.mouse_input`。
+    pub const GLOBAL_MOUSE_INPUT_KEY: &'static str = "pet.global.mouse_input";
 
     /// 规范键：`{pet_id}.{option_key}`。
     pub fn option_key(pet_id: &str, option_key: &str) -> String {
@@ -166,5 +178,17 @@ impl PetPrefs {
             map.insert(key.to_string(), self.get_option(pet_id, key, default));
         }
         map
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PetPrefs;
+
+    #[test]
+    fn global_input_is_opt_in_by_default() {
+        let prefs = PetPrefs::default();
+        assert!(!prefs.global_keyboard_input);
+        assert!(!prefs.global_mouse_input);
     }
 }

@@ -9,6 +9,7 @@ mod components;
 mod fonts;
 mod graphics;
 mod image_decode;
+mod input;
 mod menu;
 mod runtime;
 mod views;

@@ -12,6 +12,7 @@ mod pet_kind;
 mod pet_kind_info;
 mod pet_paint;
 mod pet_theme;
+mod scene;
 
 pub use dock_state::DockState;
 pub use drag_state::DragState;
@@ -25,3 +26,7 @@ pub use pet_kind::{PetConfigBag, PetKind, PetPaintCtx};
 pub use pet_kind_info::PetKindInfo;
 pub use pet_paint::{PetBubbleStyle, PetPaint};
 pub use pet_theme::PetTheme;
+pub use scene::{
+    AssetId, Path, PetScene, SceneColor, SceneItem, SceneNode, SceneValidationError, Shape,
+    Transform2D,
+};

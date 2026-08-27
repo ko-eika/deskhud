@@ -42,6 +42,10 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::SettingsPetGlobal => "全局配置",
         MessageKey::SettingsPetBubbles => "消息气泡",
         MessageKey::SettingsPetBubblesHint => "控制宠物消息气泡的显示。",
+        MessageKey::SettingsPetKeyboardInput => "全局键盘监听",
+        MessageKey::SettingsPetKeyboardInputHint => "允许当前宠物接收桌面范围的键盘事件。",
+        MessageKey::SettingsPetMouseInput => "全局鼠标监听",
+        MessageKey::SettingsPetMouseInputHint => "允许当前宠物接收桌面范围的鼠标事件。",
         MessageKey::HudSettingsIntro => {
             "「开启」并「应用」后生效，第三方插件可能读取系统信息或展示内容，存在隐私与安全风险，请仅启用可信来源的插件。"
         }

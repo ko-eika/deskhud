@@ -567,6 +567,20 @@ fn draw_pet_global(ui: &mut Ui, model: &mut SettingsModel) {
         Some(RichText::new(text(model, MessageKey::SettingsPetBubblesHint)).small()),
         &mut model.draft.pet.bubbles,
     );
+    ui.separator();
+    components::switch_row(
+        ui,
+        RichText::new(text(model, MessageKey::SettingsPetKeyboardInput)),
+        Some(RichText::new(text(model, MessageKey::SettingsPetKeyboardInputHint)).small()),
+        &mut model.draft.pet.global_keyboard_input,
+    );
+    ui.separator();
+    components::switch_row(
+        ui,
+        RichText::new(text(model, MessageKey::SettingsPetMouseInput)),
+        Some(RichText::new(text(model, MessageKey::SettingsPetMouseInputHint)).small()),
+        &mut model.draft.pet.global_mouse_input,
+    );
 }
 
 fn draw_pet_view_modes(ui: &mut Ui, model: &mut SettingsModel) {

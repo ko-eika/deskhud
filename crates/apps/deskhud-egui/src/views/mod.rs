@@ -2,6 +2,7 @@
 //!
 //! 每个视图只负责构建自己的 UI，并通过 [`ViewOutput`] 向运行时返回操作请求。
 
+pub(crate) mod bubble;
 pub(crate) mod hud;
 pub(crate) mod pet;
 pub(crate) mod setting;

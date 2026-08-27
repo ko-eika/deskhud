@@ -189,6 +189,16 @@ pub fn format_prefs_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> S
         PetPrefs::GLOBAL_BUBBLES_KEY,
         prefs.pet.bubbles
     ));
+    out.push_str(&format!(
+        "\"{}\" = {}\n",
+        PetPrefs::GLOBAL_KEYBOARD_INPUT_KEY,
+        prefs.pet.global_keyboard_input
+    ));
+    out.push_str(&format!(
+        "\"{}\" = {}\n",
+        PetPrefs::GLOBAL_MOUSE_INPUT_KEY,
+        prefs.pet.global_mouse_input
+    ));
     if let Some(pos) = prefs.pet.position() {
         out.push_str(&format!(
             "\"pet.global.position\" = [{}, {}]\n",
@@ -336,6 +346,18 @@ fn merge_pet_table(pet: &mut PetPrefs, t: &toml::map::Map<String, toml::Value>) 
         .and_then(|v| v.as_bool())
     {
         pet.bubbles = v;
+    }
+    if let Some(v) = t
+        .get(PetPrefs::GLOBAL_KEYBOARD_INPUT_KEY)
+        .and_then(|v| v.as_bool())
+    {
+        pet.global_keyboard_input = v;
+    }
+    if let Some(v) = t
+        .get(PetPrefs::GLOBAL_MOUSE_INPUT_KEY)
+        .and_then(|v| v.as_bool())
+    {
+        pet.global_mouse_input = v;
     }
     if let Some(v) = t
         .get(PetPrefs::GLOBAL_PICKER_MODE_KEY)

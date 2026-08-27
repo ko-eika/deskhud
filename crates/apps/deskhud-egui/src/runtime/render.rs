@@ -75,6 +75,8 @@ pub(crate) enum RenderCommand {
         window_id: WindowId,
         event: WindowEvent,
     },
+    /// 主线程全局输入监视器转发的宠物事件。
+    PetEvent(deskhud_engine::PetEvent),
     /// 修改普通帧的最大频率；实际渲染仍在渲染线程中串行执行。
     SetFrameRate { frames_per_second: u32 },
     /// 请求渲染一帧，但仍遵守帧率限制。
@@ -123,7 +125,7 @@ fn run(
     receiver: mpsc::Receiver<RenderCommand>,
 ) {
     // 普通重绘采用固定帧率，避免 egui 的 request_repaint_after 或高频输入事件
-    // 造成无界的渲染循环。窗口尺寸变化属于交互反馈，需要走下面的立即重绘路径。
+    // 造成无界的渲染循环。宠物窗口的几何变化属于交互反馈，需要走下面的立即重绘路径。
     let mut frame_duration = Duration::from_nanos(1_000_000_000 / 60);
     let mut next_frame = std::time::Instant::now();
     let mut applied_frame_rate = manager.frame_rate();
@@ -136,10 +138,19 @@ fn run(
             None => receiver.recv_timeout(timeout),
         };
         match command {
+            Ok(RenderCommand::PetEvent(event)) => {
+                manager.dispatch_pet_event(event);
+                if manager.render_all() {
+                    let _ = proxy.send_event(UserEvent::RenderResult(RenderResult::ShouldClose));
+                    break;
+                }
+                next_frame = std::time::Instant::now() + frame_duration;
+            }
             Ok(RenderCommand::WindowEvent { window_id, event }) => {
-                // 调整窗口大小时不能等待普通帧率节流，否则原生窗口的尺寸变化
-                // 可能会领先于设置窗口的内容刷新。Resize 事件处理完后立即补一帧。
-                let mut should_render_immediately = matches!(event, WindowEvent::Resized(_));
+                // 宠物原生拖动产生 Moved。必须立即更新气泡锚点，不能等到下一
+                // 个定时帧；限定为 Pet 窗口，避免气泡自身移动引发重绘循环。
+                let mut should_render_immediately = manager.is_pet_window(window_id)
+                    && matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_));
                 if manager.handle_event(window_id, event) {
                     let _ = proxy.send_event(UserEvent::RenderResult(RenderResult::ShouldClose));
                     break;
@@ -156,7 +167,8 @@ fn run(
                 loop {
                     match receiver.try_recv() {
                         Ok(RenderCommand::WindowEvent { window_id, event }) => {
-                            should_render_immediately |= matches!(event, WindowEvent::Resized(_));
+                            should_render_immediately |= manager.is_pet_window(window_id)
+                                && matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_));
                             if manager.handle_event(window_id, event) {
                                 let _ = proxy
                                     .send_event(UserEvent::RenderResult(RenderResult::ShouldClose));
@@ -176,8 +188,8 @@ fn run(
                         }
                     }
                 }
-                // Resized 事件必须立即绘制：原生窗口已经变了尺寸，如果继续等待
-                // next_frame，设置窗口在拖动时会出现明显的内容滞后。
+                // 宠物几何变化必须立即绘制：原生窗口已经移动或变了尺寸，如果
+                // 继续等待 next_frame，气泡会明显落后于宠物。
                 if should_render_immediately || std::time::Instant::now() >= next_frame {
                     if manager.render_all() {
                         let _ =

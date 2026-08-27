@@ -79,6 +79,14 @@ pub enum MessageKey {
     SettingsPetBubbles,
     /// 消息气泡说明。
     SettingsPetBubblesHint,
+    /// 全局键盘监听开关。
+    SettingsPetKeyboardInput,
+    /// 全局键盘监听说明。
+    SettingsPetKeyboardInputHint,
+    /// 全局鼠标监听开关。
+    SettingsPetMouseInput,
+    /// 全局鼠标监听说明。
+    SettingsPetMouseInputHint,
     /// 插件页说明（含第三方风险提示）。
     HudSettingsIntro,
     /// 尚无插件贡献。
@@ -202,6 +210,10 @@ impl MessageKey {
         Self::SettingsPetGlobal,
         Self::SettingsPetBubbles,
         Self::SettingsPetBubblesHint,
+        Self::SettingsPetKeyboardInput,
+        Self::SettingsPetKeyboardInputHint,
+        Self::SettingsPetMouseInput,
+        Self::SettingsPetMouseInputHint,
         Self::HudSettingsIntro,
         Self::HudSettingsEmpty,
         Self::MetaAuthor,

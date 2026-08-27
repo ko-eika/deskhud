@@ -1,15 +1,18 @@
 //! Pet 原生窗口生命周期。
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use deskhud_engine::{EngineRegistry, PetKind};
+use deskhud_engine::{
+    DockState, EngineRegistry, PetConfigBag, PetEvent, PetKind, PetModifiers, PetMouseButton,
+};
 use deskhud_ui::{LayerPreference, UiPreferences};
 use std::{sync::Arc, time::Instant};
 use winit::{
-    event::WindowEvent,
+    event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoopProxy},
     window::WindowId,
 };
 
+use crate::area;
 use crate::runtime::{
     viewport::{UserEvent, Viewport, WindowLayer},
     viewport_config::ViewportConfig,
@@ -22,6 +25,14 @@ pub(crate) struct PetWindow {
     pet: Arc<dyn PetKind>,
     prefs: UiPreferences,
     started: Instant,
+    last_tick: Instant,
+    last_hit: bool,
+    last_drag: bool,
+    last_dock: DockState,
+    last_scene: deskhud_engine::PetScene,
+    last_global_mouse: crate::input::GlobalMouseButtons,
+    local_modifiers: PetModifiers,
+    last_click: Option<(PetMouseButton, Instant)>,
 }
 
 impl PetWindow {
@@ -55,6 +66,14 @@ impl PetWindow {
             pet,
             prefs,
             started: Instant::now(),
+            last_tick: Instant::now(),
+            last_hit: false,
+            last_drag: false,
+            last_dock: DockState::FREE,
+            last_scene: deskhud_engine::PetScene::default(),
+            last_global_mouse: crate::input::GlobalMouseButtons::default(),
+            local_modifiers: PetModifiers::NONE,
+            last_click: None,
         }
     }
 
@@ -68,9 +87,112 @@ impl PetWindow {
         self.viewport.window_handle()
     }
 
+    pub(crate) fn focus_window(&self) {
+        self.viewport.focus_window();
+    }
+
     /// 将窗口事件交给通用视口处理器。
     pub(crate) fn handle_event(&mut self, event: &WindowEvent) {
+        match event {
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.local_modifiers = PetModifiers {
+                    shift: modifiers.state().shift_key(),
+                    ctrl: modifiers.state().control_key(),
+                    alt: modifiers.state().alt_key(),
+                    meta: modifiers.state().super_key(),
+                };
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let winit::keyboard::PhysicalKey::Code(code) = event.physical_key
+                    && let Some(key) = crate::input::winit_key_to_pet_key(code)
+                {
+                    self.pet.on_event(if event.state == ElementState::Pressed {
+                        PetEvent::KeyPressed {
+                            key,
+                            modifiers: self.local_modifiers,
+                        }
+                    } else {
+                        PetEvent::KeyReleased {
+                            key,
+                            modifiers: self.local_modifiers,
+                        }
+                    });
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let delta = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y.signum() as i8,
+                    MouseScrollDelta::PixelDelta(position) => position.y.signum() as i8,
+                };
+                if delta != 0 {
+                    self.pet.on_event(PetEvent::MouseWheel {
+                        delta,
+                        modifiers: self.local_modifiers,
+                    });
+                }
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let Some(position) = self.viewport.cursor_position() else {
+                    self.viewport.handle_event(event);
+                    return;
+                };
+                let size = self.viewport.window_handle().inner_size();
+                let center = [size.width as f32 / 2.0, size.height as f32 / 2.0];
+                let base = size.width.min(size.height) as f32 * 0.32;
+                let point = [
+                    (position.x as f32 - center[0]) / base.max(1.0),
+                    (position.y as f32 - center[1]) / base.max(1.0),
+                ];
+                if self.last_scene.hit_test(point) {
+                    let pet_button = match button {
+                        MouseButton::Left => Some(PetMouseButton::Primary),
+                        MouseButton::Right | MouseButton::Other(3) => {
+                            Some(PetMouseButton::Secondary)
+                        }
+                        MouseButton::Middle => Some(PetMouseButton::Middle),
+                        _ => None,
+                    };
+                    if let Some(button) = pet_button {
+                        let event = match state {
+                            ElementState::Pressed => PetEvent::MousePressed {
+                                button,
+                                modifiers: self.local_modifiers,
+                            },
+                            ElementState::Released => PetEvent::MouseReleased {
+                                button,
+                                modifiers: self.local_modifiers,
+                            },
+                        };
+                        self.pet.on_event(event);
+                        if *state == ElementState::Released {
+                            let now = Instant::now();
+                            let double_click = self.last_click.is_some_and(|(last, at)| {
+                                last == button && now.duration_since(at).as_millis() <= 500
+                            });
+                            self.pet.on_event(if double_click {
+                                PetEvent::MouseDoubleClicked {
+                                    button,
+                                    modifiers: self.local_modifiers,
+                                }
+                            } else {
+                                PetEvent::MouseClicked {
+                                    button,
+                                    modifiers: self.local_modifiers,
+                                }
+                            });
+                            self.last_click = Some((button, now));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
         self.viewport.handle_event(event);
+    }
+
+    /// 转发已经由平台壳归一化的全局输入事件。
+    pub(crate) fn dispatch_event(&self, event: PetEvent) {
+        self.pet.on_event(event);
     }
 
     /// 返回最近一次鼠标位置对应的屏幕坐标。
@@ -90,6 +212,60 @@ impl PetWindow {
             // 但仍应打开菜单，让合成器决定其最终位置。
             Some(winit::dpi::PhysicalPosition::new(0, 0))
         })
+    }
+
+    pub(crate) fn bubble_content(&self) -> Option<crate::views::bubble::BubbleContent> {
+        if !self.prefs.pet.bubbles {
+            return None;
+        }
+        self.last_scene
+            .items
+            .iter()
+            .find_map(|item| match &item.node {
+                deskhud_engine::SceneNode::Bubble {
+                    text,
+                    color,
+                    background,
+                    corner_radius,
+                } => Some(crate::views::bubble::BubbleContent {
+                    text: text.clone(),
+                    color: *color,
+                    background: *background,
+                    corner_radius: *corner_radius,
+                }),
+                _ => None,
+            })
+    }
+
+    pub(crate) fn bubble_anchor(&self) -> Option<winit::dpi::PhysicalPosition<i32>> {
+        let position = self.viewport.window().outer_position().ok()?;
+        let size = self.viewport.window().outer_size();
+        let center = winit::dpi::PhysicalPosition::new(
+            position.x + size.width as i32 / 2,
+            position.y + size.height as i32 / 2,
+        );
+        // 气泡位置在渲染线程中计算。macOS 上 `NSScreen` 只能在主线程访问，
+        // 因此这里使用 `get_at`：它会回退到 winit 的显示器范围，而不是让
+        // 锚点丢失并把气泡错误地放到屏幕左上角。
+        let Some(area) = area::get_at(self.viewport.window(), center) else {
+            return Some(winit::dpi::PhysicalPosition::new(
+                center.x,
+                position.y - 52_i32 / 2 - 12,
+            ));
+        };
+        let bubble_width = 180_i32;
+        let bubble_height = 52_i32;
+        let min_x = area.position.x + bubble_width / 2;
+        let max_x = area.position.x + area.size.width as i32 - bubble_width / 2;
+        let x = center.x.clamp(min_x, max_x.max(min_x));
+        let above = position.y - bubble_height - 12 >= area.position.y;
+        let y = if above {
+            position.y - bubble_height / 2 - 12
+        } else {
+            (position.y + size.height as i32 + bubble_height / 2 + 12)
+                .min(area.position.y + area.size.height as i32 - bubble_height / 2)
+        };
+        Some(winit::dpi::PhysicalPosition::new(x, y))
     }
 
     /// 应用设置页刚提交的宠物选择、尺寸、层级和位置。
@@ -131,8 +307,35 @@ impl PetWindow {
 
     /// 绘制 Pet 一帧，并返回是否请求退出应用。
     pub(crate) fn render(&mut self) -> bool {
-        self.pet.tick(1.0 / 60.0);
+        let now = Instant::now();
+        let dt = now.duration_since(self.last_tick).as_secs_f32().min(0.25);
+        self.last_tick = now;
+        let dock = self.current_dock();
+        let info = self.pet.info();
+        let options: Vec<(&str, bool)> = self
+            .pet
+            .config_options()
+            .iter()
+            .map(|option| (option.key, option.default))
+            .collect();
+        let config = self.prefs.pet.short_map_for(info.id, &options);
+        self.pet.apply_config(PetConfigBag::new(&config));
+        if dock != self.last_dock {
+            self.pet.on_event(PetEvent::DockChanged {
+                from: self.last_dock,
+                to: dock,
+            });
+            self.last_dock = dock;
+        }
         self.viewport.apply_ui_preferences(&self.prefs);
+        let window = self.viewport.window();
+        let window_size = window.outer_size();
+        let screen_center = window.outer_position().ok().map(|position| {
+            [
+                position.x as f64 + window_size.width as f64 / 2.0,
+                position.y as f64 + window_size.height as f64 / 2.0,
+            ]
+        });
         self.viewport
             .render(|context, raw_input| {
                 view::pet::run(
@@ -141,9 +344,37 @@ impl PetWindow {
                     self.pet.as_ref(),
                     &self.prefs,
                     self.started.elapsed().as_secs_f32(),
+                    &mut self.last_hit,
+                    dock,
+                    &mut self.last_drag,
+                    dt,
+                    &mut self.last_scene,
+                    &mut self.last_global_mouse,
+                    screen_center,
+                    [window_size.width as f64, window_size.height as f64],
+                    self.prefs.pet.global_mouse_input,
                 )
             })
             .should_close
+    }
+
+    fn current_dock(&self) -> deskhud_engine::DockState {
+        let Some(position) = self.viewport.window().outer_position().ok() else {
+            return deskhud_engine::DockState::FREE;
+        };
+        let Some(area) = area::get(self.viewport.window()) else {
+            return deskhud_engine::DockState::FREE;
+        };
+        let size = self.viewport.window().outer_size();
+        let right = position.x + size.width as i32;
+        let bottom = position.y + size.height as i32;
+        let tolerance = 8;
+        deskhud_engine::DockState {
+            left: (position.x - area.position.x).abs() <= tolerance,
+            top: (position.y - area.position.y).abs() <= tolerance,
+            right: (right - (area.position.x + area.size.width as i32)).abs() <= tolerance,
+            bottom: (bottom - (area.position.y + area.size.height as i32)).abs() <= tolerance,
+        }
     }
 
     /// 按正确的 OpenGL 资源顺序销毁 Pet 窗口。

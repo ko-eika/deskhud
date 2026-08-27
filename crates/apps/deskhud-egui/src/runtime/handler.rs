@@ -2,7 +2,11 @@
 //!
 //! 该模块只负责接收 winit 事件，并将窗口相关工作交给窗口管理器。
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use winit::{
     application::ApplicationHandler,
@@ -30,6 +34,11 @@ pub(crate) fn run() {
             proxy,
             renderer: None,
             windows: HashMap::new(),
+            pet_window_id: None,
+            bubble_window_id: None,
+            drag_follow: None,
+            #[cfg(target_os = "macos")]
+            _global_key_monitor: None,
             closing: false,
         })
         .expect("运行事件循环失败");
@@ -42,6 +51,14 @@ struct App {
     renderer: Option<Renderer>,
     /// 主线程持有的窗口句柄，用于执行原生窗口尺寸和位置命令。
     windows: HashMap<WindowId, Arc<winit::window::Window>>,
+    /// 原生拖动时需零等待同步位置的两个窗口。
+    pet_window_id: Option<WindowId>,
+    bubble_window_id: Option<WindowId>,
+    /// 原生系统拖动期间以全局指针预测宠物位置，绕过低频 `Moved` 事件。
+    drag_follow: Option<DragFollow>,
+    /// 必须持有 monitor，才能让 CoreGraphics event tap 在主线程 RunLoop 中持续生效。
+    #[cfg(target_os = "macos")]
+    _global_key_monitor: Option<crate::input::GlobalKeyMonitor>,
     /// 渲染线程已收到退出请求，等待其完成资源释放后再退出事件循环。
     closing: bool,
 }
@@ -54,8 +71,18 @@ impl ApplicationHandler<UserEvent> for App {
             set_macos_dock_icon(false);
             let mut windows = WindowManager::new(self.proxy.clone());
             windows.create_pet(event_loop);
+            let (pet_window_id, bubble_window_id) = windows
+                .pet_and_bubble_window_ids()
+                .expect("pet and bubble viewports must be created together");
             let handles = windows.window_handles();
             self.windows = handles.into_iter().collect();
+            self.pet_window_id = Some(pet_window_id);
+            self.bubble_window_id = Some(bubble_window_id);
+            #[cfg(target_os = "macos")]
+            {
+                let (keyboard, mouse) = windows.global_input_monitoring();
+                self.set_global_input_monitoring(keyboard, mouse);
+            }
             self.renderer = Some(Renderer::start(windows, self.proxy.clone()));
         }
     }
@@ -87,10 +114,24 @@ impl ApplicationHandler<UserEvent> for App {
                     event_loop.exit();
                 }
             }
+            UserEvent::PetEvent(event) => {
+                if let Some(renderer) = &self.renderer {
+                    renderer.send(RenderCommand::PetEvent(event));
+                }
+            }
+            UserEvent::SetGlobalInputMonitoring { keyboard, mouse } => {
+                #[cfg(target_os = "macos")]
+                self.set_global_input_monitoring(keyboard, mouse);
+                #[cfg(not(target_os = "macos"))]
+                let _ = (keyboard, mouse);
+            }
             UserEvent::WindowCommand { window_id, command } => {
-                if let Some(window) = self.windows.get(&window_id) {
+                if let Some(window) = self.windows.get(&window_id).cloned() {
                     match command {
                         WindowCommand::Drag => {
+                            if self.pet_window_id == Some(window_id) {
+                                self.start_drag_follow(&window);
+                            }
                             let _ = window.drag_window();
                         }
                         WindowCommand::Resize { width, height } => {
@@ -121,6 +162,10 @@ impl ApplicationHandler<UserEvent> for App {
             return;
         }
 
+        if let WindowEvent::Moved(position) = &event {
+            self.follow_bubble_on_pet_move(window_id, *position);
+        }
+
         if !self.closing {
             if let Some(renderer) = &self.renderer {
                 renderer.send(RenderCommand::WindowEvent { window_id, event });
@@ -129,8 +174,15 @@ impl ApplicationHandler<UserEvent> for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        // 没有待处理事件时休眠，重绘请求会通过 UserEvent 唤醒事件循环。
-        event_loop.set_control_flow(ControlFlow::Wait);
+        if self.update_drag_follow() {
+            // 拖动期间以 120Hz 采样全局指针，确保独立工具窗紧贴宠物。
+            event_loop.set_control_flow(ControlFlow::WaitUntil(
+                Instant::now() + Duration::from_millis(8),
+            ));
+        } else {
+            // 没有待处理事件时休眠，重绘请求会通过 UserEvent 唤醒事件循环。
+            event_loop.set_control_flow(ControlFlow::Wait);
+        }
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
@@ -139,6 +191,115 @@ impl ApplicationHandler<UserEvent> for App {
             renderer.shutdown();
         }
     }
+}
+
+impl App {
+    #[cfg(target_os = "macos")]
+    fn set_global_input_monitoring(&mut self, keyboard: bool, mouse: bool) {
+        self._global_key_monitor = (keyboard || mouse)
+            .then(|| crate::input::install_global_key_monitor(self.proxy.clone(), keyboard, mouse))
+            .flatten();
+        if (keyboard || mouse) && self._global_key_monitor.is_none() {
+            tracing::warn!(
+                "global input monitor unavailable; grant Accessibility permission to DeskHud"
+            );
+        }
+    }
+
+    /// 原生拖动事件抵达主线程时立即移动工具窗，避免经渲染线程往返一帧。
+    fn follow_bubble_on_pet_move(
+        &self,
+        window_id: WindowId,
+        pet_position: winit::dpi::PhysicalPosition<i32>,
+    ) {
+        if self.pet_window_id != Some(window_id) {
+            return;
+        }
+        self.position_bubble_for_pet(window_id, pet_position);
+    }
+
+    fn start_drag_follow(&mut self, pet: &winit::window::Window) {
+        let (Ok(pet_origin), Some(pointer_origin)) = (
+            pet.outer_position(),
+            crate::input::global_pointer_position(),
+        ) else {
+            return;
+        };
+        self.drag_follow = Some(DragFollow {
+            pet_origin,
+            pointer_origin,
+        });
+    }
+
+    /// 返回拖动跟随是否仍在进行，以便事件循环安排下一次低延迟采样。
+    fn update_drag_follow(&mut self) -> bool {
+        let Some(follow) = self.drag_follow else {
+            return false;
+        };
+        if !crate::input::global_mouse_buttons().primary_down {
+            self.drag_follow = None;
+            return false;
+        }
+        let Some(pointer) = crate::input::global_pointer_position() else {
+            self.drag_follow = None;
+            return false;
+        };
+        let Some(pet_window_id) = self.pet_window_id else {
+            self.drag_follow = None;
+            return false;
+        };
+        let position = winit::dpi::PhysicalPosition::new(
+            follow.pet_origin.x + (pointer[0] - follow.pointer_origin[0]).round() as i32,
+            follow.pet_origin.y + (pointer[1] - follow.pointer_origin[1]).round() as i32,
+        );
+        self.position_bubble_for_pet(pet_window_id, position);
+        true
+    }
+
+    fn position_bubble_for_pet(
+        &self,
+        pet_window_id: WindowId,
+        pet_position: winit::dpi::PhysicalPosition<i32>,
+    ) {
+        let (Some(pet), Some(bubble_id)) =
+            (self.windows.get(&pet_window_id), self.bubble_window_id)
+        else {
+            return;
+        };
+        let Some(bubble) = self.windows.get(&bubble_id) else {
+            return;
+        };
+
+        const BUBBLE_WIDTH: i32 = 180;
+        const BUBBLE_HEIGHT: i32 = 52;
+        const GAP: i32 = 12;
+        let pet_size = pet.outer_size();
+        let center_x = pet_position.x + pet_size.width as i32 / 2;
+        let (area_position, area_size) = pet
+            .current_monitor()
+            .map(|monitor| (monitor.position(), monitor.size()))
+            .unwrap_or((winit::dpi::PhysicalPosition::new(0, 0), pet_size));
+        let min_x = area_position.x + BUBBLE_WIDTH / 2;
+        let max_x = area_position.x + area_size.width as i32 - BUBBLE_WIDTH / 2;
+        let x = center_x.clamp(min_x, max_x.max(min_x));
+        let above = pet_position.y - BUBBLE_HEIGHT - GAP >= area_position.y;
+        let y = if above {
+            pet_position.y - BUBBLE_HEIGHT / 2 - GAP
+        } else {
+            (pet_position.y + pet_size.height as i32 + BUBBLE_HEIGHT / 2 + GAP)
+                .min(area_position.y + area_size.height as i32 - BUBBLE_HEIGHT / 2)
+        };
+        bubble.set_outer_position(winit::dpi::PhysicalPosition::new(
+            x - BUBBLE_WIDTH / 2,
+            y - BUBBLE_HEIGHT / 2,
+        ));
+    }
+}
+
+#[derive(Clone, Copy)]
+struct DragFollow {
+    pet_origin: winit::dpi::PhysicalPosition<i32>,
+    pointer_origin: [f64; 2],
 }
 
 #[cfg(target_os = "macos")]

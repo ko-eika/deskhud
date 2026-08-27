@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use super::{
-    DockState, DragState, MouseState, PetConfigOption, PetEvent, PetKindInfo, PetPaint, PetTheme,
+    DockState, DragState, MouseState, PetConfigOption, PetEvent, PetKindInfo, PetPaint, PetScene,
+    PetTheme, SceneItem, SceneNode, Shape, Transform2D,
 };
 
 /// 当前帧可读的宠配置（短键 → 布尔；由壳从 `[pet.config]` 解析）。
@@ -72,4 +73,19 @@ pub trait PetKind: Send + Sync {
 
     /// 根据上下文生成一帧外观。
     fn paint(&self, ctx: PetPaintCtx<'_>) -> PetPaint;
+
+    /// 根据同一帧输入生成平台无关场景；默认实现把旧身体颜色映射为圆形，便于渐进迁移。
+    fn scene(&self, ctx: PetPaintCtx<'_>) -> PetScene {
+        let paint = self.paint(ctx);
+        PetScene {
+            items: vec![SceneItem {
+                transform: Transform2D::default(),
+                z_index: 0,
+                node: SceneNode::Shape {
+                    shape: Shape::Circle { radius: 1.0 },
+                    color: [paint.body_rgb[0], paint.body_rgb[1], paint.body_rgb[2], 1.0],
+                },
+            }],
+        }
+    }
 }

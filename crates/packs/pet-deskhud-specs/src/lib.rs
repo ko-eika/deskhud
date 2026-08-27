@@ -5,8 +5,9 @@ use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use deskhud_engine::{
-    DockState, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind, PetKindInfo, PetModifiers,
-    PetMouseButton, PetPaint, PetPaintCtx,
+    DockState, PetBubbleStyle, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind,
+    PetKindInfo, PetModifiers, PetMouseButton, PetPaint, PetPaintCtx, PetScene, PetTheme,
+    SceneItem, SceneNode, Shape, Transform2D,
 };
 
 /// 默认宠物 `pet.deskhud.specs`。
@@ -35,6 +36,7 @@ struct BlinkState {
     random: u32,
 }
 
+#[allow(dead_code)]
 impl BlinkState {
     const TOTAL_SECS: f32 = 0.18;
     const CLOSE_SECS: f32 = 0.05;
@@ -105,6 +107,7 @@ impl BlinkState {
     }
 }
 
+#[allow(dead_code)]
 fn smooth_step(value: f32) -> f32 {
     let value = value.clamp(0.0, 1.0);
     value * value * (3.0 - 2.0 * value)
@@ -240,9 +243,9 @@ fn key_label(key: PetKey) -> String {
         PetKey::Space => "空格".into(),
         PetKey::Escape => "Esc".into(),
         PetKey::Tab => "Tab".into(),
-        PetKey::Enter => "Enter".into(),
+        PetKey::Enter => mac_key_label("Return", "Enter"),
         PetKey::Backspace => "Backspace".into(),
-        PetKey::Delete => "Delete".into(),
+        PetKey::Delete => "Del".into(),
         PetKey::Insert => "Insert".into(),
         PetKey::Clear => "Clear".into(),
         PetKey::ArrowUp => "↑".into(),
@@ -253,10 +256,10 @@ fn key_label(key: PetKey) -> String {
         PetKey::End => "End".into(),
         PetKey::PageUp => "PgUp".into(),
         PetKey::PageDown => "PgDn".into(),
-        PetKey::Shift => "Shift".into(),
-        PetKey::Ctrl => "Ctrl".into(),
-        PetKey::Alt => "Alt".into(),
-        PetKey::Super => "Win".into(),
+        PetKey::Shift => mac_key_label("Shift", "Shift"),
+        PetKey::Ctrl => mac_key_label("Control", "Ctrl"),
+        PetKey::Alt => mac_key_label("Option", "Alt"),
+        PetKey::Super => mac_key_label("Command", "Win"),
         PetKey::CapsLock => "Caps".into(),
         PetKey::NumLock => "NumLock".into(),
         PetKey::NumpadEnter => "Num Enter".into(),
@@ -273,21 +276,52 @@ fn key_label(key: PetKey) -> String {
 }
 
 fn format_shortcut(mods: PetModifiers, key: PetKey) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    if mods.ctrl {
-        parts.push("Ctrl".into());
+    #[cfg(target_os = "macos")]
+    {
+        let mut parts: Vec<String> = Vec::new();
+        if mods.ctrl {
+            parts.push("Control".into());
+        }
+        if mods.alt {
+            parts.push("Option".into());
+        }
+        if mods.shift {
+            parts.push("Shift".into());
+        }
+        if mods.meta {
+            parts.push("Command".into());
+        }
+        parts.push(key_label(key));
+        return parts.join("+");
     }
-    if mods.shift {
-        parts.push("Shift".into());
+    #[cfg(not(target_os = "macos"))]
+    {
+        let mut parts: Vec<String> = Vec::new();
+        if mods.ctrl {
+            parts.push("Ctrl".into());
+        }
+        if mods.shift {
+            parts.push("Shift".into());
+        }
+        if mods.alt {
+            parts.push("Alt".into());
+        }
+        if mods.meta {
+            parts.push("Win".into());
+        }
+        parts.push(key_label(key));
+        parts.join("+")
     }
-    if mods.alt {
-        parts.push("Alt".into());
-    }
-    if mods.meta {
-        parts.push("Win".into());
-    }
-    parts.push(key_label(key));
-    parts.join("+")
+}
+
+#[cfg(target_os = "macos")]
+fn mac_key_label(mac: &str, _other: &str) -> String {
+    mac.into()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn mac_key_label(_mac: &str, other: &str) -> String {
+    other.into()
 }
 
 impl BuiltinSpecsPet {
@@ -387,7 +421,22 @@ impl PetKind for BuiltinSpecsPet {
                 self.click_ms.store(420, Ordering::Relaxed);
                 self.idle_ms.store(0, Ordering::Relaxed);
             }
-            PetEvent::GlobalMouseWheel { delta, .. } => {
+            PetEvent::MousePressed { button, .. } => {
+                if button == PetMouseButton::Primary {
+                    self.click_ms.store(420, Ordering::Relaxed);
+                    self.idle_ms.store(0, Ordering::Relaxed);
+                }
+                if !self.mouse_tips.load(Ordering::Relaxed) {
+                    return;
+                }
+                let text = match button {
+                    PetMouseButton::Primary => "左键",
+                    PetMouseButton::Secondary => "右键",
+                    PetMouseButton::Middle => "中键",
+                };
+                self.show_bubble(text, 1000);
+            }
+            PetEvent::MouseWheel { delta, .. } | PetEvent::GlobalMouseWheel { delta, .. } => {
                 if !self.mouse_tips.load(Ordering::Relaxed) {
                     return;
                 }
@@ -411,7 +460,6 @@ impl PetKind for BuiltinSpecsPet {
             PetEvent::GlobalMouseReleased { .. }
             | PetEvent::GlobalKeyReleased { .. }
             | PetEvent::MouseHover { .. }
-            | PetEvent::MousePressed { .. }
             | PetEvent::MouseReleased { .. }
             | PetEvent::MouseClicked { .. }
             | PetEvent::MouseDoubleClicked { .. }
@@ -420,7 +468,6 @@ impl PetKind for BuiltinSpecsPet {
     }
 
     fn paint(&self, ctx: PetPaintCtx<'_>) -> PetPaint {
-        let follow = ctx.config.get("follow_eyes", true);
         let hover_hl = ctx.config.get("hover_highlight", true);
         let dock_tint = ctx.config.get("dock_tint", true);
         let drag_tint = ctx.config.get("drag_tint", true);
@@ -443,7 +490,6 @@ impl PetKind for BuiltinSpecsPet {
         } else {
             None
         };
-        let global_lmb = ctx.mouse.global_primary_down;
         let pointer = [
             (ctx.pointer_dir[0].clamp(-1.0, 1.0) * 8.0) as i8,
             (ctx.pointer_dir[1].clamp(-1.0, 1.0) * 8.0) as i8,
@@ -460,23 +506,6 @@ impl PetKind for BuiltinSpecsPet {
         if pointer_changed {
             self.idle_ms.store(0, Ordering::Relaxed);
         }
-        let idle = self.idle_ms.load(Ordering::Relaxed);
-        let click_ms = self.click_ms.load(Ordering::Relaxed);
-        let eye_open = self
-            .blink
-            .lock()
-            .map(|blink| blink.eye_open())
-            .unwrap_or(1.0);
-
-        let bounce_base = if dragging {
-            1.08 + (ctx.time_secs * 5.0).sin() as f32 * 0.04
-        } else if dock.bottom {
-            0.92 + (ctx.time_secs * 1.4).sin() as f32 * 0.015
-        } else if dock.top {
-            1.04 + (ctx.time_secs * 2.4).sin() as f32 * 0.02
-        } else {
-            1.0 + (ctx.time_secs * 2.0).sin() as f32 * 0.025
-        };
 
         let mut body: [f32; 3] = [0.20, 0.58, 0.96];
         if dock_tint {
@@ -507,53 +536,95 @@ impl PetKind for BuiltinSpecsPet {
             ];
         }
 
-        let mut pupil = [0.0_f32, 0.0];
-        if follow {
-            let idle_factor = ((idle.saturating_sub(1200) as f32) / 700.0).clamp(0.0, 1.0);
-            let click_elapsed = 420_u32.saturating_sub(click_ms);
-            let click_look = if click_ms > 0 {
-                smooth_step(click_elapsed as f32 / 110.0)
-            } else {
-                0.0
-            };
-            let attention = (1.0 - idle_factor).max(click_look);
-            let dx = ctx.pointer_dir[0].clamp(-1.0, 1.0) * attention;
-            let dy = ctx.pointer_dir[1].clamp(-1.0, 1.0) * attention;
-            let max_shift = if dragging || global_lmb { 6.0 } else { 4.5 };
-            pupil = [dx * max_shift, dy * max_shift * 0.9];
-            if click_ms > 0 && (ctx.pointer_dir[0].abs() + ctx.pointer_dir[1].abs()) > 0.01 {
-                // First reacquire the pointer direction, then add a short,
-                // subtle outward impulse after the look phase.
-                let impulse = smooth_step((click_elapsed.saturating_sub(110)) as f32 / 170.0)
-                    * (1.0 - smooth_step((click_elapsed.saturating_sub(280)) as f32 / 140.0));
-                pupil[0] += ctx.pointer_dir[0].clamp(-1.0, 1.0) * 1.15 * impulse;
-                pupil[1] += ctx.pointer_dir[1].clamp(-1.0, 1.0) * 0.85 * impulse;
-            }
-            if !dragging {
-                if dock.left {
-                    pupil[0] = (pupil[0] - 1.8).clamp(-max_shift, max_shift);
-                }
-                if dock.right {
-                    pupil[0] = (pupil[0] + 1.8).clamp(-max_shift, max_shift);
-                }
-                if dock.top {
-                    pupil[1] = (pupil[1] - 1.5).clamp(-max_shift, max_shift);
-                }
-                if dock.bottom {
-                    pupil[1] = (pupil[1] + 1.5).clamp(-max_shift, max_shift);
-                }
-            }
-        }
-
         PetPaint {
             body_rgb: body,
-            eye_rgb: [1.0, 1.0, 1.0],
-            bounce: bounce_base,
-            pupil_offset: pupil,
-            draw_eyes: true,
-            eye_open,
             bubble_text,
             bubble_style: Default::default(),
         }
+    }
+
+    fn scene(&self, ctx: PetPaintCtx<'_>) -> PetScene {
+        let paint = self.paint(ctx);
+        let blink = self
+            .blink
+            .lock()
+            .map(|state| state.eye_open())
+            .unwrap_or(1.0);
+        let pupil = [
+            ctx.pointer_dir[0].clamp(-1.0, 1.0) * 4.5,
+            ctx.pointer_dir[1].clamp(-1.0, 1.0) * 4.0,
+        ];
+        let mut items = vec![SceneItem {
+            transform: Transform2D::default(),
+            z_index: 0,
+            node: SceneNode::Shape {
+                shape: Shape::Circle { radius: 1.0 },
+                color: [paint.body_rgb[0], paint.body_rgb[1], paint.body_rgb[2], 1.0],
+            },
+        }];
+        items.push(SceneItem {
+            transform: Transform2D::default(),
+            z_index: -1,
+            node: SceneNode::HitRegion {
+                shape: Shape::Circle { radius: 1.0 },
+            },
+        });
+        // Keep the original 160px pet's visual proportions: eye radius ~11px,
+        // pupil radius ~4.5px, centers ±14px and 12px above center.
+        // The renderer's base is 32% of the 160px window (51.2px).
+        for x in [-0.273, 0.273] {
+            items.push(SceneItem {
+                transform: Transform2D {
+                    translation: [x, -0.234],
+                    scale: [0.215, 0.215 * blink.max(0.08)],
+                    ..Transform2D::default()
+                },
+                z_index: 1,
+                node: SceneNode::Shape {
+                    shape: Shape::Ellipse { radii: [1.0, 1.0] },
+                    color: [1.0, 1.0, 1.0, 1.0],
+                },
+            });
+            items.push(SceneItem {
+                transform: Transform2D {
+                    translation: [x + pupil[0] / 100.0, -0.234 + pupil[1] / 100.0],
+                    scale: [0.088, 0.088],
+                    ..Transform2D::default()
+                },
+                z_index: 2,
+                node: SceneNode::Shape {
+                    shape: Shape::Circle { radius: 1.0 },
+                    color: [0.08, 0.08, 0.1, 1.0],
+                },
+            });
+        }
+        if let Some(text) = paint.bubble_text {
+            let (color, background, corner_radius) = match paint.bubble_style {
+                PetBubbleStyle::FollowTheme => match ctx.theme {
+                    PetTheme::Light => ([0.08, 0.08, 0.1, 1.0], [1.0, 1.0, 1.0, 0.94], 8.0),
+                    PetTheme::Dark => ([0.91, 0.92, 0.95, 1.0], [0.12, 0.13, 0.16, 0.94], 8.0),
+                },
+                PetBubbleStyle::Custom {
+                    background_rgba,
+                    text_rgba,
+                    corner_radius,
+                } => (text_rgba, background_rgba, corner_radius),
+            };
+            items.push(SceneItem {
+                transform: Transform2D {
+                    translation: [0.0, -0.82],
+                    scale: [1.0, 1.0],
+                    ..Transform2D::default()
+                },
+                z_index: 10,
+                node: SceneNode::Bubble {
+                    text,
+                    color,
+                    background,
+                    corner_radius,
+                },
+            });
+        }
+        PetScene { items }
     }
 }

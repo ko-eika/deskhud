@@ -74,6 +74,26 @@ impl ViewportConfig {
         }
     }
 
+    /// 返回宠物对话气泡的独立透明工具窗配置。
+    pub(crate) fn pet_bubble() -> Self {
+        Self {
+            title: "Pet bubble",
+            size: [180.0, 52.0],
+            min_size: None,
+            egui_id: ViewportId::from_hash_of("pet-bubble"),
+            decorations: false,
+            transparent: true,
+            resizable: false,
+            drag_anywhere: false,
+            skip_taskbar: true,
+            visible: false,
+            always_on_top: true,
+            configure_fonts: false,
+            undecorated_shadow: false,
+            x11_popup: false,
+        }
+    }
+
     /// 返回 Settings 视口的配置。
     pub(crate) fn settings() -> Self {
         Self {

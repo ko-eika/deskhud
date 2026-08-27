@@ -18,6 +18,7 @@ use winit::{
 
 use super::viewport::UserEvent;
 use crate::views::{
+    bubble::PetBubbleWindow,
     hud::HudWindow,
     pet::{PetMenu, PetMenuAction, PetWindow},
     setting::SettingsWindow,
@@ -28,6 +29,7 @@ pub(crate) struct WindowManager {
     proxy: EventLoopProxy<UserEvent>,
     /// Pet 主窗口。
     pet: Option<PetWindow>,
+    bubble: Option<PetBubbleWindow>,
     /// HUD 窗口。
     hud: Option<HudWindow>,
     /// Settings 窗口。
@@ -68,6 +70,7 @@ impl WindowManager {
         Self {
             proxy,
             pet: None,
+            bubble: None,
             hud: None,
             settings: None,
             menu: None,
@@ -96,6 +99,13 @@ impl WindowManager {
                 self.prefs.clone(),
             ));
         }
+        if self.bubble.is_none() {
+            let mut bubble = PetBubbleWindow::create(event_loop, &self.proxy);
+            if let Some(pet) = self.pet.as_ref() {
+                bubble.set_window_layer(pet.window_layer());
+            }
+            self.bubble = Some(bubble);
+        }
         if self.settings.is_none() {
             self.settings = Some(SettingsWindow::create(
                 event_loop,
@@ -115,6 +125,9 @@ impl WindowManager {
         if let Some(pet) = &self.pet {
             handles.push((pet.window_id(), pet.window_handle()));
         }
+        if let Some(bubble) = &self.bubble {
+            handles.push((bubble.window_id(), bubble.window_handle()));
+        }
         if let Some(hud) = &self.hud {
             handles.push((hud.window_id(), hud.window_handle()));
         }
@@ -125,6 +138,14 @@ impl WindowManager {
             handles.extend(menu.window_handles());
         }
         handles
+    }
+
+    /// 返回宠物主窗口和其对话气泡窗口的标识，供 winit 主线程直接同步几何位置。
+    pub(crate) fn pet_and_bubble_window_ids(&self) -> Option<(WindowId, WindowId)> {
+        Some((
+            self.pet.as_ref()?.window_id(),
+            self.bubble.as_ref()?.window_id(),
+        ))
     }
 
     fn show_hud(&mut self) {
@@ -173,6 +194,16 @@ impl WindowManager {
 
     fn commit_preferences(&mut self, prefs: deskhud_ui::UiPreferences) {
         self.prefs = prefs;
+        let _ = self.proxy.send_event(UserEvent::SetGlobalInputMonitoring {
+            keyboard: self.prefs.pet.global_keyboard_input,
+            mouse: self.prefs.pet.global_mouse_input,
+        });
+        if !self.prefs.pet.bubbles {
+            // 设置页关闭总开关时立即收起已存在的独立气泡，不等待下一次场景帧。
+            if let Some(bubble) = self.bubble.as_mut() {
+                bubble.hide();
+            }
+        }
         self.frame_rate = super::render::frame_rate_for(&self.prefs.graphics);
         let order = PrefsWriteOrder {
             pet_ids: self
@@ -208,6 +239,9 @@ impl WindowManager {
         }
         if let Some(pet) = self.pet.as_mut() {
             pet.apply_preferences(&self.registry, self.prefs.clone());
+            if let Some(bubble) = self.bubble.as_mut() {
+                bubble.set_window_layer(pet.window_layer());
+            }
         }
         if let Some(hud) = self.hud.as_mut() {
             hud.apply_preferences(self.prefs.clone());
@@ -241,6 +275,9 @@ impl WindowManager {
     }
 
     fn show_pet_menu(&mut self) {
+        if let Some(bubble) = self.bubble.as_mut() {
+            bubble.hide();
+        }
         let Some(pet) = self.pet.as_ref() else {
             return;
         };
@@ -276,6 +313,12 @@ impl WindowManager {
         {
             ViewportKind::Pet
         } else if self
+            .bubble
+            .as_ref()
+            .is_some_and(|v| v.window_id() == window_id)
+        {
+            ViewportKind::Bubble
+        } else if self
             .hud
             .as_ref()
             .is_some_and(|v| v.window_id() == window_id)
@@ -296,6 +339,30 @@ impl WindowManager {
         } else {
             ViewportKind::Unknown
         }
+    }
+
+    /// 返回该原生窗口是否为宠物主窗口。
+    ///
+    /// 原生拖动时，宠物几何变化需要立即带动气泡；其它窗口（尤其是气泡
+    /// 自身）移动则不应触发额外渲染，避免形成重绘循环。
+    pub(crate) fn is_pet_window(&self, window_id: WindowId) -> bool {
+        self.pet
+            .as_ref()
+            .is_some_and(|pet| pet.window_id() == window_id)
+    }
+
+    /// 将平台采集后的中性全局输入事件交给当前宠物实例。
+    pub(crate) fn dispatch_pet_event(&self, event: deskhud_engine::PetEvent) {
+        if let Some(pet) = self.pet.as_ref() {
+            pet.dispatch_event(event);
+        }
+    }
+
+    pub(crate) fn global_input_monitoring(&self) -> (bool, bool) {
+        (
+            self.prefs.pet.global_keyboard_input,
+            self.prefs.pet.global_mouse_input,
+        )
     }
 
     /// 将原生输入事件路由到对应的视口控制器。
@@ -321,6 +388,14 @@ impl WindowManager {
                     .handle_event(&event);
                 if open_menu {
                     self.show_pet_menu();
+                }
+            }
+            ViewportKind::Bubble => {
+                if !is_window_close(&event) {
+                    self.bubble
+                        .as_mut()
+                        .expect("bubble viewport disappeared")
+                        .handle_event(&event);
                 }
             }
             ViewportKind::Hud => self.handle_secondary_event(event, true),
@@ -383,11 +458,40 @@ impl WindowManager {
     /// 绘制指定窗口对应的视口，并处理该视口产生的关闭或菜单动作。
     pub(crate) fn render_window(&mut self, window_id: WindowId) -> bool {
         match self.viewport_for(window_id) {
-            ViewportKind::Pet => self
-                .pet
-                .as_mut()
-                .expect("pet viewport disappeared")
-                .render(),
+            ViewportKind::Pet => {
+                let should_close = self
+                    .pet
+                    .as_mut()
+                    .expect("pet viewport disappeared")
+                    .render();
+                if self.menu.as_ref().is_some_and(PetMenu::is_visible) {
+                    if let Some(bubble) = self.bubble.as_mut() {
+                        bubble.hide();
+                    }
+                } else if let (Some(pet), Some(bubble)) = (self.pet.as_ref(), self.bubble.as_mut())
+                {
+                    if let Some(anchor) = pet.bubble_anchor() {
+                        let was_visible = bubble.is_visible();
+                        bubble.update(pet.bubble_content(), anchor, &self.prefs);
+                        if !was_visible && bubble.is_visible() {
+                            // 气泡是鼠标穿透的提示窗，显示它不能改变键盘焦点。
+                            pet.focus_window();
+                        }
+                    } else {
+                        // 无法读取宠物窗口坐标时宁可暂时不显示，也不能把气泡
+                        // 放到左上角这一错误位置。
+                        bubble.hide();
+                    }
+                }
+                should_close
+            }
+            ViewportKind::Bubble => {
+                self.bubble
+                    .as_mut()
+                    .expect("bubble viewport disappeared")
+                    .render();
+                false
+            }
             ViewportKind::Hud => {
                 if self.hud.as_ref().is_some_and(HudWindow::is_visible)
                     && self
@@ -463,6 +567,18 @@ impl WindowManager {
             );
         }
         if self
+            .bubble
+            .as_ref()
+            .is_some_and(PetBubbleWindow::is_visible)
+        {
+            window_ids.push(
+                self.bubble
+                    .as_ref()
+                    .expect("bubble viewport disappeared")
+                    .window_id(),
+            );
+        }
+        if self
             .settings
             .as_ref()
             .is_some_and(SettingsWindow::is_visible)
@@ -499,6 +615,9 @@ impl WindowManager {
             PetMenuAction::SetPetLayer(layer) => {
                 if let Some(pet) = self.pet.as_mut() {
                     pet.set_window_layer(layer);
+                    if let Some(bubble) = self.bubble.as_mut() {
+                        bubble.set_window_layer(layer);
+                    }
                 }
                 self.prefs.pet.layer = layer_preference(layer);
                 if let Some(settings) = self.settings.as_mut() {
@@ -538,6 +657,9 @@ impl WindowManager {
         if let Some(pet) = self.pet.as_mut() {
             pet.destroy();
         }
+        if let Some(bubble) = self.bubble.as_mut() {
+            bubble.destroy();
+        }
         if let Some(hud) = self.hud.as_mut() {
             hud.destroy();
         }
@@ -561,6 +683,7 @@ fn layer_preference(layer: super::viewport::WindowLayer) -> LayerPreference {
 #[derive(Clone, Copy)]
 enum ViewportKind {
     Pet,
+    Bubble,
     Hud,
     Settings,
     Menu,

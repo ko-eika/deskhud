@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use deskhud_engine::PetEvent;
 use deskhud_ui::UiTheme;
 use egui::{Color32, Context, RawInput};
 use egui_glow::Painter;
@@ -47,6 +48,13 @@ pub(crate) struct ViewportOutput {
 pub(crate) enum UserEvent {
     Repaint,
     RenderResult(RenderResult),
+    /// 平台级输入采集到的中性宠物事件。
+    PetEvent(PetEvent),
+    /// 更新平台级全局输入监听的隐私开关。
+    SetGlobalInputMonitoring {
+        keyboard: bool,
+        mouse: bool,
+    },
     WindowCommand {
         window_id: WindowId,
         command: WindowCommand,
@@ -79,6 +87,8 @@ pub(crate) struct Viewport {
     window_layer: WindowLayer,
     visible: bool,
     cursor_position: Option<PhysicalPosition<f64>>,
+    drag_press_origin: Option<PhysicalPosition<f64>>,
+    native_drag_started: bool,
     destroyed: bool,
     fonts_configured: bool,
     font_signature: Option<(String, u32)>,
@@ -145,6 +155,8 @@ impl Viewport {
             },
             visible: config.visible,
             cursor_position: None,
+            drag_press_origin: None,
+            native_drag_started: false,
             destroyed: false,
             fonts_configured: config.configure_fonts,
             font_signature: None,
@@ -319,6 +331,14 @@ impl Viewport {
         ))
     }
 
+    pub(crate) fn cursor_position(&self) -> Option<PhysicalPosition<f64>> {
+        self.cursor_position
+    }
+
+    pub(crate) fn focus_window(&self) {
+        self.gl_window.window().focus_window();
+    }
+
     pub(crate) fn render<F>(&mut self, draw_ui: F) -> ViewportOutput
     where
         F: FnOnce(&Context, RawInput) -> ViewOutput,
@@ -417,6 +437,20 @@ impl Viewport {
     pub(crate) fn handle_event(&mut self, event: &WindowEvent) {
         if let WindowEvent::CursorMoved { position, .. } = event {
             self.cursor_position = Some(*position);
+            if self.drag_anywhere
+                && !self.native_drag_started
+                && self.drag_press_origin.is_some_and(|origin| {
+                    let delta_x = position.x - origin.x;
+                    let delta_y = position.y - origin.y;
+                    delta_x * delta_x + delta_y * delta_y >= 16.0
+                })
+            {
+                self.native_drag_started = true;
+                let _ = self.proxy.send_event(UserEvent::WindowCommand {
+                    window_id: self.window_id(),
+                    command: WindowCommand::Drag,
+                });
+            }
         }
         if matches!(event, WindowEvent::Focused(false)) {
             // 窗口失去焦点时收起右键菜单和其它 egui 弹出层。
@@ -424,18 +458,24 @@ impl Viewport {
             self.context.request_repaint();
         }
         if self.drag_anywhere {
-            if let WindowEvent::MouseInput {
-                state: ElementState::Pressed,
-                button: MouseButton::Left,
-                ..
-            } = event
-            {
-                // 交给 winit 事件线程执行平台原生拖动。Linux/Wayland 要求这类
-                // 窗口管理器交互由创建窗口的事件循环线程发起。
-                let _ = self.proxy.send_event(UserEvent::WindowCommand {
-                    window_id: self.window_id(),
-                    command: WindowCommand::Drag,
-                });
+            match event {
+                WindowEvent::MouseInput {
+                    state: ElementState::Pressed,
+                    button: MouseButton::Left,
+                    ..
+                } => {
+                    self.drag_press_origin = self.cursor_position;
+                    self.native_drag_started = false;
+                }
+                WindowEvent::MouseInput {
+                    state: ElementState::Released,
+                    button: MouseButton::Left,
+                    ..
+                } => {
+                    self.drag_press_origin = None;
+                    self.native_drag_started = false;
+                }
+                _ => {}
             }
         }
         if let WindowEvent::Resized(size) = event
