@@ -2,7 +2,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use deskhud_engine::{EngineRegistry, PetKind};
-use deskhud_ui::UiPreferences;
+use deskhud_ui::{LayerPreference, UiPreferences};
 use std::{sync::Arc, time::Instant};
 use winit::{
     event::WindowEvent,
@@ -38,9 +38,7 @@ impl PetWindow {
             .into_iter()
             .find(|pet| pet.info().id == prefs.pet.kind)
             .unwrap_or_else(|| registry.active_pet());
-        if !prefs.shell.topmost {
-            viewport.set_window_layer(WindowLayer::Normal);
-        }
+        viewport.set_window_layer(window_layer(prefs.pet.layer));
         viewport.request_inner_size(winit::dpi::PhysicalSize::new(
             prefs.pet.width as u32,
             prefs.pet.height as u32,
@@ -94,12 +92,7 @@ impl PetWindow {
         })
     }
 
-    /// 切换 Pet 的置顶状态。
-    pub(crate) fn toggle_always_on_top(&mut self) {
-        self.viewport.toggle_always_on_top();
-    }
-
-    /// 应用设置页刚提交的宠物选择、尺寸、置顶和位置。
+    /// 应用设置页刚提交的宠物选择、尺寸、层级和位置。
     pub(crate) fn apply_preferences(&mut self, registry: &EngineRegistry, prefs: UiPreferences) {
         if self.pet.info().id != prefs.pet.kind {
             if let Some(pet) = registry
@@ -116,11 +109,8 @@ impl PetWindow {
                 prefs.pet.width.max(48.0) as u32,
                 prefs.pet.height.max(48.0) as u32,
             ));
-        self.viewport.set_window_layer(if prefs.shell.topmost {
-            WindowLayer::AlwaysOnTop
-        } else {
-            WindowLayer::Normal
-        });
+        self.viewport
+            .set_window_layer(window_layer(prefs.pet.layer));
         if let Some(position) = prefs.pet.position() {
             self.viewport
                 .request_outer_position(winit::dpi::PhysicalPosition::new(
@@ -135,8 +125,8 @@ impl PetWindow {
         self.viewport.window_layer()
     }
 
-    pub(crate) fn is_always_on_top(&self) -> bool {
-        self.viewport.window_layer() == WindowLayer::AlwaysOnTop
+    pub(crate) fn set_window_layer(&mut self, layer: WindowLayer) {
+        self.viewport.set_window_layer(layer);
     }
 
     /// 绘制 Pet 一帧，并返回是否请求退出应用。
@@ -159,5 +149,13 @@ impl PetWindow {
     /// 按正确的 OpenGL 资源顺序销毁 Pet 窗口。
     pub(crate) fn destroy(&mut self) {
         self.viewport.destroy();
+    }
+}
+
+fn window_layer(layer: LayerPreference) -> WindowLayer {
+    match layer {
+        LayerPreference::Top => WindowLayer::AlwaysOnTop,
+        LayerPreference::Normal => WindowLayer::Normal,
+        LayerPreference::Bottom => WindowLayer::AlwaysOnBottom,
     }
 }

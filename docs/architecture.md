@@ -69,8 +69,9 @@ Host 契约（当前）：
 - `PluginInfo.icon`：插件图标；条目图标按 contribution id 对应；设置页由壳栅格化 SVG
 - 每帧或按需产出 `HudFrame`（已启用条目的展示数据，仍在路线图）
 - prefs：
-  - `[ui]`：主题 / 字体 / 设置窗几何
-  - `[pet]`：当前宠、尺寸位置置顶 + `pet.<org>.<id>.*` 选项
+  - `[theme]` / `[font]` / `[prefs]`：主题 / 字体 / 设置窗几何
+  - `[pet]`：当前宠、尺寸位置层级 + `pet.<org>.<id>.*` 选项；`pet.global.layer` 为通用三档层级
+  - `[hud]`：HUD 开关、布局与 `hud.global.layer` 通用三档层级
   - `[hud]`：`hud.<org>.<id>[.<item>].enable` 与布局 `display/x/y/scale`
   - 插件关 → 其下全部不显示
   - 可继续加同前缀自定义键，便于扩展

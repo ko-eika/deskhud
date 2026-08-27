@@ -4,33 +4,35 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::shell::PetPickerMode;
+use crate::shell::{LayerPreference, PetPickerMode};
 
 /// 当前宠物窗体与包级选项。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PetPrefs {
     /// 当前宠物类型 ID。
-    #[serde(
-        default = "default_kind",
-        alias = "active_pet_kind_id",
-        alias = "kind_id"
-    )]
+    #[serde(default = "default_kind")]
     pub kind: String,
     /// 宠窗宽（来自宠物包元数据缓存）。
-    #[serde(default = "default_size", alias = "pet_width")]
+    #[serde(default = "default_size")]
     pub width: f32,
     /// 宠窗高。
-    #[serde(default = "default_size", alias = "pet_height")]
+    #[serde(default = "default_size")]
     pub height: f32,
     /// 宠窗左上角 X（逻辑像素）。
-    #[serde(default, alias = "pet_pos_x")]
+    #[serde(default)]
     pub pos_x: Option<f32>,
     /// 宠窗左上角 Y。
-    #[serde(default, alias = "pet_pos_y")]
+    #[serde(default)]
     pub pos_y: Option<f32>,
     /// 设置页宠物选择：网格 / 列表。
-    #[serde(default, alias = "pet_picker_mode")]
+    #[serde(default)]
     pub picker_mode: PetPickerMode,
+    /// 宠物桌面覆盖层级。
+    #[serde(default)]
+    pub layer: LayerPreference,
+    /// 是否显示聊天气泡。
+    #[serde(default = "default_true")]
+    pub bubbles: bool,
     /// 包自定义布尔选项（扁平键，如 `pet.deskhud.specs.follow_eyes`）。
     #[serde(default, flatten)]
     pub options: HashMap<String, bool>,
@@ -62,6 +64,10 @@ fn default_size() -> f32 {
     140.0
 }
 
+fn default_true() -> bool {
+    true
+}
+
 impl Default for PetPrefs {
     fn default() -> Self {
         Self {
@@ -71,6 +77,8 @@ impl Default for PetPrefs {
             pos_x: None,
             pos_y: None,
             picker_mode: PetPickerMode::Grid,
+            layer: LayerPreference::default(),
+            bubbles: true,
             options: HashMap::new(),
         }
     }
@@ -102,10 +110,12 @@ impl PetPrefs {
     pub const GLOBAL_POS_X_KEY: &'static str = "pet.global.pos_x";
     /// 宠窗 Y：`pet.global.pos_y`。
     pub const GLOBAL_POS_Y_KEY: &'static str = "pet.global.pos_y";
-    /// 旧全局置顶键（已迁 `[settings].topmost`）：`pet.global.topmost`。
-    pub const LEGACY_GLOBAL_TOPMOST_KEY: &'static str = "pet.global.topmost";
     /// 宠选择视图键：`pet.global.picker_mode`（落盘字符串，内存仍用 `picker_mode`）。
     pub const GLOBAL_PICKER_MODE_KEY: &'static str = "pet.global.picker_mode";
+    /// 宠物层级键：`pet.global.layer`。
+    pub const GLOBAL_LAYER_KEY: &'static str = "pet.global.layer";
+    /// 聊天气泡开关键：`pet.global.bubbles`。
+    pub const GLOBAL_BUBBLES_KEY: &'static str = "pet.global.bubbles";
 
     /// 规范键：`{pet_id}.{option_key}`。
     pub fn option_key(pet_id: &str, option_key: &str) -> String {

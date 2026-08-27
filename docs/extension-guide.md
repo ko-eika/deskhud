@@ -271,12 +271,11 @@ icon = "assets/clock.svg"
 
 ### 3.3 用户配置（prefs）
 
-分类落盘（键序稳定）；旧 `[shell]` / `[pet.config]` / `[hud.config]` 启动时自动迁移：
+分类落盘（键序稳定）；仅读取当前配置格式，无法读取的字段使用默认值：
 
 ```toml
-[settings]
-width = 720.0
-height = 520.0
+[prefs]
+"settings.size" = [720.0, 520.0]
 
 [theme]
 mode = "system"
@@ -290,9 +289,8 @@ size = 13.0
 
 [pet]
 "pet.global.kind" = "pet.deskhud.specs"
-"pet.global.width" = 140.0
-"pet.global.height" = 140.0
-"pet.global.topmost" = true
+"pet.global.size" = [140.0, 140.0]
+"pet.global.layer" = "top"
 "pet.global.picker_mode" = "grid"
 "pet.deskhud.specs.follow_eyes" = true
 "pet.deskhud.specs.key_tips" = false
@@ -312,9 +310,9 @@ size = 13.0
 `[pet]` / `[hud]`：先写全部 `*.global.*`，再按引擎注册的宠/插件顺序写出；同包内 `id` / `enable` 优先，其余按包内配置定义序，布局属性（`display` / `x` / `y` / `scale`）靠后。
 | 分区 / 键 | 含义 |
 |-----------|------|
-| `[ui]` | 主题、字体、设置窗几何 |
-| `[pet]` | 当前宠、尺寸/位置/置顶 + 包选项扁平键 |
-| `[hud]` | 插件/条目开关 + 布局扁平键 |
+| `[theme]` / `[font]` / `[prefs]` | 主题、字体、设置窗几何 |
+| `[pet]` | 当前宠、尺寸/位置/层级 + 包选项扁平键 |
+| `[hud]` | HUD 层级、插件/条目开关 + 布局扁平键 |
 | `pet.<组织>.<标识>.<键>` | 宠物包自定义配置（由 `PetKind::config_options` 声明） |
 
 宠配置在设置 → 宠物页下部「当前宠物行为」；设置打开时草稿会即时预览。
@@ -323,7 +321,7 @@ size = 13.0
 
 - 完整插件/宠物 id **勿互为前缀**（不要同时注册 `hud.acme` 与 `hud.acme.clock` 两个插件）。  
 - i18n 前缀与全 ID 对齐（规划中）。  
-- 旧 id（`builtin.specs`、`demo.hud` 等）加载 prefs 时会迁移/兼容读取。
+- 配置中的未知字段和旧格式不会迁移，读取不到当前字段时使用默认值。
 
 ---
 

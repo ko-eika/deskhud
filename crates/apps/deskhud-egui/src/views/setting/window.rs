@@ -2,7 +2,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use deskhud_engine::EngineRegistry;
-use deskhud_ui::{CatalogStore, SettingsModel, UiPreferences};
+use deskhud_ui::{CatalogStore, LayerPreference, SettingsModel, UiPreferences};
 use std::sync::Arc;
 use winit::{
     dpi::PhysicalPosition,
@@ -105,8 +105,12 @@ impl SettingsWindow {
         ]
     }
 
-    pub(crate) fn preferences_mut(&mut self) -> &mut UiPreferences {
-        &mut self.model.draft
+    pub(crate) fn sync_pet_layer(&mut self, layer: LayerPreference) {
+        self.model.sync_pet_layer(layer);
+    }
+
+    pub(crate) fn sync_hud_layer(&mut self, layer: LayerPreference) {
+        self.model.sync_hud_layer(layer);
     }
 
     /// 绘制一帧并返回 UI 是否请求关闭。

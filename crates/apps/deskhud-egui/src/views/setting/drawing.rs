@@ -5,8 +5,8 @@ use std::sync::Arc;
 use crate::{components, fonts};
 use deskhud_engine::EngineRegistry;
 use deskhud_ui::{
-    AnimationQuality, CatalogStore, FpsLimit, Locale, MessageKey, PowerMode, SettingsCommand,
-    SettingsModel, SettingsTab, UiPreferences, UiTheme,
+    AnimationQuality, CatalogStore, FpsLimit, LayerPreference, Locale, MessageKey, PowerMode,
+    SettingsCommand, SettingsModel, SettingsTab, UiPreferences, UiTheme,
 };
 use egui::{
     Align, CentralPanel, Color32, CornerRadius, Frame, Layout, Margin, Panel, Pos2, RichText,
@@ -191,54 +191,20 @@ fn nav_button(ui: &mut egui::Ui, tab: SettingsTab, selected: bool, label: &str) 
 }
 
 fn draw_nav_icon(ui: &egui::Ui, center: Pos2, tab: SettingsTab, color: Color32) {
-    let painter = ui.painter();
-    match tab {
-        SettingsTab::General => {
-            for y in [-5.0, 0.0, 5.0] {
-                painter.line_segment(
-                    [center + Vec2::new(-7.0, y), center + Vec2::new(7.0, y)],
-                    Stroke::new(1.5, color),
-                );
-            }
-            for x in [-3.0, 2.0, -1.0] {
-                painter.circle_filled(center + Vec2::new(x, 0.0), 2.0, color);
-            }
-        }
-        SettingsTab::Performance => {
-            for (x, h) in [(-6.0, 5.0), (0.0, 9.0), (6.0, 13.0)] {
-                painter.rect_filled(
-                    egui::Rect::from_center_size(
-                        center + Vec2::new(x, 3.0 - h * 0.5),
-                        Vec2::new(3.0, h),
-                    ),
-                    CornerRadius::same(1),
-                    color,
-                );
-            }
-        }
-        SettingsTab::Pet => {
-            painter.circle_stroke(center, 7.0, Stroke::new(1.8, color));
-            painter.circle_filled(center, 2.0, color);
-        }
-        SettingsTab::Hud => {
-            for y in [-5.0, 0.0, 5.0] {
-                painter.line_segment(
-                    [center + Vec2::new(-6.0, y), center + Vec2::new(7.0, y)],
-                    Stroke::new(1.8, color),
-                );
-            }
-        }
-        SettingsTab::About => {
-            painter.circle_stroke(center, 7.0, Stroke::new(1.8, color));
-            painter.text(
-                center + Vec2::new(0.0, 0.5),
-                egui::Align2::CENTER_CENTER,
-                "i",
-                fonts::scaled_font(ui, 0.78),
-                color,
-            );
-        }
-    }
+    let icon = match tab {
+        SettingsTab::General => "adjust-horizontal",
+        SettingsTab::Performance => "analytics",
+        SettingsTab::Pet => "create-filled",
+        SettingsTab::Hud => "puzzle",
+        SettingsTab::About => "info",
+    };
+    components::icons::paint(
+        ui,
+        icon,
+        egui::Rect::from_center_size(center, Vec2::splat(18.0)),
+        color,
+        false,
+    );
 }
 
 fn draw_general(ui: &mut egui::Ui, model: &mut SettingsModel) {
@@ -247,20 +213,6 @@ fn draw_general(ui: &mut egui::Ui, model: &mut SettingsModel) {
             .font(fonts::scaled_font(ui, 1.71)),
     );
     ui.add_space(18.0);
-    components::config_card(
-        ui,
-        None,
-        |ui| {
-            components::switch_row(
-                ui,
-                RichText::new(text(model, MessageKey::SettingsTopmost)),
-                Some(RichText::new(text(model, MessageKey::SettingsTopmostHint)).small()),
-                &mut model.draft.shell.topmost,
-            );
-        },
-        None,
-    );
-    ui.add_space(14.0);
     components::config_card(
         ui,
         None,
@@ -428,13 +380,6 @@ fn draw_performance(ui: &mut egui::Ui, model: &mut SettingsModel) {
         |ui| {
             components::switch_row(
                 ui,
-                RichText::new(text(model, MessageKey::SettingsPerformanceBubbles)),
-                None::<RichText>,
-                &mut model.draft.graphics.bubbles,
-            );
-            ui.separator();
-            components::switch_row(
-                ui,
                 RichText::new(text(model, MessageKey::SettingsPerformanceShadows)),
                 None::<RichText>,
                 &mut model.draft.graphics.shadows,
@@ -494,6 +439,17 @@ fn draw_pet(
             }
         }
     });
+    ui.add_space(16.0);
+    components::config_card(
+        ui,
+        Some(
+            RichText::new(text(model, MessageKey::SettingsPetGlobal))
+                .strong()
+                .into(),
+        ),
+        |ui| draw_pet_global(ui, model),
+        None,
+    );
     ui.add_space(16.0);
 
     let active_id = model.draft.pet.kind.clone();
@@ -568,6 +524,51 @@ fn draw_pet(
     );
 }
 
+fn draw_pet_global(ui: &mut Ui, model: &mut SettingsModel) {
+    components::config_row(
+        ui,
+        text(model, MessageKey::SettingsPetLayer),
+        Some(RichText::new(text(model, MessageKey::SettingsPetLayerHint)).small()),
+        |ui| {
+            let options = [
+                (
+                    "top".to_owned(),
+                    text(model, MessageKey::MenuLayerTop).to_owned(),
+                ),
+                (
+                    "normal".to_owned(),
+                    text(model, MessageKey::MenuLayerNormal).to_owned(),
+                ),
+                (
+                    "bottom".to_owned(),
+                    text(model, MessageKey::MenuLayerBottom).to_owned(),
+                ),
+            ];
+            let selected = match model.draft.pet.layer {
+                LayerPreference::Top => "top",
+                LayerPreference::Normal => "normal",
+                LayerPreference::Bottom => "bottom",
+            };
+            if let Some(value) =
+                components::dropdown(ui, "settings_pet_layer", selected, &options, false)
+            {
+                model.draft.pet.layer = match value.as_str() {
+                    "bottom" => LayerPreference::Bottom,
+                    "normal" => LayerPreference::Normal,
+                    _ => LayerPreference::Top,
+                };
+            }
+        },
+    );
+    ui.separator();
+    components::switch_row(
+        ui,
+        RichText::new(text(model, MessageKey::SettingsPetBubbles)),
+        Some(RichText::new(text(model, MessageKey::SettingsPetBubblesHint)).small()),
+        &mut model.draft.pet.bubbles,
+    );
+}
+
 fn draw_pet_view_modes(ui: &mut Ui, model: &mut SettingsModel) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(64.0, 28.0), Sense::hover());
     ui.painter().rect(
@@ -605,8 +606,8 @@ fn draw_pet_view_modes(ui: &mut Ui, model: &mut SettingsModel) {
         let side = area.width().min(area.height()) - 12.0;
         egui::Rect::from_center_size(area.center(), Vec2::splat(side.max(1.0)))
     };
-    components::icons::paint(ui, "grid", icon_rect(left), color, false);
-    components::icons::paint(ui, "list", icon_rect(right), color, false);
+    components::icons::paint(ui, "layout-grid", icon_rect(left), color, false);
+    components::icons::paint(ui, "list-details", icon_rect(right), color, false);
     if l.clicked() {
         model.draft.pet.picker_mode = deskhud_ui::PetPickerMode::Grid;
     }

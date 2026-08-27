@@ -178,6 +178,20 @@ impl SettingsModel {
         draft_is_dirty(&self.draft, &self.baseline)
     }
 
+    /// Synchronizes a pet layer changed outside Settings into both the draft
+    /// and its reset/apply baseline, preserving unrelated unsaved edits.
+    pub fn sync_pet_layer(&mut self, layer: crate::LayerPreference) {
+        self.draft.pet.layer = layer;
+        self.baseline.pet.layer = layer;
+    }
+
+    /// Synchronizes a HUD layer changed outside Settings into both the draft
+    /// and its reset/apply baseline, preserving unrelated unsaved edits.
+    pub fn sync_hud_layer(&mut self, layer: crate::LayerPreference) {
+        self.draft.hud.layer = layer;
+        self.baseline.hud.layer = layer;
+    }
+
     /// Resets editable settings while preserving view-only preferences and window geometry.
     pub fn reset_draft(&mut self) {
         let picker_mode = self.draft.pet.picker_mode;
@@ -285,13 +299,11 @@ pub fn apply_graphics_preferences(
     prefs: &mut UiPreferences,
     fps_limit: crate::FpsLimit,
     animation_quality: crate::AnimationQuality,
-    bubbles: bool,
     shadows: bool,
     power_mode: crate::PowerMode,
 ) {
     prefs.graphics.fps_limit = fps_limit;
     prefs.graphics.animation_quality = animation_quality;
-    prefs.graphics.bubbles = bubbles;
     prefs.graphics.shadows = shadows;
     prefs.graphics.power_mode = power_mode;
 }
@@ -332,7 +344,6 @@ mod tests {
             &mut prefs,
             crate::FpsLimit::Fps60,
             crate::AnimationQuality::High,
-            false,
             true,
             crate::PowerMode::Smooth,
         );
@@ -341,7 +352,6 @@ mod tests {
             prefs.graphics.animation_quality,
             crate::AnimationQuality::High
         );
-        assert!(!prefs.graphics.bubbles);
         assert!(prefs.graphics.shadows);
         assert_eq!(prefs.graphics.power_mode, crate::PowerMode::Smooth);
     }
@@ -361,15 +371,30 @@ mod tests {
     fn apply_and_cancel_have_distinct_commit_semantics() {
         let mut model = SettingsModel::new(UiPreferences::default());
         model.open = true;
-        model.draft.shell.topmost = false;
+        model.draft.pet.layer = crate::LayerPreference::Normal;
         assert!(model.command(SettingsCommand::Cancel).is_none());
-        assert!(model.draft.shell.topmost);
-        model.draft.shell.topmost = false;
+        assert_eq!(model.draft.pet.layer, crate::LayerPreference::Top);
+        model.draft.pet.layer = crate::LayerPreference::Normal;
         let committed = model
             .command(SettingsCommand::Apply)
             .expect("apply commits");
-        assert!(!committed.shell.topmost);
+        assert_eq!(committed.pet.layer, crate::LayerPreference::Normal);
         assert!(!model.open);
+    }
+
+    #[test]
+    fn external_layer_change_updates_baseline_without_losing_revertability() {
+        let mut model = SettingsModel::new(UiPreferences::default());
+        model.open = true;
+        model.sync_pet_layer(crate::LayerPreference::Normal);
+        assert!(!model.is_dirty());
+
+        model.draft.pet.layer = crate::LayerPreference::Top;
+        assert!(model.is_dirty());
+        let committed = model
+            .command(SettingsCommand::Apply)
+            .expect("reverted layer remains applicable");
+        assert_eq!(committed.pet.layer, crate::LayerPreference::Top);
     }
 
     #[test]
@@ -380,11 +405,11 @@ mod tests {
             .draft
             .shell
             .set_settings_geometry(900.0, 600.0, 10.0, 20.0);
-        model.draft.shell.topmost = false;
+        model.draft.pet.layer = crate::LayerPreference::Normal;
         model.reset_draft();
         assert_eq!(model.draft.pet.picker_mode, crate::PetPickerMode::List);
         assert_eq!(model.draft.shell.settings_pos(), Some([10.0, 20.0]));
-        assert!(model.draft.shell.topmost);
+        assert_eq!(model.draft.pet.layer, crate::LayerPreference::Top);
     }
 
     #[test]

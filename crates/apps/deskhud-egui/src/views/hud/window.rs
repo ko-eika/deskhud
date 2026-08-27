@@ -2,7 +2,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use deskhud_engine::EngineRegistry;
-use deskhud_ui::UiPreferences;
+use deskhud_ui::{LayerPreference, UiPreferences};
 use std::{sync::Arc, time::Instant};
 use winit::{
     dpi::PhysicalSize,
@@ -56,6 +56,8 @@ impl HudWindow {
             registry,
             started: Instant::now(),
         };
+        hud.viewport
+            .set_window_layer(window_layer(hud.prefs.hud.layer));
         // HUD 普通显示时只提供视觉叠加，不应拦截下面应用的鼠标输入。
         hud.viewport.set_cursor_hittest(false);
         hud
@@ -180,6 +182,8 @@ impl HudWindow {
 
     pub(crate) fn apply_preferences(&mut self, prefs: UiPreferences) {
         self.prefs = prefs;
+        self.viewport
+            .set_window_layer(window_layer(self.prefs.hud.layer));
         self.layout.positions.clear();
     }
 
@@ -220,5 +224,13 @@ impl HudWindow {
 
     pub(crate) fn destroy(&mut self) {
         self.viewport.destroy();
+    }
+}
+
+fn window_layer(layer: LayerPreference) -> WindowLayer {
+    match layer {
+        LayerPreference::Top => WindowLayer::AlwaysOnTop,
+        LayerPreference::Normal => WindowLayer::Normal,
+        LayerPreference::Bottom => WindowLayer::AlwaysOnBottom,
     }
 }

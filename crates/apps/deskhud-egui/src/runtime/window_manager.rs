@@ -6,7 +6,9 @@
 
 use deskhud_engine::EngineRegistry;
 use deskhud_runtime::{bootstrap_registry, build_catalog_store};
-use deskhud_ui::{CatalogStore, PrefsWriteOrder, UiPreferences, load_or_default, save_ordered};
+use deskhud_ui::{
+    CatalogStore, LayerPreference, PrefsWriteOrder, UiPreferences, load_or_default, save_ordered,
+};
 use std::sync::Arc;
 use winit::{
     event::{ElementState, MouseButton, WindowEvent},
@@ -494,13 +496,15 @@ impl WindowManager {
 
     fn handle_menu_action(&mut self, action: PetMenuAction) -> bool {
         match action {
-            PetMenuAction::ToggleAlwaysOnTop => {
-                let pet = self.pet.as_mut().expect("pet viewport disappeared");
-                pet.toggle_always_on_top();
-                self.prefs.shell.topmost = pet.is_always_on_top();
-                if let Some(settings) = self.settings.as_mut() {
-                    settings.preferences_mut().shell.topmost = self.prefs.shell.topmost;
+            PetMenuAction::SetPetLayer(layer) => {
+                if let Some(pet) = self.pet.as_mut() {
+                    pet.set_window_layer(layer);
                 }
+                self.prefs.pet.layer = layer_preference(layer);
+                if let Some(settings) = self.settings.as_mut() {
+                    settings.sync_pet_layer(self.prefs.pet.layer);
+                }
+                self.save_geometry();
             }
             PetMenuAction::OpenSettings => self.show_settings(),
             PetMenuAction::OpenHud => {
@@ -519,6 +523,11 @@ impl WindowManager {
                 if let Some(hud) = self.hud.as_mut() {
                     hud.set_window_layer(layer);
                 }
+                self.prefs.hud.layer = layer_preference(layer);
+                if let Some(settings) = self.settings.as_mut() {
+                    settings.sync_hud_layer(self.prefs.hud.layer);
+                }
+                self.save_geometry();
             }
             PetMenuAction::ExitApplication => return true,
         }
@@ -538,6 +547,14 @@ impl WindowManager {
         if let Some(menu) = self.menu.as_mut() {
             menu.destroy();
         }
+    }
+}
+
+fn layer_preference(layer: super::viewport::WindowLayer) -> LayerPreference {
+    match layer {
+        super::viewport::WindowLayer::AlwaysOnTop => LayerPreference::Top,
+        super::viewport::WindowLayer::Normal => LayerPreference::Normal,
+        super::viewport::WindowLayer::AlwaysOnBottom => LayerPreference::Bottom,
     }
 }
 

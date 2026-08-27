@@ -1,4 +1,4 @@
-//! 桌宠外壳偏好：界面主题 / 设置窗几何（`[ui]`）；字体见 `[font]`。
+//! 桌宠外壳偏好：界面主题 / 设置窗几何；字体见 `[font]`。
 
 use serde::{Deserialize, Serialize};
 
@@ -91,6 +91,20 @@ pub enum PowerMode {
     /// Prefer smooth motion.
     Smooth,
 }
+
+/// 桌面覆盖层的用户层级。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LayerPreference {
+    /// 始终位于其它普通窗口之上。
+    #[default]
+    Top,
+    /// 跟随系统普通窗口层级。
+    Normal,
+    /// 尽量位于其它普通窗口之下。
+    Bottom,
+}
+
 /// Backend-neutral graphics preferences.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphicsPreferences {
@@ -100,9 +114,6 @@ pub struct GraphicsPreferences {
     /// Animation quality.
     #[serde(default)]
     pub animation_quality: AnimationQuality,
-    /// Whether speech bubbles are enabled.
-    #[serde(default = "default_true")]
-    pub bubbles: bool,
     /// Whether shadows are enabled.
     #[serde(default = "default_true")]
     pub shadows: bool,
@@ -113,19 +124,19 @@ pub struct GraphicsPreferences {
 fn default_true() -> bool {
     true
 }
+
 impl Default for GraphicsPreferences {
     fn default() -> Self {
         Self {
             fps_limit: Default::default(),
             animation_quality: Default::default(),
-            bubbles: true,
             shadows: true,
             power_mode: Default::default(),
         }
     }
 }
 
-/// 界面与设置窗偏好（落盘 `[theme]` + `[settings]` + `[font]`；旧文件 `[ui]` / `[shell]` 可迁移）。
+/// 界面与设置窗偏好（落盘 `[theme]` + `[settings]` + `[font]`）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellPrefs {
     /// 具体字面 ID：内置为文件 stem（如 `JetBrainsMono-Regular`）；系统为字体路径（`/` 分隔）。
@@ -156,9 +167,6 @@ pub struct ShellPrefs {
     /// 设置窗左上角 Y。
     #[serde(default)]
     pub settings_pos_y: Option<f32>,
-    /// 桌面覆盖层置顶（宠 / HUD；菜单打开时临时在宠物之上；设置窗不置顶）。
-    #[serde(default = "default_topmost")]
-    pub topmost: bool,
 }
 
 fn default_ui_font_id() -> String {
@@ -169,43 +177,12 @@ fn default_ui_font_family() -> String {
     DEFAULT_UI_FONT_FAMILY.into()
 }
 
-/// 去掉历史 `builtin.` / `system.` 前缀；旧短名映射到 stem。
-pub fn migrate_ui_font_id(id: &str) -> String {
-    match id {
-        "builtin.noto_sans_sc" | "noto_sans_sc" => "NotoSansSC-Regular".into(),
-        "builtin.jetbrains_mono" | "jetbrains_mono" => "JetBrainsMono-Regular".into(),
-        other => {
-            if let Some(rest) = other.strip_prefix("builtin.") {
-                return rest.to_string();
-            }
-            if let Some(rest) = other.strip_prefix("system.") {
-                return rest.to_string();
-            }
-            other.to_string()
-        }
-    }
-}
-
-/// 去掉历史 `fam.` 前缀；旧家族短名映射。
-pub fn migrate_ui_font_family(key: &str) -> String {
-    let key = key.strip_prefix("fam.").unwrap_or(key);
-    match key {
-        "builtin.noto_sans_sc" | "noto_sans_sc" => "notosanssc".into(),
-        "builtin.jetbrains_mono" | "jetbrains_mono" => "jetbrainsmono".into(),
-        other => other.to_string(),
-    }
-}
-
 fn default_ui_font_style() -> String {
     DEFAULT_UI_FONT_STYLE.into()
 }
 
 fn default_ui_font_size() -> f32 {
     DEFAULT_UI_FONT_SIZE
-}
-
-fn default_topmost() -> bool {
-    true
 }
 
 impl Default for ShellPrefs {
@@ -220,7 +197,6 @@ impl Default for ShellPrefs {
             settings_height: None,
             settings_pos_x: None,
             settings_pos_y: None,
-            topmost: default_topmost(),
         }
     }
 }

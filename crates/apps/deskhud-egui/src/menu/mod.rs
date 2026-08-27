@@ -105,6 +105,8 @@ pub(crate) struct MenuItem {
     pub(crate) separator_before: bool,
     /// 可选的子菜单定义。
     pub(crate) submenu: Option<Box<MenuDefinition>>,
+    /// Optional bundled SVG icon name.
+    pub(crate) icon: Option<&'static str>,
 }
 
 impl MenuItem {
@@ -116,6 +118,7 @@ impl MenuItem {
             enabled: true,
             separator_before: false,
             submenu: None,
+            icon: None,
         }
     }
 
@@ -127,6 +130,7 @@ impl MenuItem {
             enabled: true,
             separator_before: false,
             submenu: None,
+            icon: None,
         }
     }
 
@@ -142,6 +146,11 @@ impl MenuItem {
 
     pub(crate) fn with_submenu(mut self, submenu: MenuDefinition) -> Self {
         self.submenu = Some(Box::new(submenu));
+        self
+    }
+
+    pub(crate) fn with_icon(mut self, icon: &'static str) -> Self {
+        self.icon = Some(icon);
         self
     }
 }
@@ -390,6 +399,7 @@ fn run(
                 let response = menu_item(
                     ui,
                     item.label,
+                    item.icon,
                     item.checked,
                     item.enabled,
                     item.submenu.is_some(),
@@ -521,6 +531,7 @@ fn menu_font_id(ctx: &Context) -> FontId {
 fn menu_item(
     ui: &mut egui::Ui,
     text: &str,
+    icon: Option<&'static str>,
     checked: bool,
     enabled: bool,
     has_submenu: bool,
@@ -539,7 +550,24 @@ fn menu_item(
         ui.painter()
             .rect_filled(rect, 4.0, ui.visuals().widgets.hovered.bg_fill);
     }
-    if checked {
+    if let Some(icon) = icon {
+        crate::components::icons::paint(
+            ui,
+            icon,
+            egui::Rect::from_center_size(
+                rect.left_center() + Vec2::new(MENU_LEFT_ICON_WIDTH * 0.5, 0.0),
+                Vec2::splat((item_height - 10.0).max(12.0)),
+            ),
+            if enabled {
+                ui.visuals().text_color()
+            } else {
+                ui.visuals()
+                    .weak_text_color()
+                    .gamma_multiply(ui.visuals().disabled_alpha)
+            },
+            false,
+        );
+    } else if checked {
         let center = rect.left_center() + Vec2::new(MENU_LEFT_ICON_WIDTH * 0.5, 0.0);
         let middle = center + Vec2::new(-1.0, 4.0);
         ui.painter().line_segment(

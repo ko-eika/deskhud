@@ -7,7 +7,7 @@
 - Windows HUD 运行态需要独立的原生合成窗口。
 - HUD 窗口会遮挡其覆盖区域，下面的其他应用无法正常点击和操作。
 - `WM_NCHITTEST` 返回 `HTTRANSPARENT` 或 `HTNOWHERE`、以及 `WS_EX_TRANSPARENT`、`WS_EX_NOACTIVATE`、分层窗口组合，在当前 DirectComposition 路径下均未稳定实现跨进程鼠标穿透。
-- HUD 窗口还需要继续遵循 HUD 条目包围盒尺寸和 `prefs.shell.topmost` 置顶策略。
+- HUD 窗口还需要继续遵循 HUD 条目包围盒尺寸和 `hud.global.layer` 层级策略。
 
 ## 已确认结论
 

@@ -73,6 +73,12 @@ pub enum MessageKey {
     SettingsPetList,
     /// 当前宠物配置卡片标题。
     SettingsPetConfig,
+    /// 宠物全局配置标题。
+    SettingsPetGlobal,
+    /// 消息气泡开关。
+    SettingsPetBubbles,
+    /// 消息气泡说明。
+    SettingsPetBubblesHint,
     /// 插件页说明（含第三方风险提示）。
     HudSettingsIntro,
     /// 尚无插件贡献。
@@ -143,6 +149,10 @@ pub enum MessageKey {
     SettingsTopmost,
     /// 全局置顶说明。
     SettingsTopmostHint,
+    /// 宠物层级。
+    SettingsPetLayer,
+    /// 宠物层级说明。
+    SettingsPetLayerHint,
     /// 简体中文。
     OptLocaleZh,
     /// 自动识别系统语言。
@@ -189,6 +199,9 @@ impl MessageKey {
         Self::SettingsPetOptions,
         Self::SettingsPetList,
         Self::SettingsPetConfig,
+        Self::SettingsPetGlobal,
+        Self::SettingsPetBubbles,
+        Self::SettingsPetBubblesHint,
         Self::HudSettingsIntro,
         Self::HudSettingsEmpty,
         Self::MetaAuthor,
@@ -224,6 +237,8 @@ impl MessageKey {
         Self::MenuLayerBottom,
         Self::SettingsTopmost,
         Self::SettingsTopmostHint,
+        Self::SettingsPetLayer,
+        Self::SettingsPetLayerHint,
         Self::OptLocaleZh,
         Self::OptLocaleSystem,
         Self::OptLocaleEn,

@@ -39,6 +39,9 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::SettingsPetOptions => "当前宠物行为",
         MessageKey::SettingsPetList => "宠物列表",
         MessageKey::SettingsPetConfig => "宠物配置",
+        MessageKey::SettingsPetGlobal => "全局配置",
+        MessageKey::SettingsPetBubbles => "消息气泡",
+        MessageKey::SettingsPetBubblesHint => "控制宠物消息气泡的显示。",
         MessageKey::HudSettingsIntro => {
             "「开启」并「应用」后生效，第三方插件可能读取系统信息或展示内容，存在隐私与安全风险，请仅启用可信来源的插件。"
         }
@@ -76,6 +79,8 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::MenuLayerBottom => "置底",
         MessageKey::SettingsTopmost => "置顶",
         MessageKey::SettingsTopmostHint => "仅让宠物和 HUD 保持置顶；设置窗口仍是普通窗口。",
+        MessageKey::SettingsPetLayer => "宠物层级",
+        MessageKey::SettingsPetLayerHint => "设置宠物在桌面窗口中的层级。",
         MessageKey::OptLocaleZh => "简体中文",
         MessageKey::OptLocaleSystem => "跟随系统",
         MessageKey::OptLocaleEn => "English",

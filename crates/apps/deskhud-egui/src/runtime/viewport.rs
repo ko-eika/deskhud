@@ -319,15 +319,6 @@ impl Viewport {
         ))
     }
 
-    pub(crate) fn toggle_always_on_top(&mut self) {
-        let layer = if self.always_on_top {
-            WindowLayer::Normal
-        } else {
-            WindowLayer::AlwaysOnTop
-        };
-        self.set_window_layer(layer);
-    }
-
     pub(crate) fn render<F>(&mut self, draw_ui: F) -> ViewportOutput
     where
         F: FnOnce(&Context, RawInput) -> ViewOutput,

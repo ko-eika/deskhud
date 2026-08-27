@@ -41,6 +41,9 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::SettingsPetOptions => "Active pet behavior",
         MessageKey::SettingsPetList => "Pet list",
         MessageKey::SettingsPetConfig => "Pet configuration",
+        MessageKey::SettingsPetGlobal => "Global configuration",
+        MessageKey::SettingsPetBubbles => "Message bubbles",
+        MessageKey::SettingsPetBubblesHint => "Show message bubbles for the pet.",
         MessageKey::HudSettingsIntro => {
             "Takes effect after you Enable and Apply. Third-party plugins may read system info or show content and pose privacy or security risks—only enable plugins from sources you trust."
         }
@@ -82,6 +85,8 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::SettingsTopmostHint => {
             "Keep only the pet and HUD on top; Settings remains a normal window."
         }
+        MessageKey::SettingsPetLayer => "Pet layer",
+        MessageKey::SettingsPetLayerHint => "Choose the pet's desktop window layer.",
         MessageKey::OptLocaleZh => "简体中文",
         MessageKey::OptLocaleSystem => "System",
         MessageKey::OptLocaleEn => "English",

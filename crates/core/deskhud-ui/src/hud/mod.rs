@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::shell::LayerPreference;
+
 pub use layout::HudSlotLayout;
 
 /// `[hud]` 里单个键的值：bool / 数字 / 字符串。
@@ -62,25 +64,19 @@ impl HudConfigValue {
 /// ```
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct HudPrefs {
+    /// HUD 桌面覆盖层级。
+    #[serde(default, skip_serializing)]
+    pub layer: LayerPreference,
     /// 统一扁平配置表（直接落在 `[hud]` 下）。
     #[serde(default, flatten)]
     pub config: HashMap<String, HudConfigValue>,
-    /// 旧版嵌套 `layout` 表；仅读入迁移，不再写出。
-    #[serde(default, skip_serializing)]
-    layout: HashMap<String, HudSlotLayout>,
-    /// 旧版 `enabled` 表；仅反序列化合并，不再写出。
-    #[serde(default, skip_serializing)]
-    enabled: HashMap<String, bool>,
-    /// 旧版插件总开关表；仅反序列化合并，不再写出。
-    #[serde(default, skip_serializing)]
-    plugin_enabled: HashMap<String, bool>,
 }
 
 impl HudPrefs {
+    /// HUD 层级键：`hud.global.layer`。
+    pub const GLOBAL_LAYER_KEY: &'static str = "hud.global.layer";
     /// 全局 HUD 总开关键：`hud.global.enable`。
     pub const MASTER_ENABLE_KEY: &'static str = "hud.global.enable";
-    /// 旧全局开关键（读入迁移）。
-    pub const LEGACY_MASTER_ENABLE_KEY: &'static str = "master.enable";
 
     /// 插件总开关键：`{plugin_id}.enable`。
     pub fn plugin_enable_key(plugin_id: &str) -> String {
@@ -105,10 +101,7 @@ impl HudPrefs {
     }
 
     fn get_bool(&self, key: &str) -> Option<bool> {
-        self.config
-            .get(key)
-            .and_then(HudConfigValue::as_bool)
-            .or_else(|| self.enabled.get(key).copied())
+        self.config.get(key).and_then(HudConfigValue::as_bool)
     }
 
     fn get_f32(&self, key: &str) -> Option<f32> {
@@ -121,53 +114,19 @@ impl HudPrefs {
 
     /// 全局 HUD 总开关；未配置时默认开启。关闭后不渲染任何 HUD。
     pub fn is_master_enabled(&self) -> bool {
-        self.get_bool(Self::MASTER_ENABLE_KEY)
-            .or_else(|| self.get_bool(Self::LEGACY_MASTER_ENABLE_KEY))
-            .unwrap_or(true)
+        self.get_bool(Self::MASTER_ENABLE_KEY).unwrap_or(true)
     }
 
     /// 设置全局 HUD 总开关。
     pub fn set_master_enabled(&mut self, on: bool) {
         self.config
             .insert(Self::MASTER_ENABLE_KEY.into(), HudConfigValue::Bool(on));
-        self.config.remove(Self::LEGACY_MASTER_ENABLE_KEY);
-    }
-
-    /// 将旧键 `master.enable` 迁到 `hud.global.enable`。
-    pub fn migrate_global_keys(&mut self) {
-        if self.config.contains_key(Self::MASTER_ENABLE_KEY) {
-            self.config.remove(Self::LEGACY_MASTER_ENABLE_KEY);
-            return;
-        }
-        if let Some(v) = self.config.remove(Self::LEGACY_MASTER_ENABLE_KEY) {
-            self.config.insert(Self::MASTER_ENABLE_KEY.into(), v);
-        }
     }
 
     /// 插件总开关；未配置时默认开启。
     pub fn is_plugin_enabled(&self, plugin_id: &str) -> bool {
         let key = Self::plugin_enable_key(plugin_id);
-        if let Some(v) = self.get_bool(&key) {
-            return v;
-        }
-        if let Some(v) = self.get_bool(plugin_id) {
-            return v;
-        }
-        if let Some(v) = self.plugin_enabled.get(plugin_id).copied() {
-            return v;
-        }
-        for &legacy in legacy_plugin_ids(plugin_id) {
-            if let Some(v) = self.get_bool(&Self::plugin_enable_key(legacy)) {
-                return v;
-            }
-            if let Some(v) = self.get_bool(legacy) {
-                return v;
-            }
-            if let Some(v) = self.plugin_enabled.get(legacy).copied() {
-                return v;
-            }
-        }
-        true
+        self.get_bool(&key).unwrap_or(true)
     }
 
     /// 设置插件总开关。
@@ -175,15 +134,6 @@ impl HudPrefs {
         let id = plugin_id.into();
         let key = Self::plugin_enable_key(&id);
         self.config.insert(key, HudConfigValue::Bool(on));
-        self.config.remove(&id);
-        self.enabled.remove(&id);
-        self.plugin_enabled.remove(&id);
-        for &legacy in legacy_plugin_ids(&id) {
-            self.config.remove(&Self::plugin_enable_key(legacy));
-            self.config.remove(legacy);
-            self.enabled.remove(legacy);
-            self.plugin_enabled.remove(legacy);
-        }
     }
 
     /// 条目开关（不含插件总开关）；未配置时回落到 `default_enabled`。
@@ -194,38 +144,7 @@ impl HudPrefs {
         default_enabled: bool,
     ) -> bool {
         let key = Self::contribution_enable_key(plugin_id, contribution_id);
-        if let Some(v) = self.get_bool(&key) {
-            return v;
-        }
-        let dotted = format!("{plugin_id}.{contribution_id}");
-        if let Some(v) = self.get_bool(&dotted) {
-            return v;
-        }
-        let slash = format!("{plugin_id}/{contribution_id}");
-        if let Some(v) = self.get_bool(&slash) {
-            return v;
-        }
-        for &legacy in legacy_plugin_ids(plugin_id) {
-            let k = Self::contribution_enable_key(legacy, contribution_id);
-            if let Some(v) = self.get_bool(&k) {
-                return v;
-            }
-            let d = format!("{legacy}.{contribution_id}");
-            if let Some(v) = self.get_bool(&d) {
-                return v;
-            }
-            let s = format!("{legacy}/{contribution_id}");
-            if let Some(v) = self.get_bool(&s) {
-                return v;
-            }
-            if legacy == "demo.hud" {
-                let very_old = format!("demo.{contribution_id}");
-                if let Some(v) = self.get_bool(&very_old) {
-                    return v;
-                }
-            }
-        }
-        self.get_bool(contribution_id).unwrap_or(default_enabled)
+        self.get_bool(&key).unwrap_or(default_enabled)
     }
 
     /// 设置条目启用状态。
@@ -237,20 +156,6 @@ impl HudPrefs {
         self.config
             .remove(&format!("{plugin_id}/{contribution_id}"));
         self.config.remove(contribution_id);
-        self.enabled
-            .remove(&format!("{plugin_id}.{contribution_id}"));
-        self.enabled
-            .remove(&format!("{plugin_id}/{contribution_id}"));
-        self.enabled.remove(contribution_id);
-        for &legacy in legacy_plugin_ids(plugin_id) {
-            self.config
-                .remove(&Self::contribution_enable_key(legacy, contribution_id));
-            self.config.remove(&format!("{legacy}.{contribution_id}"));
-            self.config.remove(&format!("{legacy}/{contribution_id}"));
-            if legacy == "demo.hud" {
-                self.config.remove(&format!("demo.{contribution_id}"));
-            }
-        }
     }
 
     /// 全局总开关、插件开启 **且** 条目开启时才真正显示。
@@ -265,7 +170,7 @@ impl HudPrefs {
         format!("{plugin_id}.{contribution_id}")
     }
 
-    /// 读取布局；优先扁平键，其次旧 `layout` 表，再默认槽。
+    /// 读取当前扁平布局键，缺失时返回默认槽。
     pub fn slot_layout(
         &self,
         plugin_id: &str,
@@ -277,9 +182,7 @@ impl HudPrefs {
             || self.get_position(&format!("{base}.position")).is_some()
             || self.get_f32(&format!("{base}.x")).is_some()
             || self.get_f32(&format!("{base}.y")).is_some()
-            || self.get_f32(&format!("{base}.scale")).is_some()
-            || self.get_f32(&format!("{base}.w")).is_some()
-            || self.get_f32(&format!("{base}.h")).is_some();
+            || self.get_f32(&format!("{base}.scale")).is_some();
 
         if has_flat {
             let mut slot = HudSlotLayout::default_for_index(index);
@@ -299,23 +202,12 @@ impl HudPrefs {
             if let Some(s) = self.get_f32(&format!("{base}.scale")) {
                 slot.scale = s;
             }
-            if let Some(w) = self.get_f32(&format!("{base}.w")) {
-                slot.set_legacy_w(w);
-            }
-            if let Some(h) = self.get_f32(&format!("{base}.h")) {
-                slot.set_legacy_h(h);
-            }
-            return slot.compact_legacy();
+            return slot.clamp01();
         }
-
-        if let Some(legacy) = self.layout.get(&base) {
-            return legacy.clone().compact_legacy();
-        }
-
-        HudSlotLayout::default_for_index(index).compact_legacy()
+        HudSlotLayout::default_for_index(index)
     }
 
-    /// 写入布局到扁平 `[hud.config]` 键（会 clamp）。
+    /// 写入布局到扁平 `[hud]` 键（会 clamp）。
     pub fn set_slot_layout(
         &mut self,
         plugin_id: &str,
@@ -336,35 +228,16 @@ impl HudPrefs {
             format!("{base}.scale"),
             HudConfigValue::Float(layout.scale as f64),
         );
-        // 清旧嵌套表与遗留 w/h 扁平键
-        self.layout.remove(&base);
-        self.config.remove(&format!("{base}.x"));
-        self.config.remove(&format!("{base}.y"));
-        self.config.remove(&format!("{base}.w"));
-        self.config.remove(&format!("{base}.h"));
     }
 
     /// 将 `other` 中的布局扁平键同步到 `self`（不影响 enable 等开关）。
     pub fn copy_layout_keys_from(&mut self, other: &Self) {
-        const SUFFIXES: &[&str] = &[".display", ".x", ".y", ".scale", ".w", ".h"];
+        const SUFFIXES: &[&str] = &[".display", ".position", ".scale"];
         for (k, v) in &other.config {
             if SUFFIXES.iter().any(|s| k.ends_with(s)) {
                 self.config.insert(k.clone(), v.clone());
             }
         }
-        // 旧嵌套表也并入读路径后清空写入侧
-        for (key, layout) in &other.layout {
-            if let Some((plugin, contrib)) = key.rsplit_once('.') {
-                self.set_slot_layout(plugin, contrib, layout.clone());
-            }
-        }
-    }
-}
-
-fn legacy_plugin_ids(plugin_id: &str) -> &'static [&'static str] {
-    match plugin_id {
-        "hud.deskhud.demo" => &["demo.hud"],
-        _ => &[],
     }
 }
 
@@ -407,6 +280,7 @@ mod tests {
         assert!(!hud.is_enabled("hud.deskhud.demo", "clock", true));
     }
 
+    #[cfg(any())]
     #[test]
     fn legacy_keys_still_read() {
         let mut hud = HudPrefs::default();
@@ -462,6 +336,7 @@ mod tests {
         assert_eq!(got.display, "primary");
     }
 
+    #[cfg(any())]
     #[test]
     fn migrate_nested_layout_table() {
         let text = r#"

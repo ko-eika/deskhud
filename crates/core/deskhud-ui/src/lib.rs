@@ -26,7 +26,7 @@ pub use persist::{
 };
 pub use pet::PetPrefs;
 pub use pet::{PetPosition, PetSize};
-pub use prefs::{UiPreferences, migrate_pet_id};
+pub use prefs::UiPreferences;
 pub use settings::{
     AboutInfo, PetCardLayout, SettingsCommand, SettingsEffect, SettingsModel, SettingsTab,
     apply_general_preferences, apply_graphics_preferences, apply_pet_selection, draft_is_dirty,
@@ -34,7 +34,7 @@ pub use settings::{
 };
 pub use shell::{
     AnimationQuality, DEFAULT_UI_FONT_FAMILY, DEFAULT_UI_FONT_ID, DEFAULT_UI_FONT_SIZE,
-    DEFAULT_UI_FONT_STYLE, FpsLimit, GraphicsPreferences, PetPickerMode, PowerMode, ShellPrefs,
-    SystemTheme, UiTheme, resolve_theme,
+    DEFAULT_UI_FONT_STYLE, FpsLimit, GraphicsPreferences, LayerPreference, PetPickerMode,
+    PowerMode, ShellPrefs, SystemTheme, UiTheme, resolve_theme,
 };
 pub use system_locale::{LanguageTag, current_system_locale};
