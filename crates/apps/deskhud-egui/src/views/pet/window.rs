@@ -22,12 +22,14 @@ use crate::views as view;
 pub(crate) struct PetWindow {
     /// Pet 对应的通用视口运行时。
     viewport: Viewport,
+    activity_area: Option<area::ActivityArea>,
     pet: Arc<dyn PetKind>,
     prefs: UiPreferences,
     started: Instant,
     last_tick: Instant,
     last_hit: bool,
     last_drag: bool,
+    snap_frames: u8,
     last_dock: DockState,
     last_scene: deskhud_engine::PetScene,
     last_global_mouse: crate::input::GlobalMouseButtons,
@@ -44,6 +46,7 @@ impl PetWindow {
         prefs: UiPreferences,
     ) -> Self {
         let mut viewport = Viewport::new(event_loop, ViewportConfig::pet(), proxy);
+        let activity_area = area::get(viewport.window());
         let pet = registry
             .pets()
             .into_iter()
@@ -63,12 +66,14 @@ impl PetWindow {
         }
         Self {
             viewport,
+            activity_area,
             pet,
             prefs,
             started: Instant::now(),
             last_tick: Instant::now(),
             last_hit: false,
             last_drag: false,
+            snap_frames: 0,
             last_dock: DockState::FREE,
             last_scene: deskhud_engine::PetScene::default(),
             last_global_mouse: crate::input::GlobalMouseButtons::default(),
@@ -310,6 +315,7 @@ impl PetWindow {
         let now = Instant::now();
         let dt = now.duration_since(self.last_tick).as_secs_f32().min(0.25);
         self.last_tick = now;
+        let was_dragging = self.last_drag;
         let dock = self.current_dock();
         let info = self.pet.info();
         let options: Vec<(&str, bool)> = self
@@ -336,45 +342,103 @@ impl PetWindow {
                 position.y as f64 + window_size.height as f64 / 2.0,
             ]
         });
-        self.viewport
-            .render(|context, raw_input| {
-                view::pet::run(
-                    context,
-                    raw_input,
-                    self.pet.as_ref(),
-                    &self.prefs,
-                    self.started.elapsed().as_secs_f32(),
-                    &mut self.last_hit,
-                    dock,
-                    &mut self.last_drag,
-                    dt,
-                    &mut self.last_scene,
-                    &mut self.last_global_mouse,
-                    screen_center,
-                    [window_size.width as f64, window_size.height as f64],
-                    self.prefs.pet.global_mouse_input,
-                )
-            })
-            .should_close
+        let result = self.viewport.render(|context, raw_input| {
+            view::pet::run(
+                context,
+                raw_input,
+                self.pet.as_ref(),
+                &self.prefs,
+                self.started.elapsed().as_secs_f32(),
+                &mut self.last_hit,
+                dock,
+                &mut self.last_drag,
+                dt,
+                &mut self.last_scene,
+                &mut self.last_global_mouse,
+                screen_center,
+                [window_size.width as f64, window_size.height as f64],
+                self.prefs.pet.global_mouse_input,
+            )
+        });
+        if was_dragging && !self.last_drag {
+            self.snap_frames = 4;
+        }
+        if !self.last_drag && self.snap_frames > 0 {
+            self.snap_to_activity_area();
+            self.snap_frames -= 1;
+        }
+        // 透明区域慢速拖动时，窗口移动可能让 egui 丢失释放边沿；以全局
+        // 鼠标快照兜底，确保释放后仍会执行严格回弹。
+        if !self.last_drag
+            && !crate::input::global_mouse_buttons().primary_down
+            && self.is_outside_activity_area()
+        {
+            self.snap_to_activity_area();
+        }
+        result.should_close
     }
 
     fn current_dock(&self) -> deskhud_engine::DockState {
         let Some(position) = self.viewport.window().outer_position().ok() else {
             return deskhud_engine::DockState::FREE;
         };
-        let Some(area) = area::get(self.viewport.window()) else {
+        let Some(area) = self.activity_area else {
             return deskhud_engine::DockState::FREE;
         };
         let size = self.viewport.window().outer_size();
         let right = position.x + size.width as i32;
         let bottom = position.y + size.height as i32;
-        let tolerance = 8;
+        let tolerance = 16;
         deskhud_engine::DockState {
-            left: (position.x - area.position.x).abs() <= tolerance,
-            top: (position.y - area.position.y).abs() <= tolerance,
-            right: (right - (area.position.x + area.size.width as i32)).abs() <= tolerance,
-            bottom: (bottom - (area.position.y + area.size.height as i32)).abs() <= tolerance,
+            left: position.x <= area.position.x + tolerance,
+            top: position.y <= area.position.y + tolerance,
+            right: right >= area.position.x + area.size.width as i32 - tolerance,
+            bottom: bottom >= area.position.y + area.size.height as i32 - tolerance,
         }
+    }
+
+    fn snap_to_activity_area(&self) {
+        let window = self.viewport.window();
+        let Some(area) = self.activity_area else {
+            return;
+        };
+        let Ok(position) = window.outer_position() else {
+            return;
+        };
+        let size = window.outer_size();
+        let right = position.x + size.width as i32;
+        let bottom = position.y + size.height as i32;
+        let area_right = area.position.x + area.size.width as i32;
+        let area_bottom = area.position.y + area.size.height as i32;
+        let mut snapped = position;
+        if position.x <= area.position.x + 16 {
+            snapped.x = area.position.x;
+        } else if right >= area_right - 16 {
+            snapped.x = area_right - size.width as i32;
+        }
+        if position.y <= area.position.y + 16 {
+            snapped.y = area.position.y;
+        } else if bottom >= area_bottom - 16 {
+            snapped.y = area_bottom - size.height as i32;
+        }
+        if snapped != position {
+            self.viewport.request_outer_position(snapped);
+        }
+    }
+
+    fn is_outside_activity_area(&self) -> bool {
+        let Some(area) = self.activity_area else {
+            return false;
+        };
+        let window = self.viewport.window();
+        let Ok(position) = window.outer_position() else {
+            return false;
+        };
+        let size = window.outer_size();
+        position.x < area.position.x
+            || position.y < area.position.y
+            || position.x + size.width as i32 > area.position.x + area.size.width as i32
+            || position.y + size.height as i32 > area.position.y + area.size.height as i32
     }
 
     /// 按正确的 OpenGL 资源顺序销毁 Pet 窗口。

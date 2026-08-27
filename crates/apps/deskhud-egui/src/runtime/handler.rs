@@ -132,6 +132,13 @@ impl ApplicationHandler<UserEvent> for App {
                             if self.pet_window_id == Some(window_id) {
                                 self.start_drag_follow(&window);
                             }
+                            #[cfg(target_os = "macos")]
+                            {
+                                // 不把透明宠物交给 AppKit 的原生拖拽，避免
+                                // macOS 在屏幕边缘触发系统窗口平铺/吸附。
+                                let _ = window;
+                            }
+                            #[cfg(not(target_os = "macos"))]
                             let _ = window.drag_window();
                         }
                         WindowCommand::Resize { width, height } => {
@@ -252,6 +259,16 @@ impl App {
             follow.pet_origin.x + (pointer[0] - follow.pointer_origin[0]).round() as i32,
             follow.pet_origin.y + (pointer[1] - follow.pointer_origin[1]).round() as i32,
         );
+        #[cfg(target_os = "macos")]
+        if let Some(pet) = self.windows.get(&pet_window_id) {
+            pet.set_outer_position(position);
+        }
+        #[cfg(target_os = "macos")]
+        let position = self
+            .windows
+            .get(&pet_window_id)
+            .and_then(|pet| pet.outer_position().ok())
+            .unwrap_or(position);
         self.position_bubble_for_pet(pet_window_id, position);
         true
     }
