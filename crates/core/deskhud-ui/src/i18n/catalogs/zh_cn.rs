@@ -61,7 +61,7 @@ pub(super) fn text(key: MessageKey) -> &'static str {
         MessageKey::OptThemeDark => "深色",
         MessageKey::OptThemeSystem => "使用系统设置",
         MessageKey::SettingsUiFont => "字体",
-        MessageKey::SettingsUiFontFamily => "系列",
+        MessageKey::SettingsUiFontFamily => "字簇",
         MessageKey::SettingsUiFontStyle => "样式",
         MessageKey::SettingsUiFontSize => "大小",
         MessageKey::SettingsUiFontPreview => "海浪的声音平静了我的心灵。DeskHud 123",

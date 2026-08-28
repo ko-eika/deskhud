@@ -1,12 +1,8 @@
 //! Toolkit-independent font container metadata.
 
-mod builtin;
 mod scan;
 
-pub use builtin::{
-    BuiltinFontAsset, builtin_font_assets, builtin_font_data, builtin_font_families,
-};
-pub use scan::system_font_families;
+pub use scan::{font_families_from_dirs, system_font_families};
 
 use std::fs;
 use std::path::Path;
@@ -50,7 +46,7 @@ pub struct FontFace {
     pub style: String,
     /// Backend-specific source identifier.
     pub font_id: String,
-    /// Whether the face is bundled with the application.
+    /// Whether the face is supplied by the application rather than the OS.
     pub builtin: bool,
 }
 
@@ -521,14 +517,6 @@ pub fn style_sort_key(style: &str) -> (u8, u8) {
     (weight, italic)
 }
 
-struct FontNames {
-    family: Option<String>,
-    subfamily: Option<String>,
-    postscript: Option<String>,
-    family_names: Vec<FontNameRecord>,
-    subfamily_names: Vec<FontNameRecord>,
-}
-
 /// Reads font-container metadata without loading glyph data or depending on a UI toolkit.
 pub fn inspect_font_file(path: impl AsRef<Path>) -> std::io::Result<Vec<FontContainerFace>> {
     let bytes = fs::read(path)?;
@@ -538,33 +526,58 @@ pub fn inspect_font_file(path: impl AsRef<Path>) -> std::io::Result<Vec<FontCont
 
 /// Reads font-container metadata from TTF/OTF/TTC bytes.
 pub fn inspect_font_bytes(bytes: &[u8]) -> Result<Vec<FontContainerFace>, String> {
-    let offsets = if bytes.get(0..4) == Some(b"ttcf") {
-        let count = be_u32(bytes, 8)?;
-        (0..count)
-            .map(|i| be_u32(bytes, 12 + i * 4))
-            .collect::<Result<Vec<_>, _>>()?
+    let mut faces = Vec::new();
+    for face_index in 0.. {
+        let Ok(face) = ttf_parser::Face::parse(bytes, face_index) else {
+            break;
+        };
+        let mut family_names = Vec::new();
+        let mut subfamily_names = Vec::new();
+        for name in face.names() {
+            if !matches!(name.name_id, 1 | 2 | 16 | 17) {
+                continue;
+            }
+            let Some(value) = name.to_string() else {
+                continue;
+            };
+            let record = FontNameRecord {
+                name_id: name.name_id,
+                platform_id: name.platform_id as u16,
+                language_id: name.language_id,
+                value,
+            };
+            if matches!(name.name_id, 1 | 16) {
+                family_names.push(record);
+            } else {
+                subfamily_names.push(record);
+            }
+        }
+        let family = preferred_name(&face, &[16, 1]);
+        let subfamily = preferred_name(&face, &[17, 2]);
+        let postscript = preferred_name(&face, &[6]);
+        faces.push(FontContainerFace {
+            face_index,
+            family,
+            subfamily,
+            postscript,
+            family_names,
+            subfamily_names,
+        });
+    }
+    if faces.is_empty() {
+        Err("font has no parseable faces".into())
     } else {
-        vec![0]
-    };
-    offsets
-        .into_iter()
-        .enumerate()
-        .map(|(index, offset)| {
-            let tables = table_directory(bytes, offset)?;
-            let name = tables
-                .get(b"name".as_slice())
-                .ok_or("font has no name table")?;
-            let names = read_names(bytes, name.0, name.1)?;
-            Ok(FontContainerFace {
-                face_index: index as u32,
-                family: names.family,
-                subfamily: names.subfamily,
-                postscript: names.postscript,
-                family_names: names.family_names,
-                subfamily_names: names.subfamily_names,
-            })
-        })
-        .collect()
+        Ok(faces)
+    }
+}
+
+fn preferred_name(face: &ttf_parser::Face<'_>, ids: &[u16]) -> Option<String> {
+    ids.iter().find_map(|wanted| {
+        face.names()
+            .into_iter()
+            .filter(|name| name.name_id == *wanted)
+            .find_map(|name| name.to_string())
+    })
 }
 
 /// Returns whether a specific face contains glyphs for every character in `text`.
@@ -576,125 +589,11 @@ pub fn face_supports_text(bytes: &[u8], face_index: u32, text: &str) -> bool {
         .all(|character| face.glyph_index(character).is_some())
 }
 
-fn be_u16(bytes: &[u8], at: u32) -> Result<u16, String> {
-    let at = at as usize;
-    bytes
-        .get(at..at + 2)
-        .map(|v| u16::from_be_bytes([v[0], v[1]]))
-        .ok_or_else(|| "truncated font".into())
-}
-
-fn be_u32(bytes: &[u8], at: u32) -> Result<u32, String> {
-    let at = at as usize;
-    bytes
-        .get(at..at + 4)
-        .map(|v| u32::from_be_bytes([v[0], v[1], v[2], v[3]]))
-        .ok_or_else(|| "truncated font".into())
-}
-
-fn table_directory(
-    bytes: &[u8],
-    offset: u32,
-) -> Result<std::collections::BTreeMap<Vec<u8>, (u32, u32)>, String> {
-    let count = be_u16(bytes, offset + 4)? as u32;
-    let mut tables = std::collections::BTreeMap::new();
-    for i in 0..count {
-        let at = offset + 12 + i * 16;
-        let tag = bytes
-            .get(at as usize..at as usize + 4)
-            .ok_or("truncated table directory")?
-            .to_vec();
-        tables.insert(tag, (be_u32(bytes, at + 8)?, be_u32(bytes, at + 12)?));
-    }
-    Ok(tables)
-}
-
-fn read_names(bytes: &[u8], offset: u32, length: u32) -> Result<FontNames, String> {
-    let end = offset.checked_add(length).ok_or("invalid name table")?;
-    let count = be_u16(bytes, offset + 2)? as u32;
-    let string_offset = be_u16(bytes, offset + 4)? as u32;
-    // Prefer OpenType typographic family/subfamily (16/17). Some collections
-    // such as Inter use those names to distinguish every weight, while the
-    // legacy family/subfamily names (1/2) intentionally collapse them.
-    let mut values: [Option<String>; 3] = [None, None, None];
-    let mut legacy: [Option<String>; 3] = [None, None, None];
-    let mut family_names = Vec::new();
-    let mut subfamily_names = Vec::new();
-    for i in 0..count {
-        let at = offset + 6 + i * 12;
-        let platform = be_u16(bytes, at)?;
-        let name_id = be_u16(bytes, at + 6)?;
-        let length = be_u16(bytes, at + 8)? as u32;
-        let relative = be_u16(bytes, at + 10)? as u32;
-        if !(name_id == 1 || name_id == 2 || name_id == 6 || name_id == 16 || name_id == 17) {
-            continue;
-        }
-        let start = offset + string_offset + relative;
-        let finish = start.checked_add(length).ok_or("invalid name record")?;
-        if finish > end {
-            continue;
-        }
-        let raw = &bytes[start as usize..finish as usize];
-        let text = if platform == 0 || platform == 3 {
-            decode_utf16(raw)
-        } else {
-            String::from_utf8_lossy(raw).into_owned()
-        };
-        if !text.is_empty() {
-            let record = FontNameRecord {
-                name_id,
-                platform_id: platform,
-                language_id: be_u16(bytes, at + 4)?,
-                value: text.clone(),
-            };
-            if name_id == 1 || name_id == 16 {
-                family_names.push(record);
-            } else if name_id == 2 || name_id == 17 {
-                subfamily_names.push(record);
-            }
-        }
-        let (slot, target) = match name_id {
-            1 => (0, &mut legacy),
-            2 => (1, &mut legacy),
-            6 => (2, &mut values),
-            16 => (0, &mut values),
-            17 => (1, &mut values),
-            _ => unreachable!(),
-        };
-        if target[slot].is_none() && !text.is_empty() {
-            target[slot] = Some(text);
-        }
-    }
-    if values[0].is_none() {
-        values[0] = legacy[0].take();
-    }
-    if values[1].is_none() {
-        values[1] = legacy[1].take();
-    }
-    Ok(FontNames {
-        family: values[0].take().or_else(|| legacy[0].take()),
-        subfamily: values[1].take().or_else(|| legacy[1].take()),
-        postscript: values[2].take(),
-        family_names,
-        subfamily_names,
-    })
-}
-
-fn decode_utf16(raw: &[u8]) -> String {
-    raw.chunks_exact(2)
-        .map(|v| u16::from_be_bytes([v[0], v[1]]))
-        .collect::<Vec<_>>()
-        .iter()
-        .copied()
-        .map(|v| char::from_u32(v as u32).unwrap_or('\u{FFFD}'))
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         FontCatalog, FontFace, FontFamilyEntry, classify_stem, face_supports_text,
-        inspect_font_file, normalize_style_name, select_font_for_locale,
+        font_families_from_dirs, inspect_font_file, normalize_style_name, select_font_for_locale,
     };
     use crate::LanguageTag;
 
@@ -706,6 +605,16 @@ mod tests {
         assert_eq!(style, "Bold Italic");
         assert_eq!(normalize_style_name("Negreta"), "Bold");
         assert_eq!(normalize_style_name("Normal"), "Regular");
+    }
+
+    #[test]
+    fn scans_external_source_han_sans_collection() {
+        let directory =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../assets/fonts");
+        let families = font_families_from_dirs([directory]);
+        assert!(families.iter().any(|family| {
+            family.family_key == "sourcehansans" && family.faces.iter().any(|face| face.builtin)
+        }));
     }
 
     #[test]

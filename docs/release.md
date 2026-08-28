@@ -41,7 +41,7 @@ cargo build -p deskhud-egui --release
 说明：
 
 - Windows 会通过 `winresource` 嵌入 `assets/icon.ico`；release 构建无控制台窗口。
-- 内置 Inter 字体集合约占 12.6 MB，覆盖中英文并包含多个字重，属预期。
+- 字体不嵌入可执行文件；Cargo 构建会将 `assets/fonts/` 递归复制到 `target/<profile>/fonts/`，发布时随可执行文件携带该 `fonts/` 目录即可。应用支持按字簇、语言和样式自由分层，缺失外置字体时回退到系统字体。
 - 设置窗口暂使用 **Glow（OpenGL）**；Windows 宠物、菜单、气泡和 HUD 原生合成使用 D3D11 + Direct2D + DirectComposition。设置窗不承担透明覆盖层职责。
 - 当前体验最完整的目标平台是 **Windows**；macOS/Linux 的原生窗口后端按迁移里程碑推进，fallback 仅作为能力不足时的明确降级。
 

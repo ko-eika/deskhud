@@ -20,10 +20,30 @@ pub fn system_font_families() -> Vec<FontFamilyEntry> {
     let mut face_count = 0;
 
     for path in priority_system_cjk() {
-        ingest(&path, &mut catalog, &mut seen, &mut face_count);
+        ingest(&path, &mut catalog, &mut seen, &mut face_count, false);
     }
     for directory in font_dirs() {
-        collect(&directory, &mut catalog, &mut seen, &mut face_count);
+        collect(&directory, &mut catalog, &mut seen, &mut face_count, false);
+        if face_count >= MAX_SYSTEM_FONTS {
+            break;
+        }
+    }
+    catalog.into_entries()
+}
+
+/// Scans application-provided font directories.
+///
+/// Files in these directories are marked as application fonts so they win
+/// over an OS font with the same family and style. The paths remain external
+/// and are loaded only when the UI selects a face.
+pub fn font_families_from_dirs(
+    directories: impl IntoIterator<Item = PathBuf>,
+) -> Vec<FontFamilyEntry> {
+    let mut catalog = FontCatalog::default();
+    let mut seen = BTreeSet::new();
+    let mut face_count = 0;
+    for directory in directories {
+        collect(&directory, &mut catalog, &mut seen, &mut face_count, true);
         if face_count >= MAX_SYSTEM_FONTS {
             break;
         }
@@ -111,7 +131,13 @@ fn priority_system_cjk() -> Vec<PathBuf> {
     .collect()
 }
 
-fn collect(path: &Path, catalog: &mut FontCatalog, seen: &mut BTreeSet<String>, count: &mut usize) {
+fn collect(
+    path: &Path,
+    catalog: &mut FontCatalog,
+    seen: &mut BTreeSet<String>,
+    count: &mut usize,
+    application_font: bool,
+) {
     let Ok(entries) = std::fs::read_dir(path) else {
         return;
     };
@@ -121,18 +147,24 @@ fn collect(path: &Path, catalog: &mut FontCatalog, seen: &mut BTreeSet<String>, 
         }
         let path = entry.path();
         if path.is_dir() {
-            collect(&path, catalog, seen, count);
+            collect(&path, catalog, seen, count, application_font);
         } else if path
             .extension()
             .and_then(|ext| ext.to_str())
             .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "ttf" | "otf" | "ttc"))
         {
-            ingest(&path, catalog, seen, count);
+            ingest(&path, catalog, seen, count, application_font);
         }
     }
 }
 
-fn ingest(path: &Path, catalog: &mut FontCatalog, seen: &mut BTreeSet<String>, count: &mut usize) {
+fn ingest(
+    path: &Path,
+    catalog: &mut FontCatalog,
+    seen: &mut BTreeSet<String>,
+    count: &mut usize,
+    application_font: bool,
+) {
     let Some(stem) = path.file_stem().and_then(|value| value.to_str()) else {
         return;
     };
@@ -153,14 +185,22 @@ fn ingest(path: &Path, catalog: &mut FontCatalog, seen: &mut BTreeSet<String>, c
     }
 
     let Some(faces) = inspect_font_file(path).ok() else {
-        add_face(path, stem, None, catalog, seen, count);
+        add_face(path, stem, None, catalog, seen, count, application_font);
         return;
     };
     for face in faces {
         if *count >= MAX_SYSTEM_FONTS {
             return;
         }
-        add_face(path, stem, Some(face), catalog, seen, count);
+        add_face(
+            path,
+            stem,
+            Some(face),
+            catalog,
+            seen,
+            count,
+            application_font,
+        );
     }
 }
 
@@ -171,6 +211,7 @@ fn add_face(
     catalog: &mut FontCatalog,
     seen: &mut BTreeSet<String>,
     count: &mut usize,
+    application_font: bool,
 ) {
     let id = match container.as_ref() {
         Some(face) => format!("{}#face={}", system_font_id(path), face.face_index),
@@ -202,7 +243,7 @@ fn add_face(
         FontFace {
             style,
             font_id: id,
-            builtin: false,
+            builtin: application_font,
         },
     );
     *count += 1;

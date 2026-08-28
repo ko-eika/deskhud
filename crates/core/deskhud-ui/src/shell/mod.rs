@@ -3,9 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 /// Default bundled font face used when no user preference exists.
-pub const DEFAULT_UI_FONT_ID: &str = "Inter#face=0";
+pub const DEFAULT_UI_FONT_ID: &str = "sourcehansans#face=0";
 /// Default bundled font family.
-pub const DEFAULT_UI_FONT_FAMILY: &str = "inter";
+pub const DEFAULT_UI_FONT_FAMILY: &str = "sourcehansans";
 /// Default bundled font style.
 pub const DEFAULT_UI_FONT_STYLE: &str = "Regular";
 /// Default UI font size in logical pixels.

@@ -29,13 +29,14 @@ struct FontDataCache {
 fn cache() -> &'static FontCache {
     FONT_CACHE.get_or_init(|| {
         let locale = deskhud_ui::current_system_locale();
-        let builtin = deskhud_ui::font::builtin_font_families();
+        let application = deskhud_ui::font::font_families_from_dirs(application_font_dirs());
         let system = deskhud_ui::font::system_font_families();
-        let all = deskhud_ui::font::merge_font_families(builtin.clone(), system);
+        let all = deskhud_ui::font::merge_font_families(application.clone(), system);
         let compatible = deskhud_ui::font::font_families_for_locale(&locale, &all);
         let selected = compatible.iter().find_map(|family| {
-            family
-                .face_for("Regular")
+            is_default_font_family(family)
+                .then(|| family.face_for(deskhud_ui::DEFAULT_UI_FONT_STYLE))
+                .flatten()
                 .map(|face| deskhud_ui::FontSelection {
                     family_key: family.family_key.clone(),
                     family_label: family.label.clone(),
@@ -45,13 +46,26 @@ fn cache() -> &'static FontCache {
                 })
         });
         let selected = selected.or_else(|| {
-            builtin
+            compatible.iter().find_map(|family| {
+                family
+                    .face_for("Regular")
+                    .map(|face| deskhud_ui::FontSelection {
+                        family_key: family.family_key.clone(),
+                        family_label: family.label.clone(),
+                        style: face.style.clone(),
+                        font_id: face.font_id.clone(),
+                        builtin: face.builtin,
+                    })
+            })
+        });
+        let selected = selected.or_else(|| {
+            application
                 .iter()
-                .find(|family| family.family_key == "inter")
-                .and_then(|family| family.face_for("Regular"))
+                .find(|family| is_default_font_family(family))
+                .and_then(|family| family.face_for(deskhud_ui::DEFAULT_UI_FONT_STYLE))
                 .map(|face| deskhud_ui::FontSelection {
-                    family_key: "inter".into(),
-                    family_label: "Inter".into(),
+                    family_key: deskhud_ui::DEFAULT_UI_FONT_FAMILY.into(),
+                    family_label: "Source Han Sans".into(),
                     style: face.style.clone(),
                     font_id: face.font_id.clone(),
                     builtin: true,
@@ -117,7 +131,7 @@ pub(crate) fn default_font_selection() -> Option<&'static deskhud_ui::FontSelect
     cache().selected.as_ref()
 }
 
-/// Loads the selected face into egui, falling back to the embedded Inter TTC.
+/// Loads the selected face into egui, falling back to the bundled default font.
 pub(crate) fn configure_context(context: &egui::Context) {
     let mut definitions = egui::FontDefinitions::default();
     let key = "deskhud_primary_font".to_owned();
@@ -141,8 +155,27 @@ pub(crate) fn configure_context(context: &egui::Context) {
 
 /// Loads the persisted UI face and size into one egui context.
 pub(crate) fn configure_context_for(context: &egui::Context, font_id: &str, size: f32) {
-    let Some(data) = cached_font_data(font_id).or_else(|| cached_font_data(DEFAULT_UI_FONT_ID))
-    else {
+    let requested_id = if font_id == DEFAULT_UI_FONT_ID {
+        default_font_selection()
+            .map(|selection| selection.font_id.as_str())
+            .unwrap_or(font_id)
+    } else {
+        font_id
+    };
+    let (selected_id, data) = if let Some(data) = cached_font_data(requested_id) {
+        (requested_id.to_owned(), Some(data))
+    } else if let Some(selection) = default_font_selection() {
+        (
+            selection.font_id.clone(),
+            cached_font_data(&selection.font_id),
+        )
+    } else {
+        (
+            DEFAULT_UI_FONT_ID.to_owned(),
+            cached_font_data(DEFAULT_UI_FONT_ID),
+        )
+    };
+    let Some(data) = data else {
         return;
     };
     let key = "deskhud_primary_font".to_owned();
@@ -155,7 +188,7 @@ pub(crate) fn configure_context_for(context: &egui::Context, font_id: &str, size
             .or_default()
             .insert(0, key.clone());
     }
-    add_ui_fallback_font(&mut definitions, font_id);
+    add_ui_fallback_font(&mut definitions, &selected_id);
     context.set_fonts(definitions);
     for theme in [egui::Theme::Dark, egui::Theme::Light] {
         context.style_mut_of(theme, |style| {
@@ -254,17 +287,49 @@ fn cached_font_data(font_id: &str) -> Option<Arc<egui::FontData>> {
 }
 
 fn font_data_for(font_id: &str) -> Option<egui::FontData> {
-    if let Some((bytes, index)) = deskhud_ui::font::builtin_font_data(font_id) {
-        let mut data = egui::FontData::from_static(bytes);
-        data.index = index;
-        return Some(data);
+    if font_id == DEFAULT_UI_FONT_ID {
+        let selection = default_font_selection()?;
+        if selection.font_id == font_id {
+            return None;
+        }
+        return font_data_for(&selection.font_id);
     }
     let (path, index) = font_id
         .split_once("#face=")
         .map_or((font_id, 0), |(path, index)| {
             (path, index.parse().unwrap_or(0))
         });
+    let path = resolve_font_path(path);
     let mut data = egui::FontData::from_owned(std::fs::read(path).ok()?);
     data.index = index;
     Some(data)
+}
+
+fn application_font_dirs() -> Vec<std::path::PathBuf> {
+    let Some(executable_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(std::path::Path::to_path_buf))
+    else {
+        return Vec::new();
+    };
+    let fonts = executable_dir.join("fonts");
+    fonts.is_dir().then_some(fonts).into_iter().collect()
+}
+
+fn is_default_font_family(family: &FontFamilyEntry) -> bool {
+    family
+        .family_key
+        .strip_prefix(deskhud_ui::DEFAULT_UI_FONT_FAMILY)
+        .is_some_and(|suffix| suffix.is_empty() || suffix.chars().all(|ch| ch.is_ascii_lowercase()))
+}
+
+fn resolve_font_path(path: &str) -> std::path::PathBuf {
+    let path = std::path::Path::new(path);
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(path)))
+        .unwrap_or_else(|| path.to_path_buf())
 }
