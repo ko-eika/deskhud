@@ -379,6 +379,7 @@ impl WindowManager {
         }
     }
 
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     pub(crate) fn global_input_monitoring(&self) -> (bool, bool) {
         (
             self.prefs.pet.global_keyboard_input,

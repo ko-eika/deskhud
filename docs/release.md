@@ -12,6 +12,12 @@ DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布
 2. [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) 中的 version 徽章
 3. （可选）`CHANGELOG` / Release 说明正文
 
+### 0.6.26 变更摘要
+
+- 修复 Linux、macOS 的 workspace 跨平台编译：Windows 原生依赖仅在 Windows target 引入。
+- 统一 Source Han Sans 的字体家族 ID，修复 Windows 字体扫描测试失败。
+- 将项目最低 Rust 版本与当前依赖同步为 1.95，并同步 CI 工具链。
+
 ## 发布前检查
 
 ```bash

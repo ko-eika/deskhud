@@ -12,4 +12,6 @@ path = "src/lib.rs"
 
 [dependencies]
 deskhud-platform = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
 windows = { workspace = true }

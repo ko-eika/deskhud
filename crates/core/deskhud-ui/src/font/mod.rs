@@ -474,6 +474,13 @@ pub fn classify_stem(stem: &str) -> (String, String, String, Vec<String>) {
         .filter(|c| c.is_ascii_alphanumeric())
         .collect();
     let family_key = family_key.to_ascii_lowercase();
+    // Source Han Sans SC is the bundled simplified-Chinese family. Keep its
+    // stable ID independent of whether it came from the filename or font
+    // metadata, since different platforms may prefer different name records.
+    let family_key = match family_key.as_str() {
+        "sourcehansanssc" => "sourcehansans".into(),
+        _ => family_key,
+    };
     let label = match family_key.as_str() {
         "jetbrainsmono" => "JetBrains Mono".into(),
         "jetbrainsmononl" => "JetBrains Mono NL".into(),
@@ -605,8 +612,8 @@ pub fn face_supports_text(bytes: &[u8], face_index: u32, text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        FontCatalog, FontFace, FontFamilyEntry, classify_stem, face_supports_text,
-        font_families_from_dirs, inspect_font_file, normalize_style_name, select_font_for_locale,
+        FontCatalog, FontFace, FontFamilyEntry, classify_stem, font_families_from_dirs,
+        normalize_style_name, select_font_for_locale,
     };
     use crate::LanguageTag;
 
@@ -693,6 +700,8 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn inspects_inter_collection_faces_when_available() {
+        use super::{face_supports_text, inspect_font_file};
+
         let path =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/Inter.ttc");
         let Ok(faces) = inspect_font_file(path) else {
