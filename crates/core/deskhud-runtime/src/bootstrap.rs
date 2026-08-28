@@ -1,46 +1,54 @@
-//! 启动引导：内置注册 + 本地包发现（社区 WASM 仍后接）。
+//! 启动引导：内置注册 + 本地包发现 + 社区 WASM 宠物注册。
 
 use std::sync::Arc;
 
 use deskhud_engine::{EngineRegistry, PetKind, Plugin};
+use deskhud_package::PackKind;
 use hud_deskhud_demo::DemoHudPlugin;
-use pet_deskhud_blob::BuiltinBlobPet;
 use pet_deskhud_specs::BuiltinSpecsPet;
 use tracing::{info, warn};
 
-use crate::{DiscoveredPack, PackageLoader, RuntimeError};
+use crate::{DiscoveredPack, PackageLoader, RuntimeError, WasmLimits, WasmPet};
 
 /// 引导结果：可运行的宿主注册表 + 已发现包清单。
 pub struct Bootstrap {
-    /// 内置宠 / 插件（及日后 WASM 注册）。
+    /// 内置宠 / 插件与可加载的社区 WASM 宠物。
     pub registry: EngineRegistry,
-    /// 本地扫描到的包（含目录与 `.deskhud`）；尚未 WASM 实例化的社区包也会在此。
+    /// 本地扫描到的包（含目录与 `.deskhud`），包括实例化失败的包。
     pub discovered: Vec<DiscoveredPack>,
 }
 
 fn register_builtins(registry: &mut EngineRegistry) {
-    registry.register_pet(Arc::new(BuiltinSpecsPet::default()) as Arc<dyn PetKind>);
-    registry.register_pet(Arc::new(BuiltinBlobPet::default()) as Arc<dyn PetKind>);
+    // This is the single source of truth for compile-in pets. To make a pet
+    // external, remove it here and ship a WASM Component with `entry` in its
+    // manifest. Keeping the list explicit avoids package-folder contents
+    // accidentally changing the built-in product surface.
+    const BUILTIN_PETS: &[&str] = &["pet.deskhud.specs"];
+    for id in BUILTIN_PETS {
+        match *id {
+            "pet.deskhud.specs" => {
+                registry.register_pet(Arc::new(BuiltinSpecsPet::default()) as Arc<dyn PetKind>);
+            }
+            _ => unreachable!("unknown configured built-in pet: {id}"),
+        }
+    }
     registry.register_plugin(Arc::new(DemoHudPlugin) as Arc<dyn Plugin>);
 }
 
 /// 启动时的默认宿主注册表（内置宠 + 演示 HUD），并扫描 `packages/`。
 ///
 /// - 与内置 **同 ID** 的清单：仅记录发现（元数据覆盖留给后续）；不卸载内置实现。
-/// - 其它包：记入 [`Bootstrap::discovered`]，待 WASM 接入后再 `register_*`。
+/// - 其它宠物包：通过沙箱化 Component Model Guest 后注册；失败只隔离该包。
 pub fn bootstrap_registry() -> Bootstrap {
-    match bootstrap_registry_result() {
-        Ok(b) => b,
-        Err(err) => {
-            warn!(%err, "package discover failed; using builtins only");
-            let mut registry = EngineRegistry::new();
-            register_builtins(&mut registry);
-            Bootstrap {
-                registry,
-                discovered: Vec::new(),
-            }
+    bootstrap_registry_result().unwrap_or_else(|err| {
+        warn!(%err, "package discover failed; using builtins only");
+        let mut registry = EngineRegistry::new();
+        register_builtins(&mut registry);
+        Bootstrap {
+            registry,
+            discovered: Vec::new(),
         }
-    }
+    })
 }
 
 /// 可返回错误的引导（测试用）。
@@ -69,8 +77,28 @@ pub fn bootstrap_registry_result() -> Result<Bootstrap, RuntimeError> {
             builtin_pet_ids.iter().any(|b| b == id) || builtin_plugin_ids.iter().any(|b| b == id);
         if mapped {
             info!(%id, "discovered pack maps to builtin (native)");
+        } else if let (PackKind::Pet, Some(entry)) =
+            (pack.manifest.kind, pack.manifest.entry.as_deref())
+            && pack.manifest.is_external()
+        {
+            match std::fs::read(pack.root.join(entry)).and_then(|bytes| {
+                let preview = pack
+                    .manifest
+                    .preview
+                    .as_deref()
+                    .map(|path| std::fs::read(pack.root.join(path)))
+                    .transpose()?;
+                WasmPet::load_with_preview(&bytes, WasmLimits::default(), preview)
+                    .map_err(|e| std::io::Error::other(e.to_string()))
+            }) {
+                Ok(pet) => {
+                    registry.register_pet(pet as Arc<dyn PetKind>);
+                    info!(%id, "registered community WASM pet");
+                }
+                Err(error) => warn!(%id, %error, "community WASM pet rejected"),
+            }
         } else if pack.manifest.entry.is_some() {
-            info!(%id, "discovered community pack (wasm pending)");
+            info!(%id, "discovered community plugin (WASM plugin ABI pending)");
         } else {
             info!(%id, "discovered pack without entry (metadata only)");
         }

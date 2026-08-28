@@ -13,7 +13,7 @@ pub enum RuntimeError {
     /// IO。
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
-    /// WASM 尚未接入或加载失败。
+    /// WASM 组件加载、调用或沙箱校验失败。
     #[error("wasm: {0}")]
     Wasm(String),
 }

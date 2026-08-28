@@ -20,7 +20,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.6.26"
+version = "0.7.0"
 edition = "2024"
 rust-version = "1.95"
 license = "Apache-2.0"
@@ -38,6 +38,7 @@ deskhud-engine = { path = "crates/core/deskhud-engine" }
 deskhud-runtime = { path = "crates/core/deskhud-runtime" }
 deskhud-ui = { path = "crates/core/deskhud-ui" }
 deskhud-package = { path = "crates/core/deskhud-package" }
+deskhud-sdk = { path = "crates/core/deskhud-sdk" }
 
 # 内置宠物 / HUD 包：由 deskhud-runtime 注册，不属于 UI 壳。
 pet-deskhud-specs = { path = "crates/packs/pet-deskhud-specs" }
@@ -136,6 +137,11 @@ windows-numerics = "0.3.1"
 # 打包与 Windows 资源：构建脚本、.deskhud 压缩包和图标资源。
 winresource = "0.1.31"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
+# Community WASM components. Keep the runtime dependency host-only; SDK uses
+# wit-bindgen to generate guest-side bindings from the shared WIT contract.
+wasmtime = { version = "38.0.0", default-features = false, features = ["cranelift", "component-model", "runtime"] }
+wit-bindgen = "0.44.0"
 
 [profile.dev]
 opt-level = 1

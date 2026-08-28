@@ -320,6 +320,7 @@ mod tests {
         let manifest = PackManifest {
             id: "pet.example.roundtrip".into(),
             kind: PackKind::Pet,
+            load: crate::PackLoadMode::Builtin,
             version: "0.3.0".into(),
             engine: "0.3".into(),
             api_version: PackManifest::SUPPORTED_API_VERSION,
@@ -363,6 +364,7 @@ mod tests {
         let manifest = PackManifest {
             id: "pet.example.bad_resource".into(),
             kind: PackKind::Pet,
+            load: crate::PackLoadMode::Builtin,
             version: "0.6.25".into(),
             engine: "0.6".into(),
             api_version: PackManifest::SUPPORTED_API_VERSION,
@@ -402,7 +404,7 @@ mod tests {
     #[test]
     fn rejects_unsafe_manifest_paths() {
         let err = PackManifest::parse_toml(
-            r#"id="pet.example.path" kind="pet" version="0.6" engine="0.6" api_version=1 display_name="x" preview="../x""#,
+            r#"id="pet.example.path" kind="pet" version="0.7" engine="0.7" api_version=2 display_name="x" preview="../x""#,
         )
         .unwrap_err();
         assert!(format!("{err}").contains(".."));

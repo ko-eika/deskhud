@@ -1,9 +1,10 @@
-//! 宠物包 Guest API（骨架）。
+//! Pet Guest authoring helpers.
 //!
-//! Phase 3 将提供与 `deskhud-engine::PetKind` / `PetEvent` 对齐的导出宏。
-//! 扩展说明见仓库 `docs/extension-guide.md`。
+//! Implement the generated [`crate::Guest`] trait. The WIT types are the ABI;
+//! this module retains the small metadata types used by package tooling.
 
-/// 宠物 Guest 应实现的逻辑钩子（设计稿；WASM 导出尚未接线）。
+/// Legacy authoring shape retained for source compatibility; new components
+/// should implement [`crate::Guest`] instead.
 pub trait PetGuest {
     /// 稳定 ID（与 manifest.id 一致）。
     fn id(&self) -> &str;
@@ -11,6 +12,6 @@ pub trait PetGuest {
     /// 每帧或定时推进行为状态。
     fn tick(&mut self, _dt_secs: f32) {}
 
-    /// 宿主事件入口（贴边 / 拖拽 / 键鼠）；形状将与 host `PetEvent` 对齐。
+    /// Legacy event hook.
     fn on_event_placeholder(&mut self) {}
 }

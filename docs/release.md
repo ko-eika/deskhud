@@ -12,6 +12,13 @@ DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布
 2. [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) 中的 version 徽章
 3. （可选）`CHANGELOG` / Release 说明正文
 
+### 0.7.0 变更摘要
+
+- 完成阶段 F 社区 WASM Guest：外部宠物包通过 Wasmtime Component Model 加载并纳入运行时注册表。
+- `cargo pack-external` 自动编译 WASM、生成 Component 并打包到 `target/<profile>/packages/`，源码目录不再保存 `guest.wasm`。
+- 外部宠物包支持通过 Guest 元数据提供设置预览图与布尔配置项；蓝点改为外部 WASM 包。
+- WASM Guest ABI 增加配置项元数据，`api_version` 升至 2，兼容族升至 `0.7`。
+
 ### 0.6.26 变更摘要
 
 - 修复 Linux、macOS 的 workspace 跨平台编译：Windows 原生依赖仅在 Windows target 引入。

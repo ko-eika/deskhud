@@ -1,21 +1,35 @@
-//! # deskhud-sdk
+//! Guest-side bindings for the DeskHud WASM Component Model contract.
 //!
-//! 社区作者编写 **宠物包** / **HUD 插件** 时依赖本 crate，目标
-//! `wasm32-unknown-unknown`，再打成 `.deskhud`。
-//!
-//! 宿主 **不** 依赖本 crate；ABI 由 `deskhud-runtime` 的 WASM 适配器对接。
-//!
-//! ## 作者流程（目标）
-//!
-//! 1. `cargo new --lib my-pet`，依赖 `deskhud-sdk`，`crate-type = ["cdylib"]`
-//! 2. 实现 [`pet`] 或 [`plugin`] 入口
-//! 3. `cargo build --target wasm32-unknown-unknown`
-//! 4. 与 `manifest.toml` / `i18n/` / `assets/` 一并打成 `.deskhud`
+//! Community components only see neutral records and never receive egui,
+//! HWND, or other host implementation types.
 
 #![deny(missing_docs)]
 
 pub mod pet;
 pub mod plugin;
 
-/// Guest ABI 主版本；须与 [`deskhud_package::PackManifest::SUPPORTED_API_VERSION`] 一致。
-pub const API_VERSION: u32 = 1;
+/// Generated WIT bindings and the `Guest` trait implemented by a pet.
+pub mod bindings {
+    #![allow(missing_docs)]
+    wit_bindgen::generate!({
+        path: "wit",
+        world: "pet-guest",
+    });
+}
+
+/// Guest ABI main version; this must match the package manifest.
+pub const API_VERSION: u32 = 2;
+
+/// Guest ABI trait implemented by a community pet.
+pub use bindings::exports::deskhud::guest::pet_api::Guest;
+
+/// Generated WIT records and variants used by a Guest implementation.
+pub use bindings::exports::deskhud::guest::pet_api;
+
+/// Exports a Guest implementation as the `pet-guest` world.
+#[macro_export]
+macro_rules! export_pet {
+    ($guest:ty) => {
+        $crate::bindings::__export_pet_guest_impl!($guest);
+    };
+}

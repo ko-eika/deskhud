@@ -11,3 +11,4 @@ authors.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+wit-bindgen = { workspace = true }

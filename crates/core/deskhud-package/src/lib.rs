@@ -19,6 +19,6 @@ pub use io::{
     read_manifest_dir, unpack_archive, write_manifest_dir,
 };
 pub use manifest::{
-    PackFrame, PackHudEntry, PackKind, PackManifest, PackResource, PackResourceKind,
+    PackFrame, PackHudEntry, PackKind, PackLoadMode, PackManifest, PackResource, PackResourceKind,
     validate_relative_path,
 };

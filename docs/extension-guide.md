@@ -5,7 +5,13 @@
 当前阶段：
 
 - **内置扩展**：在 `crates/packs/` 实现 `PetKind` / `Plugin`（目录名 `pet-*` / `hud-*`），由 `deskhud-runtime` 引导注册进空的 `EngineRegistry`。
-- **社区扩展（规划）**：`.deskhud` 包 + WASM Guest（`deskhud-sdk` / `deskhud-runtime`），语义与下文 host 契约对齐。
+- **社区扩展**：`.deskhud` 包 + WASM Component Guest（`deskhud-sdk` / `deskhud-runtime`），语义与下文 host 契约对齐。
+
+社区宠物使用 `crates/core/deskhud-sdk/wit/pet-guest.wit` 生成 Guest 绑定：实现
+`deskhud_sdk::Guest` 的 `info`、`tick`、`on_event` 与 `render`，并编译为 WASM
+Component。宿主只提供中性输入和场景数据；不会提供 WASI、文件系统、网络、egui、窗口句柄或操作系统 API。
+`render` 返回的 Sprite/atlas、路径、基础图形、文字、气泡和命中区域会统一转换为
+`deskhud_engine::PetScene`，再由宿主校验与渲染。
 
 ---
 
@@ -87,7 +93,7 @@ impl PetKind for MyPet {
 
 外观：`PetPaint.bubble_text` 可选短句；当前 Windows 原生后端把它绘制在宿主管理的独立透明工具窗中，超长截断，并按工作区自动选择宠物上方或下方、限制在屏幕内。后续 `PetFrame` 会增加平台无关的首选方位、气泡皮肤、透明度、尾巴与文字样式；包不得直接创建平台窗口。
 
-宠物可以自发显示对话：在 `tick(dt)` 中累计提醒计时，到点后更新包内状态；随后由 `paint(...)` 把提示写入 `bubble_text`。宿主每帧调用 `tick` / `paint`，并自动显示、定位和隐藏对话窗。当前没有全局“定时提醒器”替包决定内容；提醒周期、随机性、冷却与文案属于宠物行为。此能力现在适用于原生内置宠，社区 WASM 包需等待 Guest runtime 接入同一帧契约。
+宠物可以自发显示对话：在 `tick(dt)` 中累计提醒计时，到点后更新包内状态；随后由 `paint(...)` 把提示写入 `bubble_text`。宿主每帧调用 `tick` / `paint`，并自动显示、定位和隐藏对话窗。当前没有全局“定时提醒器”替包决定内容；提醒周期、随机性、冷却与文案属于宠物行为。WASM Guest 通过 `render` 返回同一中性场景契约。
 
 `PetPaint.bubble_style` 默认 `FollowTheme`，宿主会按 `ctx.theme` 选择高对比度浅/深配色。包也可填写 `PetBubbleStyle::Custom` 的背景 RGBA、文字 RGBA 与圆角，完全使用自定义样式；包仍不得创建平台窗口。
 
@@ -111,11 +117,17 @@ crates/packs/pet-deskhud-specs/   # 示例
   src/lib.rs
 ```
 
-导出 **仅** 打包 `manifest.toml` + `assets/` + `i18n/`（不含 `src/` / `Cargo.toml`）：
+外部 WASM 包的源目录不需要提交 `guest.wasm`。打包时会自动编译 crate、生成 WASM Component，并导出 `manifest.toml` + `guest.wasm` + `assets/` + `i18n/`（不含 `src/` / `Cargo.toml`）：
 
 ```bash
-# 导出 crates/packs/ 下全部出厂包 → target/packages/*.deskhud
+# 导出 crates/packs/ 下所有带 entry 的外部 WASM 包 → target/<profile>/packages/*.deskhud
 cargo pack-builtins
+
+# 导出一个外部 WASM 包（也可传仓库外的目录）
+cargo pack-external crates/packs/pet-your-pack
+
+# 发布构建；Guest 也按 release profile 编译
+cargo pack-external --release
 
 # 导出单个目录名（crates/packs/ 下的文件夹名）
 cargo pack-builtin pet-deskhud-specs
@@ -128,16 +140,19 @@ cargo pack-builtins --out path/to/out
 说明：
 
 - 别名定义在 [`.cargo/config.toml`](../.cargo/config.toml)，实际由 `deskhud-xtask` 执行。
-- 运行时仍以原生 crate **compile-in**；导出的 `.deskhud` 用于规范校验 / 对照社区包布局。
-- 社区 WASM 包另含 `guest.wasm`（Phase 3）；本地扫描根为 [`packages/`](../packages/)。
-- 默认输出在 `target/packages/`（随 `cargo clean` 清理）；需要长期保留可用 `--out`。
+- `pack-external` / `pack-builtins` 只处理 manifest 声明了 `entry` 的外部包；内置包仍可用 `pack-builtin` 显式导出。
+- 当前编译进程序的内置宠物清单在 [`deskhud-runtime/src/bootstrap.rs`](../crates/core/deskhud-runtime/src/bootstrap.rs) 的 `BUILTIN_PETS`；只有列在该数组中的宠物才属于内置。要外置某个宠物，需要从该数组移除，并提供带 `entry = "guest.wasm"` 的 WASM Component 包。
+- 包自身可在 `manifest.toml` 中写 `load = "builtin"` 或 `load = "external"`；旧清单不写时按 `entry` 自动判断。`load` 控制打包/发现分类，但不能让外部包凭清单获得 Rust 内置实现。
+- 运行时优先扫描可执行文件旁的 `packages/`，因此 debug 使用 `target/debug/packages/`，release 使用 `target/release/packages/`。
+- 默认输出在当前 profile 的 `target/<profile>/packages/`（随 `cargo clean` 清理）；需要长期保留可用 `--out`。
+- `pack-external` 需要本机安装 `wasm-tools`；Guest 中间产物位于 `target/deskhud-guest/`，不会写回源码包目录。
 
 `manifest` 字段见 `deskhud-package` / [`docs/versioning.md`](./versioning.md)。
 
 ### 1.7 内置演示
 
 - `pet.deskhud.specs`：全局跟鼠标看；短提示（`左键` / `Ctrl+Shift+X` / `滚轮↑`）；悬停高亮；贴边变色。
-- `pet.deskhud.blob`：贴边 / 拖动 / 悬停轻量反馈。
+- 蓝点若作为社区包，必须以 `guest.wasm` Component 提供，不再作为内置 Rust 宠物注册。
 
 ---
 
@@ -193,7 +208,7 @@ impl Plugin for MyPlugin {
 
 - `Plugin::hud_frame(...)` → 中性 `HudFrame`（文本 / 进度等）
 
-社区 WASM 侧对应 `deskhud-sdk::PluginGuest` / `HudItem`（`icon` 为包内相对路径）。
+社区 HUD Guest 侧仍对应 `deskhud-sdk::PluginGuest` / `HudItem`（`icon` 为包内相对路径）；HUD ABI 尚未纳入阶段 F。
 
 ### 2.4 包格式与导出
 
@@ -209,7 +224,7 @@ crates/packs/hud-deskhud-demo/
   src/lib.rs       # 不进入 .deskhud
 ```
 
-社区目标形态（WASM，规划）额外包含 `guest.wasm`：
+社区分发包的最终形态包含生成的 `guest.wasm`：
 
 ```text
 my-hud.deskhud/
@@ -227,7 +242,7 @@ id = "hud.acme.clock"
 kind = "plugin"
 version = "1.0.0"
 engine = "0.2"
-api_version = 1
+api_version = 2
 display_name = "时钟"
 icon = "assets/icon.svg"
 

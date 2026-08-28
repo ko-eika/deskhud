@@ -30,7 +30,7 @@ id = "pet.community.cool_cat"
 kind = "pet"
 version = "1.0.3"    # 包自身
 engine = "0.4"       # 适配族
-api_version = 1      # Guest/契约 ABI
+api_version = 2      # Guest/契约 ABI
 ```
 
 ## `engine` 族匹配

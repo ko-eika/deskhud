@@ -1,8 +1,9 @@
 id = "pet.deskhud.specs"
 kind = "pet"
-version = "0.6.26"
-engine = "0.6"
-api_version = 1
+load = "builtin"
+version = "0.7.0"
+engine = "0.7"
+api_version = 2
 display_name = "Big Eyes"
 description = "Natural blinking; follows the cursor; key/mouse tip bubbles; hover highlight"
 author = "DeskHud"

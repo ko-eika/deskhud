@@ -1,11 +1,15 @@
 [package]
 name = "pet-deskhud-blob"
-description = "DeskHud builtin pet: Blue Dot (pet.deskhud.blob)."
+description = "DeskHud community WASM pet: Blue Dot (pet.deskhud.blob)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
-deskhud-engine = { workspace = true }
+deskhud-sdk = { workspace = true }
+wit-bindgen = { workspace = true }

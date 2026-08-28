@@ -1,7 +1,7 @@
 # 宠物引擎核心实施计划
 
-状态：阶段 E 已完成
-当前版本：0.6.26
+状态：阶段 F 已完成
+当前版本：0.7.0
 首个运行态后端：`deskhud-egui`
 
 ## 目标
@@ -77,13 +77,13 @@
 
 ## 阶段 F：社区 WASM Guest
 
-- [ ] 用 WIT 定义宠物 Guest/Host 接口。
-- [ ] 用 Wasmtime Component Model 加载 Guest。
-- [ ] `deskhud-sdk` 只生成 Guest 侧绑定，不让 engine 依赖 SDK。
-- [ ] 默认关闭文件系统、网络和任意 WASI 能力。
-- [ ] 增加 fuel、内存、节点数量和调用耗时限制。
-- [ ] 内置 Rust 宠物和 WASM 宠物都转换为相同的 `PetScene`。
-- [ ] 确认 WASM 宠物可以在资源和节点限制内驱动矢量动画与序列帧动画；骨骼/网格/粒子/物理/3D 留作后续 ABI 扩展。
+- [x] 用 WIT 定义宠物 Guest/Host 接口。
+- [x] 用 Wasmtime Component Model 加载 Guest。
+- [x] `deskhud-sdk` 只生成 Guest 侧绑定，不让 engine 依赖 SDK。
+- [x] 默认关闭文件系统、网络和任意 WASI 能力。
+- [x] 增加 fuel、内存、节点数量和调用耗时限制。
+- [x] 内置 Rust 宠物和 WASM 宠物都转换为相同的 `PetScene`。
+- [x] 确认 WASM 宠物可以在资源和节点限制内驱动矢量动画与序列帧动画；骨骼/网格/粒子/物理/3D 留作后续 ABI 扩展。
 
 验收：一个最小社区宠物包可在不接触 egui、窗口和操作系统 API 的情况下完成动画和绘制。
 
@@ -113,7 +113,7 @@
 
 ## 执行记录
 
-- 状态：阶段 E 已完成
+- 状态：阶段 F 已完成
 - 开始日期：2026-08-27
 - 完成日期：2026-08-27
 - 实际改动：新增 EguiSceneRenderer、局部命中与事件派发、阈值拖拽、跨平台贴边与 macOS 全局指针/鼠标输入；运行态按 config→events→tick→scene→validate→renderer 运行；气泡由独立透明工具窗承载并按工作区避让。
@@ -121,3 +121,5 @@
 - 阶段 E 改动：新增 `PackResource`/atlas 帧索引、包内路径与入口门闸、位图损坏/尺寸/帧边界校验；目录包和 ZIP 在发现、打包、打开三个入口统一校验；新增 `PackInstance`/`PetInstanceSlot`，切换失败会清理旧实例；坏包按单包失败隔离。
 - 阶段 E 验证命令：`cargo fmt --all`、`cargo test -p deskhud-package -p deskhud-runtime`、`cargo check -p deskhud-egui`。
 - 遗留问题：WASM Guest runtime 属于阶段 F；全 workspace 检查仍受既有 windows-future/windows-core 依赖错配影响。
+- 阶段 F 改动：新增 `deskhud-sdk/wit/pet-guest.wit`、Guest 绑定与 Wasmtime Component Model Host 适配；社区宠物在无 WASI linker、fuel、Store memory limiter、调用超时和 `PetScene::validate` 下实例化，并接入 bootstrap 注册；插件 Guest ABI 留待后续扩展。
+- 阶段 F 验证命令：`cargo fmt --all`、`cargo check -p deskhud-sdk -p deskhud-runtime`。

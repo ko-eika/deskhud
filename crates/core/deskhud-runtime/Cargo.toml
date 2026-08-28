@@ -12,7 +12,7 @@ deskhud-engine = { workspace = true }
 deskhud-package = { workspace = true }
 deskhud-ui = { workspace = true }
 pet-deskhud-specs = { workspace = true }
-pet-deskhud-blob = { workspace = true }
 hud-deskhud-demo = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+wasmtime = { workspace = true }

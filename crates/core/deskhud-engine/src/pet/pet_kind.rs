@@ -23,6 +23,11 @@ impl<'a> PetConfigBag<'a> {
     pub fn get(self, key: &str, default: bool) -> bool {
         self.map.get(key).copied().unwrap_or(default)
     }
+
+    /// Iterates over the normalized config entries for a Guest adapter.
+    pub fn iter(self) -> impl Iterator<Item = (&'a str, bool)> {
+        self.map.iter().map(|(key, value)| (key.as_str(), *value))
+    }
 }
 
 /// 一帧绘制上下文（由 UI 壳填充）。

@@ -14,6 +14,20 @@ pub enum PackKind {
     Plugin,
 }
 
+/// Controls whether a package is compile-in native code or a disk-loaded
+/// WASM Component. `Auto` preserves compatibility with older manifests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum PackLoadMode {
+    /// Infer from `entry`: no entry means builtin, an entry means external.
+    #[default]
+    Auto,
+    /// Package metadata belongs to a compile-in native implementation.
+    Builtin,
+    /// Load the package's `entry` as a WASM Component from disk.
+    External,
+}
+
 /// `.deskhud` 根清单。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackManifest {
@@ -21,6 +35,9 @@ pub struct PackManifest {
     pub id: String,
     /// 宠物或插件。
     pub kind: PackKind,
+    /// Deployment mode; this controls packaging and discovery, not native registration.
+    #[serde(default)]
+    pub load: PackLoadMode,
     /// 包自身 SemVer（仅展示 / 更新比较，不参与加载门闸）。
     pub version: String,
     /// 引擎兼容族，如 `"0.3"` 或 `"1"`（见 `docs/versioning.md`）。
@@ -151,7 +168,13 @@ fn validate_namespaced_id(id: &str, kind: &str, min_segments: usize) -> Result<(
 
 impl PackManifest {
     /// 当前引擎支持的 API 主版本。
-    pub const SUPPORTED_API_VERSION: u32 = 1;
+    pub const SUPPORTED_API_VERSION: u32 = 2;
+
+    /// Whether this manifest describes a disk-loaded WASM package.
+    pub fn is_external(&self) -> bool {
+        matches!(self.load, PackLoadMode::External)
+            || (matches!(self.load, PackLoadMode::Auto) && self.entry.is_some())
+    }
 
     /// 校验必填与版本。
     pub fn validate(&self) -> Result<(), PackageError> {
@@ -177,6 +200,16 @@ impl PackManifest {
                 self.api_version,
                 Self::SUPPORTED_API_VERSION
             )));
+        }
+        if matches!(self.load, PackLoadMode::External) && self.entry.is_none() {
+            return Err(PackageError::InvalidManifest(
+                "external package requires entry = `guest.wasm`".into(),
+            ));
+        }
+        if matches!(self.load, PackLoadMode::Builtin) && self.entry.is_some() {
+            return Err(PackageError::InvalidManifest(
+                "builtin package must not declare a WASM entry".into(),
+            ));
         }
         match self.kind {
             PackKind::Plugin => validate_namespaced_id(&self.id, "hud", 3)?,
@@ -262,7 +295,7 @@ id = "pet.community.cool_cat"
 kind = "pet"
 version = "0.3.0"
 engine = "0.3"
-api_version = 1
+api_version = 2
 display_name = "Cool Cat"
 entry = "guest.wasm"
 "#,
@@ -282,7 +315,7 @@ id = "hud.acme.clock"
 kind = "plugin"
 version = "0.3.0"
 engine = "0.3"
-api_version = 1
+api_version = 2
 display_name = "Clock"
 "#,
         )
@@ -295,7 +328,7 @@ id = "demo.hud"
 kind = "plugin"
 version = "0.3.0"
 engine = "0.3"
-api_version = 1
+api_version = 2
 display_name = "Bad"
 "#,
         )
@@ -311,7 +344,7 @@ id = "builtin.specs"
 kind = "pet"
 version = "0.3.0"
 engine = "0.3"
-api_version = 1
+api_version = 2
 display_name = "Bad"
 "#,
         )
@@ -327,7 +360,7 @@ id = "hud.acme.clock"
 kind = "plugin"
 version = "0.3.0"
 engine = "0.3"
-api_version = 1
+api_version = 2
 display_name = "Clock"
 icon = "assets/icon.svg"
 
@@ -355,7 +388,7 @@ id = "pet.community.cool_cat"
 kind = "pet"
 version = ""
 engine = "0.3"
-api_version = 1
+api_version = 2
 display_name = "Cool Cat"
 "#,
         )
@@ -368,7 +401,7 @@ id = "pet.community.cool_cat"
 kind = "pet"
 version = "0.3.0"
 engine = ""
-api_version = 1
+api_version = 2
 display_name = "Cool Cat"
 "#,
         )

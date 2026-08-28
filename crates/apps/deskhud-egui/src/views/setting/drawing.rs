@@ -463,7 +463,6 @@ fn draw_pet(
     };
     let options = pet.config_options();
     if options.is_empty() {
-        ui.label(text(model, MessageKey::SettingsPetIntro));
         return;
     }
 

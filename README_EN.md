@@ -2,7 +2,7 @@
 <h4 align="center">An extensible desktop pet engine</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.6.26-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.7.0-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.95+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -13,7 +13,7 @@
 
 [简体中文](./README.md) | English
 
-DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.6.26`, with cross-platform CI fixes, target-gated Windows dependencies, stable font family IDs, and Rust 1.95 support.
+DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.7.0`, with community WASM Guest packs that are built during packaging and can provide previews and settings metadata.
 
 ## Features
 
@@ -135,8 +135,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud-egui
 
 # 4. Tag, push, and attach binaries on a GitHub Release
-git tag -a v0.6.26 -m "DeskHud 0.6.26"
-git push origin v0.6.26
+git tag -a v0.7.0 -m "DeskHud 0.7.0"
+git push origin v0.7.0
 ```
 
 CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs cross-platform `check` / tests only; it does **not** publish installers yet.

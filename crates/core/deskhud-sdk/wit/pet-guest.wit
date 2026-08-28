@@ -1,0 +1,107 @@
+package deskhud:guest;
+
+interface pet-api {
+  record config-entry { key: string, value: bool }
+
+  enum dock-edge { left, right, top, bottom }
+  record dock-state { left: bool, right: bool, top: bool, bottom: bool }
+  record drag-state { active: bool }
+  record mouse-state {
+    hovering: bool,
+    primary-down: bool,
+    secondary-down: bool,
+    middle-down: bool,
+    global-primary-down: bool,
+    global-secondary-down: bool,
+    global-middle-down: bool,
+  }
+  record modifiers { shift: bool, ctrl: bool, alt: bool, meta: bool }
+  enum mouse-button { primary, secondary, middle }
+  enum key {
+    escape, tab, enter, space, backspace, delete, insert, clear,
+    arrow-up, arrow-down, arrow-left, arrow-right, home, end, page-up,
+    page-down, shift, ctrl, alt, super, caps-lock, num-lock, numpad-enter,
+    numpad-add, numpad-subtract, numpad-multiply, numpad-divide,
+    numpad-decimal, numpad-separator,
+  }
+  variant key-value { function(u8), letter(char), digit(char), punct(char), named(key), numpad-digit(u8) }
+  variant event {
+    drag-started,
+    drag-ended(drag-state),
+    dock-changed(tuple<dock-state, dock-state>),
+    mouse-hover(bool),
+    mouse-pressed(tuple<mouse-button, modifiers>),
+    mouse-released(tuple<mouse-button, modifiers>),
+    mouse-clicked(tuple<mouse-button, modifiers>),
+    mouse-double-clicked(tuple<mouse-button, modifiers>),
+    mouse-wheel(tuple<s8, modifiers>),
+    global-mouse-pressed(tuple<mouse-button, modifiers>),
+    global-mouse-released(tuple<mouse-button, modifiers>),
+    global-mouse-wheel(tuple<s8, modifiers>),
+    global-key-pressed(tuple<key-value, modifiers>),
+    global-key-released(tuple<key-value, modifiers>),
+    key-pressed(tuple<key-value, modifiers>),
+    key-released(tuple<key-value, modifiers>),
+  }
+
+  record paint-context {
+    time-secs: f64,
+    pointer-dir: tuple<f32, f32>,
+    status-line: string,
+    dock: dock-state,
+    drag: drag-state,
+    mouse: mouse-state,
+    config: list<config-entry>,
+    theme-dark: bool,
+  }
+
+  record transform { translation: tuple<f32, f32>, rotation-radians: f32, scale: tuple<f32, f32> }
+  record color { r: f32, g: f32, b: f32, a: f32 }
+  variant shape {
+    circle(f32), rect(tuple<tuple<f32, f32>, f32>), ellipse(tuple<f32, f32>),
+  }
+  record path {
+    points: list<tuple<f32, f32>>,
+    closed: bool,
+    fill: option<color>,
+    stroke: option<color>,
+    stroke-width: f32,
+  }
+  variant node {
+    sprite(tuple<string, tuple<f32, f32>, f32>),
+    atlas-frame(tuple<string, u32, tuple<f32, f32>, f32>),
+    path(path),
+    shape(tuple<shape, color>),
+    text(tuple<string, color, f32>),
+    bubble(tuple<string, color, color, f32>),
+    hit-region(shape),
+  }
+  record item { transform: transform, z-index: s32, node: node }
+  record scene { items: list<item> }
+  record pet-info {
+    id: string,
+    display-name: string,
+    description: string,
+    author: string,
+    homepage: option<string>,
+    version: string,
+    engine: string,
+    window-width: f32,
+    window-height: f32,
+    config-options: list<config-option>,
+  }
+  record config-option {
+    key: string,
+    label: string,
+    description: string,
+    default: bool,
+  }
+
+  info: func() -> pet-info;
+  apply-config: func(config: list<config-entry>);
+  tick: func(dt-secs: f32);
+  on-event: func(event: event);
+  render: func(ctx: paint-context) -> scene;
+}
+
+world pet-guest { export pet-api; }

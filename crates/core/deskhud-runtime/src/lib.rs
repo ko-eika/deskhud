@@ -4,7 +4,7 @@
 //! [`PetKind`](deskhud_engine::PetKind) / [`Plugin`](deskhud_engine::Plugin)。
 //!
 //! - **内置**：`packs/*` 原生 crate（`pet-*` / `hud-*`），由本 crate 引导注册进空的 [`EngineRegistry`](deskhud_engine::EngineRegistry)。
-//! - **社区**：Phase 3 起经 WASM 适配器加载（本 crate 预留 `wasm` 模块）。
+//! - **社区**：经 `wasmtime` Component Model 适配器加载，默认不提供 WASI。
 
 #![deny(missing_docs)]
 
@@ -20,3 +20,4 @@ pub use catalog::build_catalog_store;
 pub use error::RuntimeError;
 pub use loader::{DiscoveredPack, PackInstance, PackageLoader, PetInstanceSlot};
 pub use paths::default_package_dirs;
+pub use wasm::{WasmLimits, WasmPet, load_wasm_guest};
