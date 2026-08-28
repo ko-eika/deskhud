@@ -40,8 +40,10 @@ cargo build -p deskhud-egui --release
 
 说明：
 
-- Windows 会通过 `winresource` 嵌入 `assets/icon.ico`；release 构建无控制台窗口。
-- 字体不嵌入可执行文件；Cargo 构建会将 `assets/fonts/` 递归复制到 `target/<profile>/fonts/`，发布时随可执行文件携带该 `fonts/` 目录即可。应用支持按字簇、语言和样式自由分层，缺失外置字体时回退到系统字体。
+- 应用图标按平台处理：Windows 构建脚本通过 `winresource` 将 `assets/icon.ico` 嵌入 exe，资源管理器和任务栏使用 exe 图标；Windows、Linux 窗口使用编译时嵌入的 `assets/icon.png`，因此窗口和任务栏不依赖发布目录中的图标文件；macOS 在主线程将 `assets/icon.icns` 设置到 `NSApplication`，保证未打成 `.app` 的 cargo 二进制和已打包应用的 Dock 图标一致。
+- `cargo build` 产出的是 `target/release/deskhud-egui`（Windows 为 `.exe`）；它不会自动生成 macOS `.app` 或 Linux `.desktop` 安装包。制作这类原生安装包时，应将 `assets/icon.icns` 与 macOS 应用包的原生元数据一起安装。运行中的窗口图标仍由程序自身提供。
+- macOS 本地打包可执行 `bash scripts/package-macos.sh`，生成 `target/release/DeskHud.app` 和 `target/release/DeskHud-macos.dmg`；使用 `--skip-build` 可复用已经生成的 release 二进制。该脚本同时供后续 GitHub Actions 发布 workflow 调用，不依赖第三方打包工具。
+- 字体不嵌入可执行文件；Cargo 构建会将 `assets/fonts/` 递归复制到 `target/<profile>/fonts/`。macOS 打包脚本会将其放入 `.app/Contents/Resources/fonts/`，裸二进制仍从可执行文件旁的 `fonts/` 目录读取。应用支持按字簇、语言和样式自由分层，缺失外置字体时回退到系统字体。
 - 设置窗口暂使用 **Glow（OpenGL）**；Windows 宠物、菜单、气泡和 HUD 原生合成使用 D3D11 + Direct2D + DirectComposition。设置窗不承担透明覆盖层职责。
 - 当前体验最完整的目标平台是 **Windows**；macOS/Linux 的原生窗口后端按迁移里程碑推进，fallback 仅作为能力不足时的明确降级。
 

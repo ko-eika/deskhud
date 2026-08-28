@@ -9,6 +9,7 @@ use deskhud_package::{
 };
 use tracing::{info, warn};
 
+use crate::paths::default_pack_cache_dir;
 use crate::{RuntimeError, default_package_dirs};
 
 /// 本 crate / workspace 的引擎产品 SemVer（发现时用于 `engine` 门闸）。
@@ -199,29 +200,4 @@ fn engine_incompatible_reason(manifest: &PackManifest) -> Option<String> {
         "engine `{}` incompatible (need `{}` for product {})",
         manifest.engine, need, RUNTIME_PRODUCT_VERSION
     ))
-}
-
-fn default_pack_cache_dir() -> Option<PathBuf> {
-    #[cfg(windows)]
-    {
-        let appdata = std::env::var_os("APPDATA")?;
-        Some(
-            PathBuf::from(appdata)
-                .join("DeskHud")
-                .join("cache")
-                .join("../../../../../packs"),
-        )
-    }
-    #[cfg(not(windows))]
-    {
-        let home = std::env::var_os("HOME")?;
-        Some(
-            PathBuf::from(home)
-                .join(".local")
-                .join("share")
-                .join("DeskHud")
-                .join("cache")
-                .join("packs"),
-        )
-    }
 }

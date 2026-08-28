@@ -16,6 +16,7 @@ use winit::{
 };
 
 use super::{
+    app_icon,
     render::{RenderCommand, RenderResult, Renderer, WindowCommand},
     viewport::UserEvent,
     window_manager::WindowManager,
@@ -72,8 +73,7 @@ impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // resumed 可能被系统调用多次，只在第一次恢复时创建窗口和渲染线程。
         if self.renderer.is_none() {
-            #[cfg(target_os = "macos")]
-            set_macos_dock_icon(false);
+            app_icon::set_visibility(false);
             let mut windows = WindowManager::new(self.proxy.clone());
             windows.create_pet(event_loop);
             let (pet_window_id, bubble_window_id) = windows
@@ -171,7 +171,7 @@ impl ApplicationHandler<UserEvent> for App {
                         }
                         #[cfg(target_os = "macos")]
                         WindowCommand::SetDockIcon { visible } => {
-                            set_macos_dock_icon(visible);
+                            app_icon::set_visibility(visible);
                         }
                     }
                 }
@@ -349,74 +349,3 @@ struct DragFollow {
     pet_origin: winit::dpi::PhysicalPosition<i32>,
     pointer_origin: [f64; 2],
 }
-
-#[cfg(target_os = "macos")]
-fn set_macos_dock_icon(visible: bool) {
-    use core::{
-        ffi::{c_char, c_void},
-        mem,
-    };
-
-    type Id = *mut c_void;
-    type Sel = *mut c_void;
-
-    #[link(name = "AppKit", kind = "framework")]
-    #[link(name = "objc")]
-    unsafe extern "C" {
-        fn objc_msgSend();
-        fn objc_getClass(name: *const c_char) -> Id;
-        fn sel_registerName(name: *const c_char) -> Sel;
-    }
-
-    unsafe {
-        let send_id: unsafe extern "C" fn(Id, Sel) -> Id =
-            mem::transmute(objc_msgSend as *const ());
-        let send_policy: unsafe extern "C" fn(Id, Sel, isize) -> bool =
-            mem::transmute(objc_msgSend as *const ());
-        let send_id_arg: unsafe extern "C" fn(Id, Sel, Id) -> Id =
-            mem::transmute(objc_msgSend as *const ());
-        let send_data: unsafe extern "C" fn(Id, Sel, *const u8, usize) -> Id =
-            mem::transmute(objc_msgSend as *const ());
-        let application = send_id(
-            objc_getClass(c"NSApplication".as_ptr()),
-            sel_registerName(c"sharedApplication".as_ptr()),
-        );
-        if !application.is_null() {
-            // NSApplicationActivationPolicyRegular = 0;
-            // NSApplicationActivationPolicyAccessory = 1.
-            let policy = if visible { 0 } else { 1 };
-            let _ = send_policy(
-                application,
-                sel_registerName(c"setActivationPolicy:".as_ptr()),
-                policy,
-            );
-
-            // 直接设置 NSApplication.applicationIconImage，保证 cargo run
-            // 或未及时刷新 Dock 缓存的 .app 也使用项目图标。
-            let data_class = objc_getClass(c"NSData".as_ptr());
-            let image_class = objc_getClass(c"NSImage".as_ptr());
-            let data = send_data(
-                data_class,
-                sel_registerName(c"dataWithBytes:length:".as_ptr()),
-                APP_ICON_PNG.as_ptr(),
-                APP_ICON_PNG.len(),
-            );
-            let image = if data.is_null() || image_class.is_null() {
-                core::ptr::null_mut()
-            } else {
-                let image = send_id(image_class, sel_registerName(c"alloc".as_ptr()));
-                send_id_arg(image, sel_registerName(c"initWithData:".as_ptr()), data)
-            };
-            if !image.is_null() {
-                let _ = send_id_arg(
-                    application,
-                    sel_registerName(c"setApplicationIconImage:".as_ptr()),
-                    image,
-                );
-            }
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-const APP_ICON_PNG: &[u8] = include_bytes!("../../../../../assets/icon.png");

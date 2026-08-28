@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use super::platform::{font_dirs, priority_system_cjk};
 use super::{
     FontCatalog, FontFace, FontFamilyEntry, classify_stem, inspect_font_file, system_font_id,
 };
@@ -49,86 +50,6 @@ pub fn font_families_from_dirs(
         }
     }
     catalog.into_entries()
-}
-
-#[cfg(windows)]
-fn font_dirs() -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
-    if let Ok(windir) = std::env::var("WINDIR") {
-        dirs.push(PathBuf::from(windir).join("Fonts"));
-    } else {
-        dirs.push(PathBuf::from(r"C:\Windows\Fonts"));
-    }
-    if let Ok(local) = std::env::var("LOCALAPPDATA") {
-        dirs.push(PathBuf::from(local).join(r"Microsoft\Windows\Fonts"));
-    }
-    dirs
-}
-
-#[cfg(target_os = "macos")]
-fn font_dirs() -> Vec<PathBuf> {
-    [
-        "/System/Library/Fonts",
-        "/Library/Fonts",
-        "/System/Library/Fonts/Supplemental",
-    ]
-    .into_iter()
-    .map(PathBuf::from)
-    .collect()
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn font_dirs() -> Vec<PathBuf> {
-    let mut dirs = vec![
-        PathBuf::from("/usr/share/fonts"),
-        PathBuf::from("/usr/local/share/fonts"),
-    ];
-    if let Ok(home) = std::env::var("HOME") {
-        dirs.push(PathBuf::from(&home).join(".local/share/fonts"));
-        dirs.push(PathBuf::from(home).join(".fonts"));
-    }
-    dirs
-}
-
-#[cfg(not(any(windows, unix, target_os = "macos")))]
-fn font_dirs() -> Vec<PathBuf> {
-    Vec::new()
-}
-
-#[cfg(windows)]
-fn priority_system_cjk() -> Vec<PathBuf> {
-    [
-        "msyh.ttc",
-        "msyh.ttf",
-        "msyhbd.ttc",
-        "simhei.ttf",
-        "simsun.ttc",
-        "msyhl.ttc",
-    ]
-    .into_iter()
-    .filter_map(|name| {
-        font_dirs()
-            .into_iter()
-            .map(|dir| dir.join(name))
-            .find(|path| path.is_file())
-    })
-    .collect()
-}
-
-#[cfg(not(windows))]
-fn priority_system_cjk() -> Vec<PathBuf> {
-    [
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-        "/System/Library/Fonts/PingFang.ttc",
-        "/System/Library/Fonts/STHeiti Light.ttc",
-        "/System/Library/Fonts/Hiragino Sans GB.ttc",
-    ]
-    .into_iter()
-    .map(PathBuf::from)
-    .filter(|path| path.is_file())
-    .collect()
 }
 
 fn collect(

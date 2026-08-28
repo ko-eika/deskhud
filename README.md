@@ -2,7 +2,7 @@
 <h4 align="center">一个可扩展的桌宠引擎</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.6.24-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.6.25-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -15,7 +15,7 @@
 
 DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（外观 + 行为），并按需开关 **HUD 插件** 及其贡献条目。界面基于 **egui + winit / egui_glow**，支持多语言与本地社区包加载（商店能力后置）。
 
-当前版本：`0.6.24`。完成阶段 E 包与运行时闭环：资源索引、入口与路径安全校验、损坏资源隔离，以及宠物实例切换清理；目录包与 ZIP 包均可重复验证。
+当前版本：`0.6.25`。完成阶段 E 包与运行时闭环，并整理跨平台实现：平台相关路径、字体、配置持久化和应用图标均按目标平台分文件处理；Windows release exe 嵌入应用图标，窗口与 macOS Dock 使用统一应用图标资源。
 
 ## 功能概览
 
@@ -137,12 +137,12 @@ cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime
 
 # 3. 发行构建（在目标平台上）
 cargo build -p deskhud-egui --release
-# Windows: target/release/deskhud.exe
-# macOS / Linux: target/release/deskhud
+# Windows: target/release/deskhud-egui.exe
+# macOS / Linux: target/release/deskhud-egui
 
 # 4. 打 tag 并推送后，在 GitHub Release 上传二进制
-git tag -a v0.6.24 -m "DeskHud 0.6.24"
-git push origin v0.6.24
+git tag -a v0.6.25 -m "DeskHud 0.6.25"
+git push origin v0.6.25
 ```
 
 当前 CI（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）只做三端 `check` / 测试，**不会**自动发布安装包。

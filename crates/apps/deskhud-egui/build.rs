@@ -4,6 +4,20 @@ use std::path::{Path, PathBuf};
 
 fn main() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let icon_ico = manifest_dir.join("../../../assets/icon.ico");
+    let icon_icns = manifest_dir.join("../../../assets/icon.icns");
+    let icon_png = manifest_dir.join("../../../assets/icon.png");
+    let icon_svg = manifest_dir.join("../../../assets/icon.svg");
+    println!("cargo:rerun-if-changed={}", icon_ico.display());
+    println!("cargo:rerun-if-changed={}", icon_icns.display());
+    println!("cargo:rerun-if-changed={}", icon_png.display());
+    println!("cargo:rerun-if-changed={}", icon_svg.display());
+
+    #[cfg(windows)]
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        embed_windows_icon(&icon_ico);
+    }
+
     let source = manifest_dir.join("../../../assets/fonts");
     println!("cargo:rerun-if-changed={}", source.display());
 
@@ -18,6 +32,18 @@ fn main() {
         .expect("OUT_DIR should be inside target/<profile>/build");
     let destination = target_profile.join("fonts");
     copy_tree(&source, &destination).expect("copy DeskHud fonts to target profile");
+}
+
+#[cfg(windows)]
+fn embed_windows_icon(icon: &Path) {
+    let mut resource = winresource::WindowsResource::new();
+    let icon_path = icon.to_string_lossy();
+    resource.set_icon(icon_path.as_ref());
+    if let Err(error) = resource.compile() {
+        // A non-MSVC resource toolchain can still build the application;
+        // only the Explorer/executable icon falls back in that case.
+        println!("cargo:warning=embed icon.ico failed: {error}");
+    }
 }
 
 fn copy_tree(source: &Path, destination: &Path) -> std::io::Result<()> {

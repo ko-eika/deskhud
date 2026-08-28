@@ -2,6 +2,19 @@
 
 mod scan;
 
+#[cfg(windows)]
+#[path = "windows.rs"]
+mod platform;
+#[cfg(target_os = "macos")]
+#[path = "macos.rs"]
+mod platform;
+#[cfg(all(unix, not(target_os = "macos")))]
+#[path = "unix.rs"]
+mod platform;
+#[cfg(not(any(windows, unix)))]
+#[path = "fallback.rs"]
+mod platform;
+
 pub use scan::{font_families_from_dirs, system_font_families};
 
 use std::fs;

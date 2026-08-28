@@ -363,7 +363,7 @@ mod tests {
         let manifest = PackManifest {
             id: "pet.example.bad_resource".into(),
             kind: PackKind::Pet,
-            version: "0.6.24".into(),
+            version: "0.6.25".into(),
             engine: "0.6".into(),
             api_version: PackManifest::SUPPORTED_API_VERSION,
             display_name: "Bad".into(),

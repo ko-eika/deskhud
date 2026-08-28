@@ -2,7 +2,7 @@
 <h4 align="center">An extensible desktop pet engine</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.6.24-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.6.25-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.85+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -13,7 +13,7 @@
 
 [简体中文](./README.md) | English
 
-DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.6.24`, with package/runtime resource validation, safe entry and path handling, damaged-resource isolation, and repeatable pet instance switching for directory and ZIP packs.
+DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.6.25`, with platform-specific path, font, persistence, and application-icon implementations; Windows release executables embed the app icon, while Windows window surfaces and the macOS Dock use the shared app icon assets.
 
 ## Features
 
@@ -131,12 +131,12 @@ cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime
 
 # 3. Release build (on the target OS)
 cargo build -p deskhud-egui --release
-# Windows: target/release/deskhud.exe
-# macOS / Linux: target/release/deskhud
+# Windows: target/release/deskhud-egui.exe
+# macOS / Linux: target/release/deskhud-egui
 
 # 4. Tag, push, and attach binaries on a GitHub Release
-git tag -a v0.6.24 -m "DeskHud 0.6.24"
-git push origin v0.6.24
+git tag -a v0.6.25 -m "DeskHud 0.6.25"
+git push origin v0.6.25
 ```
 
 CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs cross-platform `check` / tests only; it does **not** publish installers yet.

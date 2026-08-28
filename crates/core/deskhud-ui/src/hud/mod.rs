@@ -308,11 +308,12 @@ mod tests {
 
     #[test]
     fn layout_flat_keys_roundtrip() {
-        let mut slot = HudSlotLayout::default();
-        slot.display = "primary".into();
-        slot.x = 0.12;
-        slot.y = 0.34;
-        slot.scale = 1.5;
+        let slot = HudSlotLayout {
+            display: "primary".into(),
+            x: 0.12,
+            y: 0.34,
+            scale: 1.5,
+        };
         let mut hud = HudPrefs::default();
         hud.set_slot_layout("hud.deskhud.demo", "tip", slot);
         let text = toml::to_string_pretty(&hud).expect("ser");

@@ -312,8 +312,18 @@ fn application_font_dirs() -> Vec<std::path::PathBuf> {
     else {
         return Vec::new();
     };
-    let fonts = executable_dir.join("fonts");
-    fonts.is_dir().then_some(fonts).into_iter().collect()
+    let mut candidates = vec![executable_dir.join("fonts")];
+    // A macOS app keeps bundled resources under Contents/Resources while the
+    // executable itself lives under Contents/MacOS.
+    if executable_dir.file_name().and_then(|name| name.to_str()) == Some("MacOS") {
+        if let Some(contents_dir) = executable_dir.parent() {
+            candidates.push(contents_dir.join("Resources/fonts"));
+        }
+    }
+    candidates
+        .into_iter()
+        .filter(|path| path.is_dir())
+        .collect()
 }
 
 /// Stores bundled application fonts relative to the executable directory.
@@ -354,8 +364,23 @@ fn resolve_font_path(path: &str) -> std::path::PathBuf {
     if path.is_absolute() {
         return path.to_path_buf();
     }
-    std::env::current_exe()
+    let Some(executable_dir) = std::env::current_exe()
         .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join(path)))
-        .unwrap_or_else(|| path.to_path_buf())
+        .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))
+    else {
+        return path.to_path_buf();
+    };
+    let executable_path = executable_dir.join(path);
+    if executable_path.exists() {
+        return executable_path;
+    }
+    if executable_dir.file_name().and_then(|name| name.to_str()) == Some("MacOS") {
+        if let Some(contents_dir) = executable_dir.parent() {
+            let resource_path = contents_dir.join("Resources").join(path);
+            if resource_path.exists() {
+                return resource_path;
+            }
+        }
+    }
+    executable_path
 }

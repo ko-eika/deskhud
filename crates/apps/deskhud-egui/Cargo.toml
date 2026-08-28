@@ -41,3 +41,6 @@ core-graphics = { workspace = true }
 
 [build-dependencies]
 image = { workspace = true }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = { workspace = true }

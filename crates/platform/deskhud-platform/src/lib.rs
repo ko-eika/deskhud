@@ -124,21 +124,11 @@ pub struct WindowRecord {
     pub level: WindowLevel,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct HudWindowState {
     pub enabled: bool,
     pub layout_mode: bool,
     pub topmost: bool,
-}
-
-impl Default for HudWindowState {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            layout_mode: false,
-            topmost: false,
-        }
-    }
 }
 
 impl HudWindowState {

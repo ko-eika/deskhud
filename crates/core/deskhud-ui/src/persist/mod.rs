@@ -1,7 +1,6 @@
 //! 偏好持久化（有序 TOML → 用户数据目录）。
 
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 
 use thiserror::Error;
@@ -11,6 +10,16 @@ use crate::hud::{HudConfigValue, HudPrefs};
 use crate::i18n::Locale;
 use crate::pet::PetPrefs;
 use crate::shell::{LayerPreference, PetPickerMode, ShellPrefs, UiTheme};
+
+#[cfg(windows)]
+#[path = "windows.rs"]
+mod platform;
+#[cfg(unix)]
+#[path = "unix.rs"]
+mod platform;
+#[cfg(not(any(windows, unix)))]
+#[path = "fallback.rs"]
+mod platform;
 
 /// 持久化错误。
 #[derive(Debug, Error)]
@@ -31,21 +40,7 @@ pub enum PersistError {
 
 /// 用户数据根：`%APPDATA%/DeskHud` 或 `~/.local/share/DeskHud`。
 pub fn user_data_dir() -> Option<PathBuf> {
-    #[cfg(windows)]
-    {
-        let appdata = std::env::var_os("APPDATA")?;
-        Some(PathBuf::from(appdata).join("DeskHud"))
-    }
-    #[cfg(not(windows))]
-    {
-        let home = std::env::var_os("HOME")?;
-        Some(
-            PathBuf::from(home)
-                .join(".local")
-                .join("share")
-                .join("DeskHud"),
-        )
-    }
+    platform::user_data_dir()
 }
 
 /// 偏好文件路径。
@@ -102,48 +97,14 @@ pub fn save_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> Result<()
     })?;
     fs::create_dir_all(&dir)?;
     let path = dir.join("config.toml");
-    if let Ok(metadata) = fs::metadata(&path)
-        && metadata.permissions().readonly()
-    {
-        let mut permissions = metadata.permissions();
-        permissions.set_readonly(false);
-        fs::set_permissions(&path, permissions)?;
-    }
+    platform::ensure_writable(&path)?;
     let text = format_prefs_ordered(prefs, order);
     // Never put a string that cannot be parsed back on disk. This catches
     // malformed user/font/HUD text before it can poison the next startup.
     toml::from_str::<toml::Value>(&text)?;
     let tmp = dir.join("config.toml.tmp");
     fs::write(&tmp, &text)?;
-    // Windows does not replace an existing file with rename(). Keep the
-    // temporary write, but remove only the known config target before retrying
-    // so a successful save cannot be mistaken for a startup default reset.
-    #[cfg(windows)]
-    {
-        // Windows rename() cannot reliably replace a file that is being
-        // inspected by the shell/antivirus. Write the exact target and flush
-        // it instead; this also works when the target does not exist yet.
-        let direct_write = fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&path)
-            .and_then(|mut file| {
-                file.write_all(text.as_bytes())?;
-                file.sync_all()
-            });
-        if direct_write.is_err() {
-            // Some Windows file providers reject truncation of an existing
-            // file but allow replacement by rename after the old entry is
-            // removed. The temporary document was already syntax-validated.
-            fs::remove_file(&path)?;
-            fs::rename(&tmp, &path)?;
-        } else {
-            let _ = fs::remove_file(&tmp);
-        }
-    }
-    #[cfg(not(windows))]
-    fs::rename(&tmp, &path)?;
+    platform::write_config(&tmp, &path, &text)?;
     let saved = fs::read_to_string(&path)?;
     toml::from_str::<toml::Value>(&saved)
         .map_err(|error| PersistError::Verify(error.to_string()))?;
@@ -758,11 +719,12 @@ mod tests {
         prefs.pet.set_bool("pet.deskhud.specs.config1", true);
         prefs.hud.set_enabled("hud.deskhud.demo", "clock", false);
         prefs.hud.set_slot_layout("hud.deskhud.demo", "tip", {
-            let mut s = HudSlotLayout::default();
-            s.x = 0.5;
-            s.y = 0.8;
-            s.scale = 1.25;
-            s
+            HudSlotLayout {
+                x: 0.5,
+                y: 0.8,
+                scale: 1.25,
+                ..Default::default()
+            }
         });
 
         let text = format_prefs(&prefs);
