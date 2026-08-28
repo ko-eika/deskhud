@@ -12,3 +12,4 @@ serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
 zip = { workspace = true }
+image = { workspace = true }

@@ -4,8 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use deskhud_package::{
-    PackCatalog, PackManifest, engine_family_of_product, open_pack, pack_engine_matches,
-    read_catalog_dir, read_manifest_dir,
+    PackCatalog, PackManifest, engine_family_of_product, index_pack_dir, open_pack,
+    pack_engine_matches, read_catalog_dir, read_manifest_dir,
 };
 use tracing::{info, warn};
 
@@ -25,6 +25,51 @@ pub struct DiscoveredPack {
     pub manifest: PackManifest,
     /// 不适配原因（如 `engine` 族不匹配）；有值则仍列入发现列表，但勿注册 WASM。
     pub incompatible_reason: Option<String>,
+}
+
+/// 已加载包的可替换运行时句柄。
+///
+/// 句柄只保存当前包的资源索引和实例状态；替换时先丢弃旧句柄，避免旧包
+/// 的资源引用继续存活。WASM/原生实例接入时可复用此生命周期边界。
+#[derive(Debug)]
+pub struct PackInstance {
+    /// 发现结果及其兼容性元数据。
+    pub pack: DiscoveredPack,
+    /// 已校验的包资源索引。
+    pub resources: deskhud_package::PackResourceIndex,
+}
+
+impl PackInstance {
+    /// 从发现结果加载包资源；失败只影响该包，不影响宿主循环。
+    pub fn load(pack: DiscoveredPack) -> Result<Self, RuntimeError> {
+        let resources = index_pack_dir(&pack.root)?;
+        Ok(Self { pack, resources })
+    }
+}
+
+/// 可重复切换的宠物包实例槽位。
+#[derive(Debug, Default)]
+pub struct PetInstanceSlot {
+    current: Option<PackInstance>,
+}
+
+impl PetInstanceSlot {
+    /// 当前实例；不存在表示尚未加载或已禁用。
+    pub fn current(&self) -> Option<&PackInstance> {
+        self.current.as_ref()
+    }
+
+    /// 原子地替换实例。传入 `None` 会清理旧实例及其资源引用。
+    pub fn replace(&mut self, next: Option<PackInstance>) {
+        self.current = next;
+    }
+
+    /// 尝试切换；加载失败时清理旧实例并返回错误，保证不会继续运行半旧状态。
+    pub fn switch(&mut self, pack: DiscoveredPack) -> Result<(), RuntimeError> {
+        self.current = None;
+        self.current = Some(PackInstance::load(pack)?);
+        Ok(())
+    }
 }
 
 impl DiscoveredPack {
@@ -106,6 +151,7 @@ impl PackageLoader {
                 return Ok(None);
             }
             let manifest = read_manifest_dir(path)?;
+            let _ = index_pack_dir(path)?;
             return Ok(Some(make_discovered(path.to_path_buf(), None, manifest)));
         }
         let ext = path

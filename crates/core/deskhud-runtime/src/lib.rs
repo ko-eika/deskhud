@@ -18,5 +18,5 @@ pub mod wasm;
 pub use bootstrap::{Bootstrap, bootstrap_registry, bootstrap_registry_result};
 pub use catalog::build_catalog_store;
 pub use error::RuntimeError;
-pub use loader::{DiscoveredPack, PackageLoader};
+pub use loader::{DiscoveredPack, PackInstance, PackageLoader, PetInstanceSlot};
 pub use paths::default_package_dirs;

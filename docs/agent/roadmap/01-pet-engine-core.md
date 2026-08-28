@@ -1,7 +1,7 @@
 # 宠物引擎核心实施计划
 
-状态：阶段 D 已完成
-当前版本：0.6.23
+状态：阶段 E 已完成
+当前版本：0.6.24
 首个运行态后端：`deskhud-egui`
 
 ## 目标
@@ -66,12 +66,12 @@
 
 ## 阶段 E：包与运行时闭环
 
-- [ ] manifest 增加或明确资源索引和入口约束。
-- [ ] 明确序列帧/atlas 资源的声明、帧引用、尺寸边界和加载失败行为；首版不要求宿主理解骨骼或 3D 资源。
-- [ ] 校验包内路径，拒绝路径穿越、未声明资源和损坏资源。
-- [ ] 宠物实例切换时清理旧实例状态和资源引用。
-- [ ] 宠物异常时隔离错误，不阻塞宿主主循环。
-- [ ] 增加目录包、zip 包、缺失资源和不兼容包测试。
+- [x] manifest 增加或明确资源索引和入口约束。
+- [x] 明确序列帧/atlas 资源的声明、帧引用、尺寸边界和加载失败行为；首版不要求宿主理解骨骼或 3D 资源。
+- [x] 校验包内路径，拒绝路径穿越、未声明资源和损坏资源。
+- [x] 宠物实例切换时清理旧实例状态和资源引用。
+- [x] 宠物异常时隔离错误，不阻塞宿主主循环。
+- [x] 增加目录包、zip 包、缺失资源和不兼容包测试。
 
 验收：坏包不会导致宿主崩溃；包切换、重载、禁用和恢复行为可重复验证。
 
@@ -113,9 +113,11 @@
 
 ## 执行记录
 
-- 状态：阶段 D 已完成
+- 状态：阶段 E 已完成
 - 开始日期：2026-08-27
 - 完成日期：2026-08-27
 - 实际改动：新增 EguiSceneRenderer、局部命中与事件派发、阈值拖拽、跨平台贴边与 macOS 全局指针/鼠标输入；运行态按 config→events→tick→scene→validate→renderer 运行；气泡由独立透明工具窗承载并按工作区避让。
 - 验证命令：`cargo fmt --all`、`cargo check -p deskhud-egui -p pet-deskhud-specs -p pet-deskhud-blob`、`cargo test -p deskhud-engine`、`cargo run -p deskhud-egui`（启动后手动中断）。
-- 遗留问题：Sprite/atlas 的实际资源解析和包资源门闸属于阶段 E；全 workspace 检查仍受既有 windows-future/windows-core 依赖错配影响。
+- 阶段 E 改动：新增 `PackResource`/atlas 帧索引、包内路径与入口门闸、位图损坏/尺寸/帧边界校验；目录包和 ZIP 在发现、打包、打开三个入口统一校验；新增 `PackInstance`/`PetInstanceSlot`，切换失败会清理旧实例；坏包按单包失败隔离。
+- 阶段 E 验证命令：`cargo fmt --all`、`cargo test -p deskhud-package -p deskhud-runtime`、`cargo check -p deskhud-egui`。
+- 遗留问题：WASM Guest runtime 属于阶段 F；全 workspace 检查仍受既有 windows-future/windows-core 依赖错配影响。

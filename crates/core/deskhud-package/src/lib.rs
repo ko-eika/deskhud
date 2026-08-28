@@ -15,7 +15,10 @@ pub use compat::{ENGINE_PRODUCT_VERSION, engine_family_of_product, pack_engine_m
 pub use error::PackageError;
 pub use i18n::PackCatalog;
 pub use io::{
-    PackRoot, open_pack, pack_directory, read_catalog_dir, read_manifest_dir, unpack_archive,
-    write_manifest_dir,
+    PackResourceIndex, PackRoot, index_pack_dir, open_pack, pack_directory, read_catalog_dir,
+    read_manifest_dir, unpack_archive, write_manifest_dir,
 };
-pub use manifest::{PackHudEntry, PackKind, PackManifest};
+pub use manifest::{
+    PackFrame, PackHudEntry, PackKind, PackManifest, PackResource, PackResourceKind,
+    validate_relative_path,
+};

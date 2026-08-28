@@ -56,6 +56,56 @@ pub struct PackManifest {
     /// HUD 插件条目图标映射（`id` ↔ 包内图标路径）；与 Guest 声明的条目 id 对齐。
     #[serde(default)]
     pub hud: Vec<PackHudEntry>,
+    /// 包内可被场景引用的资源索引。资源路径必须相对包根且唯一。
+    #[serde(default)]
+    pub resources: Vec<PackResource>,
+}
+
+/// 包资源的用途；首版只解释位图和 atlas/序列帧，不承诺骨骼或 3D。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PackResourceKind {
+    /// 普通位图。
+    Image,
+    /// 包含多个矩形帧的 atlas 位图。
+    Atlas,
+    /// 逐张图片组成的序列帧资源。
+    Sequence,
+    /// 宿主不解释内容的资源。
+    Other,
+}
+
+/// 清单中的一个资源索引项。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackResource {
+    /// 场景中的稳定资源 ID。
+    pub id: String,
+    /// 相对包根路径。
+    pub path: String,
+    /// 资源用途。
+    pub kind: PackResourceKind,
+    /// 可选的期望像素尺寸；非零时加载后必须匹配。
+    #[serde(default)]
+    pub width: u32,
+    /// 可选的期望像素尺寸；非零时加载后必须匹配。
+    #[serde(default)]
+    pub height: u32,
+    /// atlas/序列帧引用，坐标和尺寸均为像素。
+    #[serde(default)]
+    pub frames: Vec<PackFrame>,
+}
+
+/// atlas 或序列帧中的一个矩形。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackFrame {
+    /// 左上角 X。
+    pub x: u32,
+    /// 左上角 Y。
+    pub y: u32,
+    /// 帧宽度。
+    pub width: u32,
+    /// 帧高度。
+    pub height: u32,
 }
 
 /// 清单中声明的一条 HUD 条目资源（至少用于图标；文案可由 Guest / i18n 提供）。
@@ -132,6 +182,45 @@ impl PackManifest {
             PackKind::Plugin => validate_namespaced_id(&self.id, "hud", 3)?,
             PackKind::Pet => validate_namespaced_id(&self.id, "pet", 3)?,
         }
+        let mut ids = std::collections::HashSet::new();
+        for resource in &self.resources {
+            if resource.id.trim().is_empty() || !ids.insert(&resource.id) {
+                return Err(PackageError::InvalidManifest(format!(
+                    "resource id `{}` is empty or duplicated",
+                    resource.id
+                )));
+            }
+            validate_relative_path(&resource.path)?;
+            if resource.kind == PackResourceKind::Atlas
+                || resource.kind == PackResourceKind::Sequence
+            {
+                if resource.frames.is_empty() {
+                    return Err(PackageError::InvalidManifest(format!(
+                        "resource `{}` requires at least one frame",
+                        resource.id
+                    )));
+                }
+                for frame in &resource.frames {
+                    if frame.width == 0 || frame.height == 0 {
+                        return Err(PackageError::InvalidManifest(format!(
+                            "resource `{}` has a zero-sized frame",
+                            resource.id
+                        )));
+                    }
+                }
+            } else if !resource.frames.is_empty() {
+                return Err(PackageError::InvalidManifest(format!(
+                    "resource `{}` has frames but is not atlas/sequence",
+                    resource.id
+                )));
+            }
+        }
+        for path in [&self.entry, &self.preview, &self.icon]
+            .into_iter()
+            .flatten()
+        {
+            validate_relative_path(path)?;
+        }
         Ok(())
     }
 
@@ -141,6 +230,24 @@ impl PackManifest {
         m.validate()?;
         Ok(m)
     }
+}
+
+/// Validates a package-relative path without touching the filesystem.
+pub fn validate_relative_path(path: &str) -> Result<(), PackageError> {
+    let p = std::path::Path::new(path);
+    if path.trim().is_empty() || p.is_absolute() || path.contains('\\') || path.contains('\0') {
+        return Err(PackageError::InvalidManifest(format!(
+            "path `{path}` must be a non-empty relative POSIX path"
+        )));
+    }
+    if p.components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err(PackageError::InvalidManifest(format!(
+            "path `{path}` must not contain `..`"
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

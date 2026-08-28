@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
-use crate::{PackCatalog, PackManifest, PackageError};
+use crate::{PackCatalog, PackManifest, PackResourceKind, PackageError, validate_relative_path};
 
 /// 打开的包根：目录，或已解压到缓存的 zip。
 #[derive(Debug, Clone)]
@@ -18,10 +18,149 @@ pub struct PackRoot {
     pub archive: Option<PathBuf>,
 }
 
+/// 包资源的可读索引。构造时会校验所有清单声明，后续读取不会越过包根。
+#[derive(Debug, Clone)]
+pub struct PackResourceIndex {
+    root: PathBuf,
+    manifest: PackManifest,
+}
+
+impl PackResourceIndex {
+    /// 校验清单引用的入口、预览图、图标和所有资源，并建立索引。
+    pub fn load(root: &Path, manifest: &PackManifest) -> Result<Self, PackageError> {
+        manifest.validate()?;
+        let index = Self {
+            root: root.to_path_buf(),
+            manifest: manifest.clone(),
+        };
+        for path in [&manifest.entry, &manifest.preview, &manifest.icon]
+            .into_iter()
+            .flatten()
+        {
+            index.validate_file(path)?;
+        }
+        for resource in &manifest.resources {
+            index.validate_file(&resource.path)?;
+            let bytes = index.read_path(&resource.path)?;
+            if matches!(
+                resource.kind,
+                PackResourceKind::Image | PackResourceKind::Atlas | PackResourceKind::Sequence
+            ) {
+                validate_image(
+                    &resource.path,
+                    &bytes,
+                    resource.width,
+                    resource.height,
+                    &resource.frames,
+                )?;
+            }
+        }
+        Ok(index)
+    }
+
+    /// 读取清单中声明的资源；未声明或路径不安全时失败。
+    pub fn read(&self, id: &str) -> Result<Vec<u8>, PackageError> {
+        let resource = self
+            .manifest
+            .resources
+            .iter()
+            .find(|r| r.id == id)
+            .ok_or_else(|| PackageError::MissingEntry(format!("undeclared resource `{id}`")))?;
+        self.read_path(&resource.path)
+    }
+
+    /// 返回资源声明，供渲染器解释 atlas 帧。
+    pub fn resource(&self, id: &str) -> Option<&crate::PackResource> {
+        self.manifest.resources.iter().find(|r| r.id == id)
+    }
+
+    fn validate_file(&self, path: &str) -> Result<(), PackageError> {
+        validate_relative_path(path).map_err(|e| PackageError::InvalidResource(e.to_string()))?;
+        let full = self.root.join(path);
+        if !full.is_file() {
+            return Err(PackageError::MissingEntry(format!(
+                "resource `{path}` not found"
+            )));
+        }
+        Ok(())
+    }
+
+    fn read_path(&self, path: &str) -> Result<Vec<u8>, PackageError> {
+        self.validate_file(path)?;
+        let bytes = fs::read(self.root.join(path))?;
+        if bytes.is_empty() {
+            return Err(PackageError::DamagedResource {
+                path: path.into(),
+                reason: "file is empty".into(),
+            });
+        }
+        Ok(bytes)
+    }
+}
+
+fn validate_image(
+    path: &str,
+    bytes: &[u8],
+    width: u32,
+    height: u32,
+    frames: &[crate::PackFrame],
+) -> Result<(), PackageError> {
+    let svg = std::str::from_utf8(bytes).is_ok_and(|s| {
+        let s = s.trim_start().to_ascii_lowercase();
+        s.starts_with("<svg") && s.contains("</svg")
+    });
+    if svg {
+        return Ok(());
+    }
+    let image = image::load_from_memory(bytes).map_err(|e| PackageError::DamagedResource {
+        path: path.into(),
+        reason: e.to_string(),
+    })?;
+    if (width != 0 && image.width() != width) || (height != 0 && image.height() != height) {
+        return Err(PackageError::DamagedResource {
+            path: path.into(),
+            reason: format!(
+                "dimensions {}x{} do not match declared {}x{}",
+                image.width(),
+                image.height(),
+                width,
+                height
+            ),
+        });
+    }
+    for frame in frames {
+        let in_bounds = frame.x <= image.width()
+            && frame.y <= image.height()
+            && frame.width <= image.width() - frame.x
+            && frame.height <= image.height() - frame.y;
+        if !in_bounds {
+            return Err(PackageError::DamagedResource {
+                path: path.into(),
+                reason: format!(
+                    "frame ({},{},{},{}) exceeds image {}x{}",
+                    frame.x,
+                    frame.y,
+                    frame.width,
+                    frame.height,
+                    image.width(),
+                    image.height()
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// 从目录读取并校验清单。
 pub fn read_manifest_dir(dir: &Path) -> Result<PackManifest, PackageError> {
     let text = fs::read_to_string(dir.join("manifest.toml"))?;
     PackManifest::parse_toml(&text)
+}
+
+/// 校验并索引一个已打开的目录包。
+pub fn index_pack_dir(dir: &Path) -> Result<PackResourceIndex, PackageError> {
+    let manifest = read_manifest_dir(dir)?;
+    PackResourceIndex::load(dir, &manifest)
 }
 
 /// 将清单写入目录（创建父目录）。
@@ -51,8 +190,8 @@ pub fn pack_directory(src_dir: &Path, dest_zip: &Path) -> Result<(), PackageErro
             src_dir.display()
         )));
     }
-    // 确保有清单
-    let _ = read_manifest_dir(src_dir)?;
+    // 打包前执行与加载相同的资源门闸，避免生成宿主必然拒绝的坏包。
+    let _ = index_pack_dir(src_dir)?;
     if let Some(parent) = dest_zip.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -129,7 +268,7 @@ pub fn unpack_archive(archive: &Path, dest_dir: &Path) -> Result<PackManifest, P
 pub fn open_pack(path: &Path, cache_dir: &Path) -> Result<PackRoot, PackageError> {
     if path.is_dir() {
         let manifest = read_manifest_dir(path)?;
-        let _ = manifest;
+        let _ = PackResourceIndex::load(path, &manifest)?;
         return Ok(PackRoot {
             path: path.to_path_buf(),
             archive: None,
@@ -149,6 +288,7 @@ pub fn open_pack(path: &Path, cache_dir: &Path) -> Result<PackRoot, PackageError
     // 先解到临时名，读 id 后再落到 cache/<id>
     let tmp = cache_dir.join("_tmp_unpack");
     let manifest = unpack_archive(path, &tmp)?;
+    let _ = PackResourceIndex::load(&tmp, &manifest)?;
     let dest = cache_dir.join(&manifest.id);
     if dest.exists() {
         fs::remove_dir_all(&dest)?;
@@ -193,6 +333,7 @@ mod tests {
             preview: None,
             icon: None,
             hud: vec![],
+            resources: vec![],
         };
         write_manifest_dir(&dir, &manifest).unwrap();
         fs::create_dir_all(dir.join("i18n")).unwrap();
@@ -214,5 +355,56 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         let _ = fs::remove_file(&zip_path);
         let _ = fs::remove_dir_all(&cache);
+    }
+
+    #[test]
+    fn rejects_missing_and_damaged_resources() {
+        let dir = temp_dir("bad-resource");
+        let manifest = PackManifest {
+            id: "pet.example.bad_resource".into(),
+            kind: PackKind::Pet,
+            version: "0.6.24".into(),
+            engine: "0.6".into(),
+            api_version: PackManifest::SUPPORTED_API_VERSION,
+            display_name: "Bad".into(),
+            description: String::new(),
+            author: String::new(),
+            homepage: None,
+            entry: None,
+            window_width: 140,
+            window_height: 140,
+            preview: None,
+            icon: None,
+            hud: vec![],
+            resources: vec![crate::PackResource {
+                id: "pet/body".into(),
+                path: "assets/body.png".into(),
+                kind: crate::PackResourceKind::Image,
+                width: 1,
+                height: 1,
+                frames: vec![],
+            }],
+        };
+        write_manifest_dir(&dir, &manifest).unwrap();
+        assert!(matches!(
+            index_pack_dir(&dir),
+            Err(PackageError::MissingEntry(_))
+        ));
+        fs::create_dir_all(dir.join("assets")).unwrap();
+        fs::write(dir.join("assets/body.png"), b"not-an-image").unwrap();
+        assert!(matches!(
+            index_pack_dir(&dir),
+            Err(PackageError::DamagedResource { .. })
+        ));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rejects_unsafe_manifest_paths() {
+        let err = PackManifest::parse_toml(
+            r#"id="pet.example.path" kind="pet" version="0.6" engine="0.6" api_version=1 display_name="x" preview="../x""#,
+        )
+        .unwrap_err();
+        assert!(format!("{err}").contains(".."));
     }
 }

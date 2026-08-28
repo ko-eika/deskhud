@@ -17,6 +17,17 @@ pub enum PackageError {
     /// 缺少入口或资源。
     #[error("missing entry: {0}")]
     MissingEntry(String),
+    /// 包内资源声明或资源文件不合法。
+    #[error("invalid resource: {0}")]
+    InvalidResource(String),
+    /// 包内资源存在但无法解析。
+    #[error("damaged resource `{path}`: {reason}")]
+    DamagedResource {
+        /// 出错资源的包内路径。
+        path: String,
+        /// 解码或尺寸校验原因。
+        reason: String,
+    },
     /// Zip 读写失败。
     #[error("zip: {0}")]
     Zip(String),
