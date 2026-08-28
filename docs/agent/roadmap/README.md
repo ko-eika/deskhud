@@ -33,3 +33,4 @@
 ## 计划文档
 
 - [`01-pet-engine-core.md`](01-pet-engine-core.md)：当前唯一详细实施计划。
+- [`02-builtin-pets.md`](02-builtin-pets.md)：两个内置宠物的吉祥物重塑、ID 迁移与状态动画计划。
