@@ -263,7 +263,9 @@ impl SettingsModel {
     }
 }
 
-/// Compares editable preference values while ignoring the window geometry preset.
+/// Compares editable preference values while ignoring native geometry presets.
+/// Native pet movement and Settings window movement are persisted by the host
+/// immediately and must not turn an open Settings draft dirty.
 pub fn draft_is_dirty(draft: &UiPreferences, baseline: &UiPreferences) -> bool {
     let mut draft = draft.clone();
     let mut baseline = baseline.clone();
@@ -272,6 +274,8 @@ pub fn draft_is_dirty(draft: &UiPreferences, baseline: &UiPreferences) -> bool {
         prefs.shell.settings_height = None;
         prefs.shell.settings_pos_x = None;
         prefs.shell.settings_pos_y = None;
+        prefs.pet.pos_x = None;
+        prefs.pet.pos_y = None;
     }
     draft != baseline
 }
@@ -365,6 +369,15 @@ mod tests {
             .shell
             .set_settings_geometry(900.0, 600.0, 10.0, 20.0);
         assert!(!model.is_dirty());
+    }
+
+    #[test]
+    fn native_pet_position_does_not_make_draft_dirty() {
+        let mut draft = UiPreferences::default();
+        let mut baseline = draft.clone();
+        draft.pet.set_pos(320.0, 240.0);
+        baseline.pet.set_pos(10.0, 20.0);
+        assert!(!draft_is_dirty(&draft, &baseline));
     }
 
     #[test]

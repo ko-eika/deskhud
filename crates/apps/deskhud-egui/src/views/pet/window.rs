@@ -23,12 +23,15 @@ pub(crate) struct PetWindow {
     /// Pet 对应的通用视口运行时。
     viewport: Viewport,
     activity_area: Option<area::ActivityArea>,
+    native_position: Option<winit::dpi::PhysicalPosition<i32>>,
+    native_size: winit::dpi::PhysicalSize<u32>,
     pet: Arc<dyn PetKind>,
     prefs: UiPreferences,
     started: Instant,
     last_tick: Instant,
     last_hit: bool,
     last_drag: bool,
+    position_dirty: bool,
     snap_frames: u8,
     last_dock: DockState,
     last_scene: deskhud_engine::PetScene,
@@ -67,12 +70,23 @@ impl PetWindow {
         Self {
             viewport,
             activity_area,
+            native_position: prefs.pet.position().map(|position| {
+                winit::dpi::PhysicalPosition::new(
+                    position.x.round() as i32,
+                    position.y.round() as i32,
+                )
+            }),
+            native_size: winit::dpi::PhysicalSize::new(
+                prefs.pet.width.max(1.0) as u32,
+                prefs.pet.height.max(1.0) as u32,
+            ),
             pet,
             prefs,
             started: Instant::now(),
             last_tick: Instant::now(),
             last_hit: false,
             last_drag: false,
+            position_dirty: false,
             snap_frames: 0,
             last_dock: DockState::FREE,
             last_scene: deskhud_engine::PetScene::default(),
@@ -92,13 +106,15 @@ impl PetWindow {
         self.viewport.window_handle()
     }
 
-    pub(crate) fn focus_window(&self) {
-        self.viewport.focus_window();
-    }
-
     /// 将窗口事件交给通用视口处理器。
     pub(crate) fn handle_event(&mut self, event: &WindowEvent) {
         match event {
+            WindowEvent::Moved(position) => {
+                self.native_position = Some(*position);
+            }
+            WindowEvent::Resized(size) => {
+                self.native_size = *size;
+            }
             WindowEvent::ModifiersChanged(modifiers) => {
                 self.local_modifiers = PetModifiers {
                     shift: modifiers.state().shift_key(),
@@ -243,8 +259,8 @@ impl PetWindow {
     }
 
     pub(crate) fn bubble_anchor(&self) -> Option<winit::dpi::PhysicalPosition<i32>> {
-        let position = self.viewport.window().outer_position().ok()?;
-        let size = self.viewport.window().outer_size();
+        let position = self.native_position?;
+        let size = self.native_size;
         let center = winit::dpi::PhysicalPosition::new(
             position.x + size.width as i32 / 2,
             position.y + size.height as i32 / 2,
@@ -285,6 +301,13 @@ impl PetWindow {
             }
         }
         self.prefs = prefs.clone();
+        self.native_size = winit::dpi::PhysicalSize::new(
+            prefs.pet.width.max(1.0) as u32,
+            prefs.pet.height.max(1.0) as u32,
+        );
+        self.native_position = prefs.pet.position().map(|position| {
+            winit::dpi::PhysicalPosition::new(position.x.round() as i32, position.y.round() as i32)
+        });
         self.viewport
             .request_inner_size(winit::dpi::PhysicalSize::new(
                 prefs.pet.width.max(48.0) as u32,
@@ -299,6 +322,26 @@ impl PetWindow {
                     position.y.round() as i32,
                 ));
         }
+    }
+
+    /// 返回原生窗口的最新位置，供设置 Apply 保留拖拽产生的几何状态。
+    pub(crate) fn current_position(&self) -> Option<winit::dpi::PhysicalPosition<i32>> {
+        self.viewport.window().outer_position().ok()
+    }
+
+    /// Copies the final native position into the applied preferences before
+    /// the renderer is shut down.
+    pub(crate) fn sync_position(&mut self) {
+        if let Some(position) = self.current_position() {
+            self.prefs.pet.set_pos(position.x as f32, position.y as f32);
+        }
+    }
+
+    /// Returns whether a completed drag changed the persisted native position.
+    pub(crate) fn take_position_dirty(&mut self) -> bool {
+        let dirty = self.position_dirty;
+        self.position_dirty = false;
+        dirty
     }
 
     /// 返回 Pet 当前的窗口层级。
@@ -374,6 +417,34 @@ impl PetWindow {
             && self.is_outside_activity_area()
         {
             self.snap_to_activity_area();
+        }
+        // Native drag can lose the release edge when the pointer crosses a
+        // transparent region. The global snapshot is authoritative on every
+        // platform that provides it, so recover the state and persist the
+        // final native position as soon as the drag ends.
+        let recovered_drag = self.last_drag && !crate::input::global_mouse_buttons().primary_down;
+        if recovered_drag {
+            self.pet.on_event(PetEvent::DragEnded {
+                drag: deskhud_engine::DragState::IDLE,
+            });
+            self.last_drag = false;
+            self.snap_frames = 4;
+        }
+        // Do not sample and save on ordinary startup frames: the asynchronous
+        // initial Move command may not have reached the native window yet.
+        // Only a completed drag (or its short snap settling period) authorizes
+        // replacing the persisted position.
+        if !self.last_drag && (was_dragging || recovered_drag || self.snap_frames > 0) {
+            if let Some(position) = self.current_position() {
+                let current = deskhud_ui::PetPosition {
+                    x: position.x as f32,
+                    y: position.y as f32,
+                };
+                if self.prefs.pet.position() != Some(current) {
+                    self.prefs.pet.set_pos(current.x, current.y);
+                    self.position_dirty = true;
+                }
+            }
         }
         result.should_close
     }

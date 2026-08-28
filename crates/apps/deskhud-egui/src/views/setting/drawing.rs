@@ -1372,7 +1372,8 @@ fn draw_font_section(ui: &mut egui::Ui, model: &mut SettingsModel) {
                     ) {
                         model.draft.shell.ui_font_style = style.clone();
                         if let Some(face) = selected_family.and_then(|f| f.face_for(&style)) {
-                            model.draft.shell.ui_font_id = face.font_id.clone();
+                            model.draft.shell.ui_font_id =
+                                crate::fonts::persistable_font_id(&face.font_id);
                         }
                     }
                 },
@@ -1412,7 +1413,7 @@ fn draw_font_section(ui: &mut egui::Ui, model: &mut SettingsModel) {
 fn apply_default_font_face(model: &mut SettingsModel, family: &deskhud_ui::font::FontFamilyEntry) {
     if let Some(face) = preferred_default_face(family) {
         model.draft.shell.ui_font_style = face.style.clone();
-        model.draft.shell.ui_font_id = face.font_id.clone();
+        model.draft.shell.ui_font_id = crate::fonts::persistable_font_id(&face.font_id);
     }
 }
 

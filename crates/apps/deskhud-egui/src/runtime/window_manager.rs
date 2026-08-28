@@ -7,7 +7,7 @@
 use deskhud_engine::EngineRegistry;
 use deskhud_runtime::{bootstrap_registry, build_catalog_store};
 use deskhud_ui::{
-    CatalogStore, LayerPreference, PrefsWriteOrder, UiPreferences, load_or_default, save_ordered,
+    CatalogStore, LayerPreference, PrefsWriteOrder, UiPreferences, load, save_ordered,
 };
 use std::sync::Arc;
 use winit::{
@@ -45,7 +45,17 @@ pub(crate) struct WindowManager {
 impl WindowManager {
     pub(crate) fn new(proxy: EventLoopProxy<UserEvent>) -> Self {
         let bootstrap = bootstrap_registry();
-        let mut prefs = load_or_default();
+        tracing::info!(path = ?deskhud_ui::prefs_path(), "loading preferences");
+        let mut prefs = match load() {
+            Ok(prefs) => {
+                tracing::info!("preferences loaded");
+                prefs
+            }
+            Err(error) => {
+                tracing::warn!(%error, "load preferences failed; using defaults");
+                UiPreferences::default()
+            }
+        };
         if !bootstrap
             .registry
             .pets()
@@ -54,17 +64,9 @@ impl WindowManager {
         {
             prefs.pet.kind = bootstrap.registry.active_pet_id().to_owned();
         }
-        if let Some(pet) = bootstrap
-            .registry
-            .pets()
-            .into_iter()
-            .find(|pet| pet.info().id == prefs.pet.kind)
-        {
-            let info = pet.info();
-            prefs
-                .pet
-                .apply_window_size(info.window_width, info.window_height);
-        }
+        // Keep the persisted pet size. Pack metadata is used when a pet is
+        // selected in Settings; applying it during startup would silently
+        // overwrite the user's saved preset on every launch.
         let catalogs = build_catalog_store(&bootstrap.discovered, prefs.locale);
         let frame_rate = super::render::frame_rate_for(&prefs.graphics);
         Self {
@@ -193,6 +195,16 @@ impl WindowManager {
     }
 
     fn commit_preferences(&mut self, prefs: deskhud_ui::UiPreferences) {
+        tracing::info!("settings applied; saving preferences");
+        let mut prefs = prefs;
+        // The settings model is intentionally unaware of live native window
+        // movement. Preserve the position captured from the pet window so an
+        // unrelated Apply cannot move the pet back to an older snapshot.
+        if let Some(pet) = self.pet.as_ref()
+            && let Some(position) = pet.current_position()
+        {
+            prefs.pet.set_pos(position.x as f32, position.y as f32);
+        }
         self.prefs = prefs;
         let _ = self.proxy.send_event(UserEvent::SetGlobalInputMonitoring {
             keyboard: self.prefs.pet.global_keyboard_input,
@@ -205,6 +217,31 @@ impl WindowManager {
             }
         }
         self.frame_rate = super::render::frame_rate_for(&self.prefs.graphics);
+        if let Some(pet) = self.pet.as_mut() {
+            pet.apply_preferences(&self.registry, self.prefs.clone());
+            if let Some(bubble) = self.bubble.as_mut() {
+                bubble.set_window_layer(pet.window_layer());
+            }
+        }
+        if let Some(hud) = self.hud.as_mut() {
+            hud.apply_preferences(self.prefs.clone());
+        }
+        self.save_preferences();
+    }
+
+    fn save_geometry(&mut self) {
+        self.save_preferences();
+    }
+
+    /// Saves the single applied preference snapshot. All persistence is
+    /// serialized here so pet movement cannot overwrite newer settings with
+    /// a stale PetWindow-local clone.
+    fn save_preferences(&mut self) {
+        if let Some(position) = self.pet.as_ref().and_then(PetWindow::current_position) {
+            self.prefs.pet.set_pos(position.x as f32, position.y as f32);
+        }
+        self.prefs.shell.ui_font_id =
+            crate::fonts::persistable_font_id(&self.prefs.shell.ui_font_id);
         let order = PrefsWriteOrder {
             pet_ids: self
                 .registry
@@ -235,22 +272,9 @@ impl WindowManager {
             plugin_contrib_ids: Vec::new(),
         };
         if let Err(error) = save_ordered(&self.prefs, &order) {
-            tracing::warn!(%error, "save preferences failed");
-        }
-        if let Some(pet) = self.pet.as_mut() {
-            pet.apply_preferences(&self.registry, self.prefs.clone());
-            if let Some(bubble) = self.bubble.as_mut() {
-                bubble.set_window_layer(pet.window_layer());
-            }
-        }
-        if let Some(hud) = self.hud.as_mut() {
-            hud.apply_preferences(self.prefs.clone());
-        }
-    }
-
-    fn save_geometry(&self) {
-        if let Err(error) = save_ordered(&self.prefs, &PrefsWriteOrder::default()) {
-            tracing::warn!(%error, "save settings window geometry failed");
+            tracing::warn!(%error, path = ?deskhud_ui::prefs_path(), "save preferences failed");
+        } else {
+            tracing::info!(path = ?deskhud_ui::prefs_path(), "preferences saved");
         }
     }
 
@@ -275,9 +299,6 @@ impl WindowManager {
     }
 
     fn show_pet_menu(&mut self) {
-        if let Some(bubble) = self.bubble.as_mut() {
-            bubble.hide();
-        }
         let Some(pet) = self.pet.as_ref() else {
             return;
         };
@@ -459,23 +480,25 @@ impl WindowManager {
     pub(crate) fn render_window(&mut self, window_id: WindowId) -> bool {
         match self.viewport_for(window_id) {
             ViewportKind::Pet => {
-                let should_close = self
-                    .pet
-                    .as_mut()
-                    .expect("pet viewport disappeared")
-                    .render();
-                if self.menu.as_ref().is_some_and(PetMenu::is_visible) {
-                    if let Some(bubble) = self.bubble.as_mut() {
-                        bubble.hide();
+                let should_close = {
+                    let pet = self.pet.as_mut().expect("pet viewport disappeared");
+                    let should_close = pet.render();
+                    if pet.take_position_dirty() {
+                        tracing::info!("pet position changed; saving preferences");
+                        self.save_preferences();
                     }
-                } else if let (Some(pet), Some(bubble)) = (self.pet.as_ref(), self.bubble.as_mut())
-                {
+                    should_close
+                };
+                if let (Some(pet), Some(bubble)) = (self.pet.as_ref(), self.bubble.as_mut()) {
                     if let Some(anchor) = pet.bubble_anchor() {
                         let was_visible = bubble.is_visible();
                         bubble.update(pet.bubble_content(), anchor, &self.prefs);
                         if !was_visible && bubble.is_visible() {
-                            // 气泡是鼠标穿透的提示窗，显示它不能改变键盘焦点。
-                            pet.focus_window();
+                            // The bubble is added to the next render list only
+                            // after this Pet pass. Render its first frame now
+                            // so event-triggered messages are not delayed or
+                            // lost before the next repaint request arrives.
+                            bubble.render();
                         }
                     } else {
                         // 无法读取宠物窗口坐标时宁可暂时不显示，也不能把气泡
@@ -654,6 +677,12 @@ impl WindowManager {
     }
 
     pub(crate) fn destroy_all(&mut self) {
+        if let Some(pet) = self.pet.as_mut() {
+            pet.sync_position();
+        }
+        if let Some(position) = self.pet.as_ref().and_then(PetWindow::current_position) {
+            self.prefs.pet.set_pos(position.x as f32, position.y as f32);
+        }
         if let Some(pet) = self.pet.as_mut() {
             pet.destroy();
         }

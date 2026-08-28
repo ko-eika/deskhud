@@ -72,7 +72,6 @@ impl PetBubbleWindow {
             self.viewport
                 .set_visible_without_focus(self.content.is_some());
         }
-        self.viewport.set_cursor_hittest(false);
     }
     pub(crate) fn render(&mut self) {
         let content = self.content.clone();

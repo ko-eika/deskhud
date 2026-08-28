@@ -409,10 +409,237 @@ mod tests {
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn global_mouse_buttons() -> GlobalMouseButtons {
-    GlobalMouseButtons::default()
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            GetAsyncKeyState, VIRTUAL_KEY, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON,
+        };
+        let is_down = |key: VIRTUAL_KEY| unsafe { GetAsyncKeyState(key.0 as i32) < 0 };
+        return GlobalMouseButtons {
+            primary_down: is_down(VK_LBUTTON),
+            secondary_down: is_down(VK_RBUTTON),
+            middle_down: is_down(VK_MBUTTON),
+        };
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        GlobalMouseButtons::default()
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn global_pointer_position() -> Option<[f64; 2]> {
-    None
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+        let mut point = POINT::default();
+        return unsafe { GetCursorPos(&mut point).ok() }.map(|_| [point.x as f64, point.y as f64]);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
+/// Windows low-level hooks are listen-only and run on the winit thread, whose
+/// message pump remains alive for the lifetime of the application.
+#[cfg(target_os = "windows")]
+pub(crate) struct GlobalKeyMonitor {
+    keyboard: windows::Win32::UI::WindowsAndMessaging::HHOOK,
+    mouse: windows::Win32::UI::WindowsAndMessaging::HHOOK,
+}
+
+#[cfg(target_os = "windows")]
+static WINDOWS_PROXY: std::sync::OnceLock<
+    std::sync::Mutex<
+        Option<winit::event_loop::EventLoopProxy<crate::runtime::viewport::UserEvent>>,
+    >,
+> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "windows")]
+pub(crate) fn install_global_key_monitor(
+    proxy: winit::event_loop::EventLoopProxy<crate::runtime::viewport::UserEvent>,
+    keyboard: bool,
+    mouse: bool,
+) -> Option<GlobalKeyMonitor> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        HHOOK, SetWindowsHookExW, WH_KEYBOARD_LL, WH_MOUSE_LL,
+    };
+
+    let slot = WINDOWS_PROXY.get_or_init(|| std::sync::Mutex::new(None));
+    *slot.lock().ok()? = Some(proxy);
+
+    let keyboard_hook = if keyboard {
+        unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), None, 0).ok() }
+    } else {
+        None
+    };
+    let mouse_hook = if mouse {
+        unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), None, 0).ok() }
+    } else {
+        None
+    };
+    if (keyboard && keyboard_hook.is_none()) || (mouse && mouse_hook.is_none()) {
+        if let Some(hook) = keyboard_hook {
+            unsafe {
+                let _ = windows::Win32::UI::WindowsAndMessaging::UnhookWindowsHookEx(hook);
+            }
+        }
+        if let Some(hook) = mouse_hook {
+            unsafe {
+                let _ = windows::Win32::UI::WindowsAndMessaging::UnhookWindowsHookEx(hook);
+            }
+        }
+        return None;
+    }
+    Some(GlobalKeyMonitor {
+        keyboard: keyboard_hook.unwrap_or(HHOOK::default()),
+        mouse: mouse_hook.unwrap_or(HHOOK::default()),
+    })
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for GlobalKeyMonitor {
+    fn drop(&mut self) {
+        unsafe {
+            use windows::Win32::UI::WindowsAndMessaging::UnhookWindowsHookEx;
+            if !self.keyboard.is_invalid() {
+                let _ = UnhookWindowsHookEx(self.keyboard);
+            }
+            if !self.mouse.is_invalid() {
+                let _ = UnhookWindowsHookEx(self.mouse);
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn send_global(event: deskhud_engine::PetEvent) {
+    // The proxy is installed before either hook is registered. The static is
+    // deliberately process-local; hooks are removed before the event loop exits.
+    if let Ok(guard) = WINDOWS_PROXY
+        .get_or_init(|| std::sync::Mutex::new(None))
+        .lock()
+        && let Some(proxy) = guard.as_ref()
+    {
+        let _ = proxy.send_event(crate::runtime::viewport::UserEvent::PetEvent(event));
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn keyboard_proc(
+    code: i32,
+    wparam: windows::Win32::Foundation::WPARAM,
+    lparam: windows::Win32::Foundation::LPARAM,
+) -> windows::Win32::Foundation::LRESULT {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, KBDLLHOOKSTRUCT, WM_KEYDOWN, WM_SYSKEYDOWN,
+    };
+    if code >= 0 {
+        let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+        if let Some(key) = windows_vk_to_pet_key(info.vkCode as u16) {
+            let pressed = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
+            send_global(if pressed {
+                deskhud_engine::PetEvent::GlobalKeyPressed {
+                    key,
+                    modifiers: windows_modifiers(),
+                }
+            } else {
+                deskhud_engine::PetEvent::GlobalKeyReleased {
+                    key,
+                    modifiers: windows_modifiers(),
+                }
+            });
+        }
+    }
+    unsafe { CallNextHookEx(None, code, wparam, lparam) }
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn mouse_proc(
+    code: i32,
+    wparam: windows::Win32::Foundation::WPARAM,
+    lparam: windows::Win32::Foundation::LPARAM,
+) -> windows::Win32::Foundation::LRESULT {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, MSLLHOOKSTRUCT, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
+        WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
+    };
+    if code >= 0 {
+        let _info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+        let message = wparam.0 as u32;
+        let button = match message {
+            WM_LBUTTONDOWN | WM_LBUTTONUP => Some(deskhud_engine::PetMouseButton::Primary),
+            WM_RBUTTONDOWN | WM_RBUTTONUP => Some(deskhud_engine::PetMouseButton::Secondary),
+            WM_MBUTTONDOWN | WM_MBUTTONUP => Some(deskhud_engine::PetMouseButton::Middle),
+            _ => None,
+        };
+        if let Some(button) = button {
+            send_global(
+                if matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN) {
+                    deskhud_engine::PetEvent::GlobalMousePressed {
+                        button,
+                        modifiers: windows_modifiers(),
+                    }
+                } else {
+                    deskhud_engine::PetEvent::GlobalMouseReleased {
+                        button,
+                        modifiers: windows_modifiers(),
+                    }
+                },
+            );
+        }
+        if message == WM_MOUSEWHEEL {
+            let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+            let delta = ((info.mouseData >> 16) as i16).signum() as i8;
+            if delta != 0 {
+                send_global(deskhud_engine::PetEvent::GlobalMouseWheel {
+                    delta,
+                    modifiers: windows_modifiers(),
+                });
+            }
+        }
+    }
+    unsafe { CallNextHookEx(None, code, wparam, lparam) }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_modifiers() -> deskhud_engine::PetModifiers {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, VK_CONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN,
+    };
+    let down = |key: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY| unsafe {
+        GetAsyncKeyState(key.0 as i32) < 0
+    };
+    deskhud_engine::PetModifiers {
+        shift: down(VK_LSHIFT),
+        ctrl: down(VK_CONTROL),
+        alt: down(VK_LMENU),
+        meta: down(VK_LWIN),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_vk_to_pet_key(vk: u16) -> Option<PetKey> {
+    Some(match vk {
+        0x08 => PetKey::Backspace,
+        0x09 => PetKey::Tab,
+        0x0D => PetKey::Enter,
+        0x1B => PetKey::Escape,
+        0x20 => PetKey::Space,
+        0x25 => PetKey::ArrowLeft,
+        0x26 => PetKey::ArrowUp,
+        0x27 => PetKey::ArrowRight,
+        0x28 => PetKey::ArrowDown,
+        0x2E => PetKey::Delete,
+        0x10 => PetKey::Shift,
+        0x11 => PetKey::Ctrl,
+        0x12 => PetKey::Alt,
+        0x5B | 0x5C => PetKey::Super,
+        0x70..=0x7B => PetKey::Function((vk - 0x6F) as u8),
+        0x30..=0x39 => PetKey::Digit((b'0' + (vk - 0x30) as u8) as char),
+        0x41..=0x5A => PetKey::Letter((b'A' + (vk - 0x41) as u8) as char),
+        _ => return None,
+    })
 }

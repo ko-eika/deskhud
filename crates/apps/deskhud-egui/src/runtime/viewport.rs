@@ -49,6 +49,7 @@ pub(crate) enum UserEvent {
     Repaint,
     RenderResult(RenderResult),
     /// 平台级输入采集到的中性宠物事件。
+    #[allow(dead_code)]
     PetEvent(PetEvent),
     /// 更新平台级全局输入监听的隐私开关。
     SetGlobalInputMonitoring {
@@ -333,10 +334,6 @@ impl Viewport {
 
     pub(crate) fn cursor_position(&self) -> Option<PhysicalPosition<f64>> {
         self.cursor_position
-    }
-
-    pub(crate) fn focus_window(&self) {
-        self.gl_window.window().focus_window();
     }
 
     pub(crate) fn render<F>(&mut self, draw_ui: F) -> ViewportOutput

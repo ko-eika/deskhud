@@ -39,6 +39,8 @@ pub(crate) fn run() {
             drag_follow: None,
             #[cfg(target_os = "macos")]
             _global_key_monitor: None,
+            #[cfg(target_os = "windows")]
+            _global_key_monitor: None,
             closing: false,
         })
         .expect("运行事件循环失败");
@@ -58,6 +60,9 @@ struct App {
     drag_follow: Option<DragFollow>,
     /// 必须持有 monitor，才能让 CoreGraphics event tap 在主线程 RunLoop 中持续生效。
     #[cfg(target_os = "macos")]
+    _global_key_monitor: Option<crate::input::GlobalKeyMonitor>,
+    /// Windows low-level hooks must be retained until the event loop exits.
+    #[cfg(target_os = "windows")]
     _global_key_monitor: Option<crate::input::GlobalKeyMonitor>,
     /// 渲染线程已收到退出请求，等待其完成资源释放后再退出事件循环。
     closing: bool,
@@ -79,6 +84,11 @@ impl ApplicationHandler<UserEvent> for App {
             self.pet_window_id = Some(pet_window_id);
             self.bubble_window_id = Some(bubble_window_id);
             #[cfg(target_os = "macos")]
+            {
+                let (keyboard, mouse) = windows.global_input_monitoring();
+                self.set_global_input_monitoring(keyboard, mouse);
+            }
+            #[cfg(target_os = "windows")]
             {
                 let (keyboard, mouse) = windows.global_input_monitoring();
                 self.set_global_input_monitoring(keyboard, mouse);
@@ -122,7 +132,10 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::SetGlobalInputMonitoring { keyboard, mouse } => {
                 #[cfg(target_os = "macos")]
                 self.set_global_input_monitoring(keyboard, mouse);
+                #[cfg(target_os = "windows")]
+                self.set_global_input_monitoring(keyboard, mouse);
                 #[cfg(not(target_os = "macos"))]
+                #[cfg(not(target_os = "windows"))]
                 let _ = (keyboard, mouse);
             }
             UserEvent::WindowCommand { window_id, command } => {
@@ -138,8 +151,16 @@ impl ApplicationHandler<UserEvent> for App {
                                 // macOS 在屏幕边缘触发系统窗口平铺/吸附。
                                 let _ = window;
                             }
-                            #[cfg(not(target_os = "macos"))]
+                            #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
                             let _ = window.drag_window();
+                            #[cfg(target_os = "windows")]
+                            {
+                                // Windows 使用上面的全局指针跟随，不能再叠加
+                                // drag_window()，否则系统拖动起点和绝对坐标跟随
+                                // 会同时修改窗口位置，表现为鼠标移动很多但宠物
+                                // 只移动一点。
+                                let _ = window;
+                            }
                         }
                         WindowCommand::Resize { width, height } => {
                             let _ = window
@@ -213,6 +234,16 @@ impl App {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    fn set_global_input_monitoring(&mut self, keyboard: bool, mouse: bool) {
+        self._global_key_monitor = (keyboard || mouse)
+            .then(|| crate::input::install_global_key_monitor(self.proxy.clone(), keyboard, mouse))
+            .flatten();
+        if (keyboard || mouse) && self._global_key_monitor.is_none() {
+            tracing::warn!("global input monitor unavailable on Windows");
+        }
+    }
+
     /// 原生拖动事件抵达主线程时立即移动工具窗，避免经渲染线程往返一帧。
     fn follow_bubble_on_pet_move(
         &self,
@@ -259,11 +290,11 @@ impl App {
             follow.pet_origin.x + (pointer[0] - follow.pointer_origin[0]).round() as i32,
             follow.pet_origin.y + (pointer[1] - follow.pointer_origin[1]).round() as i32,
         );
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         if let Some(pet) = self.windows.get(&pet_window_id) {
             pet.set_outer_position(position);
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let position = self
             .windows
             .get(&pet_window_id)

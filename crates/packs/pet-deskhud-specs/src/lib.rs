@@ -25,7 +25,23 @@ pub struct BuiltinSpecsPet {
     click_ms: AtomicU32,
     last_pointer: Mutex<[i8; 2]>,
     idle_ms: AtomicU32,
+    eye_motion: Mutex<EyeMotion>,
     blink: Mutex<BlinkState>,
+}
+
+#[derive(Debug)]
+struct EyeMotion {
+    current: [f32; 2],
+    last_time_secs: f64,
+}
+
+impl Default for EyeMotion {
+    fn default() -> Self {
+        Self {
+            current: [0.0, 0.0],
+            last_time_secs: 0.0,
+        }
+    }
 }
 
 /// Short, asymmetric eye-close cycle with locally generated timing jitter.
@@ -128,6 +144,7 @@ impl Default for BuiltinSpecsPet {
             click_ms: AtomicU32::new(0),
             last_pointer: Mutex::new([0, 0]),
             idle_ms: AtomicU32::new(0),
+            eye_motion: Mutex::new(EyeMotion::default()),
             blink: Mutex::new(BlinkState::new()),
         }
     }
@@ -330,6 +347,21 @@ impl BuiltinSpecsPet {
             *g = text.into();
         }
         self.bubble_ms.store(ms, Ordering::Relaxed);
+    }
+
+    fn smooth_eye_target(&self, target: [f32; 2], time_secs: f64) -> [f32; 2] {
+        let Ok(mut motion) = self.eye_motion.lock() else {
+            return target;
+        };
+        let dt = (time_secs - motion.last_time_secs).clamp(0.0, 0.1) as f32;
+        motion.last_time_secs = time_secs;
+        // Exponential smoothing keeps the response frame-rate independent and
+        // prevents a large cursor sample jump from teleporting the pupils.
+        let alpha = 1.0 - (-12.0 * dt).exp();
+        for (current, target) in motion.current.iter_mut().zip(target) {
+            *current += (target - *current) * alpha;
+        }
+        motion.current
     }
 }
 
@@ -550,9 +582,20 @@ impl PetKind for BuiltinSpecsPet {
             .lock()
             .map(|state| state.eye_open())
             .unwrap_or(1.0);
+        let click = (self.click_ms.load(Ordering::Relaxed) as f32 / 420.0).clamp(0.0, 1.0);
+        let idle = self.idle_ms.load(Ordering::Relaxed) >= 900;
+        let target = if self.follow_eyes.load(Ordering::Relaxed) && (!idle || click > 0.0) {
+            [
+                ctx.pointer_dir[0].clamp(-1.0, 1.0),
+                ctx.pointer_dir[1].clamp(-1.0, 1.0),
+            ]
+        } else {
+            [0.0, 0.0]
+        };
+        let pointer = self.smooth_eye_target(target, ctx.time_secs);
         let pupil = [
-            ctx.pointer_dir[0].clamp(-1.0, 1.0) * 4.5,
-            ctx.pointer_dir[1].clamp(-1.0, 1.0) * 4.0,
+            pointer[0] * (4.5 + click * 2.5),
+            pointer[1] * (4.0 + click * 2.2),
         ];
         let mut items = vec![SceneItem {
             transform: Transform2D::default(),

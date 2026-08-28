@@ -1,6 +1,7 @@
 //! 偏好持久化（有序 TOML → 用户数据目录）。
 
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 
 use thiserror::Error;
@@ -23,6 +24,9 @@ pub enum PersistError {
     /// TOML 序列化。
     #[error("prefs serialize: {0}")]
     Serialize(#[from] toml::ser::Error),
+    /// 写入后无法重新读取配置。
+    #[error("prefs verify: {0}")]
+    Verify(String),
 }
 
 /// 用户数据根：`%APPDATA%/DeskHud` 或 `~/.local/share/DeskHud`。
@@ -66,7 +70,19 @@ pub fn load() -> Result<UiPreferences, PersistError> {
         return Ok(UiPreferences::default());
     }
     let text = fs::read_to_string(&path)?;
-    let value: toml::Value = toml::from_str(&text)?;
+    let value: toml::Value = match toml::from_str(&text) {
+        Ok(value) => value,
+        Err(primary_error) => {
+            // A previous process may have been interrupted after writing the
+            // temporary file but before replacing the target. Recover only
+            // when that complete temporary document parses successfully.
+            let tmp = path.with_file_name("config.toml.tmp");
+            let recovered = fs::read_to_string(tmp)
+                .ok()
+                .and_then(|candidate| toml::from_str(&candidate).ok());
+            recovered.ok_or(PersistError::Parse(primary_error))?
+        }
+    };
     let prefs = prefs_from_value(value);
     Ok(prefs)
 }
@@ -86,10 +102,56 @@ pub fn save_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> Result<()
     })?;
     fs::create_dir_all(&dir)?;
     let path = dir.join("config.toml");
+    if let Ok(metadata) = fs::metadata(&path)
+        && metadata.permissions().readonly()
+    {
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&path, permissions)?;
+    }
     let text = format_prefs_ordered(prefs, order);
+    // Never put a string that cannot be parsed back on disk. This catches
+    // malformed user/font/HUD text before it can poison the next startup.
+    toml::from_str::<toml::Value>(&text)?;
     let tmp = dir.join("config.toml.tmp");
-    fs::write(&tmp, text)?;
+    fs::write(&tmp, &text)?;
+    // Windows does not replace an existing file with rename(). Keep the
+    // temporary write, but remove only the known config target before retrying
+    // so a successful save cannot be mistaken for a startup default reset.
+    #[cfg(windows)]
+    {
+        // Windows rename() cannot reliably replace a file that is being
+        // inspected by the shell/antivirus. Write the exact target and flush
+        // it instead; this also works when the target does not exist yet.
+        let direct_write = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&path)
+            .and_then(|mut file| {
+                file.write_all(text.as_bytes())?;
+                file.sync_all()
+            });
+        if direct_write.is_err() {
+            // Some Windows file providers reject truncation of an existing
+            // file but allow replacement by rename after the old entry is
+            // removed. The temporary document was already syntax-validated.
+            fs::remove_file(&path)?;
+            fs::rename(&tmp, &path)?;
+        } else {
+            let _ = fs::remove_file(&tmp);
+        }
+    }
+    #[cfg(not(windows))]
     fs::rename(&tmp, &path)?;
+    let saved = fs::read_to_string(&path)?;
+    toml::from_str::<toml::Value>(&saved)
+        .map_err(|error| PersistError::Verify(error.to_string()))?;
+    if saved != text {
+        return Err(PersistError::Verify(
+            "configuration content changed during write".into(),
+        ));
+    }
     Ok(())
 }
 
@@ -389,6 +451,8 @@ fn is_reserved_pet_key(k: &str) -> bool {
                 | PetPrefs::GLOBAL_POS_Y_KEY
                 | PetPrefs::GLOBAL_LAYER_KEY
                 | PetPrefs::GLOBAL_BUBBLES_KEY
+                | PetPrefs::GLOBAL_KEYBOARD_INPUT_KEY
+                | PetPrefs::GLOBAL_MOUSE_INPUT_KEY
                 | PetPrefs::GLOBAL_PICKER_MODE_KEY
         )
 }
@@ -508,7 +572,24 @@ fn parse_picker(s: &str) -> PetPickerMode {
 }
 
 fn escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
+    let mut escaped = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\u{8}' => escaped.push_str("\\b"),
+            '\t' => escaped.push_str("\\t"),
+            '\n' => escaped.push_str("\\n"),
+            '\u{c}' => escaped.push_str("\\f"),
+            '\r' => escaped.push_str("\\r"),
+            c if c.is_control() => {
+                use std::fmt::Write as _;
+                let _ = write!(escaped, "\\u{:04X}", c as u32);
+            }
+            c => escaped.push(c),
+        }
+    }
+    escaped
 }
 
 fn ordered_pet_options<'a>(
@@ -815,6 +896,25 @@ picker_mode = "list"
         // global 开关应排在其它 hud 键前
         let g = out.find("\"hud.global.enable\"").unwrap();
         assert!(out[g..].contains("\"hud.global.enable\" = false"));
+    }
+
+    #[test]
+    fn global_input_keys_are_not_migrated_as_pet_options() {
+        let root: toml::Value = toml::from_str(
+            r#"
+            [pet]
+            "pet.global.keyboard_input" = true
+            "pet.global.mouse_input" = false
+            "pet.deskhud.specs.follow_eyes" = false
+            "#,
+        )
+        .expect("valid TOML");
+        let prefs = prefs_from_value(root);
+        assert!(prefs.pet.global_keyboard_input);
+        assert!(!prefs.pet.global_mouse_input);
+        assert!(!prefs.pet.options.contains_key("pet.global.keyboard_input"));
+        assert!(!prefs.pet.options.contains_key("pet.global.mouse_input"));
+        assert!(!prefs.pet.options["pet.deskhud.specs.follow_eyes"]);
     }
 
     #[cfg(any())]

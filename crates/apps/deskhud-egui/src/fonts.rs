@@ -316,6 +316,32 @@ fn application_font_dirs() -> Vec<std::path::PathBuf> {
     fonts.is_dir().then_some(fonts).into_iter().collect()
 }
 
+/// Stores bundled application fonts relative to the executable directory.
+/// System fonts keep their absolute IDs because they are not owned by the app.
+pub(crate) fn persistable_font_id(font_id: &str) -> String {
+    let (path, face) = font_id
+        .split_once("#face=")
+        .map_or((font_id, None), |(path, face)| (path, Some(face)));
+    let path = std::path::Path::new(path);
+    if !path.is_absolute() {
+        return font_id.to_owned();
+    }
+    let Some(fonts_dir) = application_font_dirs().into_iter().next() else {
+        return font_id.to_owned();
+    };
+    let canonical_path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let canonical_fonts_dir =
+        std::fs::canonicalize(&fonts_dir).unwrap_or_else(|_| fonts_dir.clone());
+    let Ok(relative) = canonical_path.strip_prefix(&canonical_fonts_dir) else {
+        return font_id.to_owned();
+    };
+    let relative = std::path::Path::new("fonts")
+        .join(relative)
+        .to_string_lossy()
+        .replace('\\', "/");
+    face.map_or(relative.clone(), |face| format!("{relative}#face={face}"))
+}
+
 fn is_default_font_family(family: &FontFamilyEntry) -> bool {
     family
         .family_key
