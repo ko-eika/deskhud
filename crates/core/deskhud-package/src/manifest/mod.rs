@@ -168,7 +168,7 @@ fn validate_namespaced_id(id: &str, kind: &str, min_segments: usize) -> Result<(
 
 impl PackManifest {
     /// 当前引擎支持的 API 主版本。
-    pub const SUPPORTED_API_VERSION: u32 = 2;
+    pub const SUPPORTED_API_VERSION: u32 = 3;
 
     /// Whether this manifest describes a disk-loaded WASM package.
     pub fn is_external(&self) -> bool {
@@ -295,7 +295,7 @@ id = "pet.community.cool_cat"
 kind = "pet"
 version = "0.3.0"
 engine = "0.3"
-api_version = 2
+api_version = 3
 display_name = "Cool Cat"
 entry = "guest.wasm"
 "#,
@@ -315,7 +315,7 @@ id = "hud.acme.clock"
 kind = "plugin"
 version = "0.3.0"
 engine = "0.3"
-api_version = 2
+api_version = 3
 display_name = "Clock"
 "#,
         )
@@ -328,7 +328,7 @@ id = "demo.hud"
 kind = "plugin"
 version = "0.3.0"
 engine = "0.3"
-api_version = 2
+api_version = 3
 display_name = "Bad"
 "#,
         )
@@ -344,7 +344,7 @@ id = "builtin.specs"
 kind = "pet"
 version = "0.3.0"
 engine = "0.3"
-api_version = 2
+api_version = 3
 display_name = "Bad"
 "#,
         )
@@ -360,7 +360,7 @@ id = "hud.acme.clock"
 kind = "plugin"
 version = "0.3.0"
 engine = "0.3"
-api_version = 2
+api_version = 3
 display_name = "Clock"
 icon = "assets/icon.svg"
 
@@ -388,7 +388,7 @@ id = "pet.community.cool_cat"
 kind = "pet"
 version = ""
 engine = "0.3"
-api_version = 2
+api_version = 3
 display_name = "Cool Cat"
 "#,
         )
@@ -401,7 +401,7 @@ id = "pet.community.cool_cat"
 kind = "pet"
 version = "0.3.0"
 engine = ""
-api_version = 2
+api_version = 3
 display_name = "Cool Cat"
 "#,
         )

@@ -12,12 +12,12 @@ DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布
 2. [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) 中的 version 徽章
 3. （可选）`CHANGELOG` / Release 说明正文
 
-### 0.7.0 变更摘要
+### 0.8.0 变更摘要
 
-- 完成阶段 F 社区 WASM Guest：外部宠物包通过 Wasmtime Component Model 加载并纳入运行时注册表。
-- `cargo pack-external` 自动编译 WASM、生成 Component 并打包到 `target/<profile>/packages/`，源码目录不再保存 `guest.wasm`。
-- 外部宠物包支持通过 Guest 元数据提供设置预览图与布尔配置项；蓝点改为外部 WASM 包。
-- WASM Guest ABI 增加配置项元数据，`api_version` 升至 2，兼容族升至 `0.7`。
+- 完成糯米团与芝麻豆内置宠物的 `PetScene` 矢量绘制、动画行为、气泡样式和中英文包文案。
+- 宿主渲染器支持凹多边形填充、渐变路径、按场景坐标缩放描边和自适应椭圆细分，并遵守宠物阴影开关。
+- 修复跨透明边界拖拽时的状态保持与瞬时全局指针采样失败；运行时默认扫描 profile / 用户数据包目录。
+- 内置包清单与 Guest ABI 同步升至 `engine = "0.8"`、`api_version = 3`；旧 `pet.deskhud.specs` 偏好迁移至 `pet.deskhud.dumpling`。
 
 ### 0.6.26 变更摘要
 
@@ -109,12 +109,12 @@ shasum -a 256 target/release/deskhud
 cargo pack-builtins
 
 # 单个（参数为 crates/packs/ 下目录名）
-cargo pack-builtin pet-deskhud-specs
-cargo pack-builtin pet-deskhud-blob
+cargo pack-builtin pet-deskhud-mochi
+cargo pack-builtin pet-deskhud-sesame
 cargo pack-builtin hud-deskhud-demo
 
 # 指定输出目录
 cargo pack-builtins --out dist/my-packs
 ```
 
-可将产物拷到 [`packages/`](../packages/) 做扫描侧验证。更多上下文见 [`docs/extension-guide.md`](./extension-guide.md) §1.6。
+Debug / release 运行时会直接扫描对应的 `target/<profile>/packages/`。更多上下文见 [`docs/extension-guide.md`](./extension-guide.md) §1.6。

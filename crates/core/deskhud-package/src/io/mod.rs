@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn rejects_unsafe_manifest_paths() {
         let err = PackManifest::parse_toml(
-            r#"id="pet.example.path" kind="pet" version="0.7" engine="0.7" api_version=2 display_name="x" preview="../x""#,
+            r#"id="pet.example.path" kind="pet" version="0.8" engine="0.8" api_version=3 display_name="x" preview="../x""#,
         )
         .unwrap_err();
         assert!(format!("{err}").contains(".."));

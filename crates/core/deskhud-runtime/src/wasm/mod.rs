@@ -170,12 +170,9 @@ impl PetKind for WasmPet {
     }
     fn scene(&self, ctx: PetPaintCtx<'_>) -> PetScene {
         let result = self.call(|s| {
-            let scene = s
-                .guest
+            s.guest
                 .deskhud_guest_pet_api()
                 .call_render(&mut s.store, &ctx_to_guest(ctx))
-                .map_err(wasmtime::Error::from);
-            scene
         });
         match result.and_then(scene_to_engine) {
             Ok(scene) => scene,
@@ -267,6 +264,7 @@ fn ctx_to_guest(ctx: PetPaintCtx<'_>) -> pet_api::PaintContext {
             })
             .collect(),
         theme_dark: matches!(ctx.theme, deskhud_engine::PetTheme::Dark),
+        shadows: ctx.shadows,
     }
 }
 
@@ -422,6 +420,19 @@ fn scene_to_engine(scene: pet_api::Scene) -> Result<PetScene, RuntimeError> {
                     stroke: path.stroke.map(color_to_engine),
                     stroke_width: path.stroke_width,
                 }),
+                pet_api::Node::GradientPath((path, top_color, bottom_color)) => {
+                    SceneNode::GradientPath {
+                        path: Path {
+                            points: path.points.into_iter().map(|p| [p.0, p.1]).collect(),
+                            closed: path.closed,
+                            fill: path.fill.map(color_to_engine),
+                            stroke: path.stroke.map(color_to_engine),
+                            stroke_width: path.stroke_width,
+                        },
+                        top_color: color_to_engine(top_color),
+                        bottom_color: color_to_engine(bottom_color),
+                    }
+                }
                 pet_api::Node::Shape((shape, color)) => SceneNode::Shape {
                     shape: shape_to_engine(shape),
                     color: color_to_engine(color),

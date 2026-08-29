@@ -5,7 +5,8 @@ use std::sync::Arc;
 use deskhud_engine::{EngineRegistry, PetKind, Plugin};
 use deskhud_package::PackKind;
 use hud_deskhud_demo::DemoHudPlugin;
-use pet_deskhud_specs::BuiltinSpecsPet;
+use pet_deskhud_mochi::BuiltinMochiPet;
+use pet_deskhud_sesame::BuiltinSesamePet;
 use tracing::{info, warn};
 
 use crate::{DiscoveredPack, PackageLoader, RuntimeError, WasmLimits, WasmPet};
@@ -23,11 +24,14 @@ fn register_builtins(registry: &mut EngineRegistry) {
     // external, remove it here and ship a WASM Component with `entry` in its
     // manifest. Keeping the list explicit avoids package-folder contents
     // accidentally changing the built-in product surface.
-    const BUILTIN_PETS: &[&str] = &["pet.deskhud.specs"];
+    const BUILTIN_PETS: &[&str] = &["pet.deskhud.mochi", "pet.deskhud.sesame"];
     for id in BUILTIN_PETS {
         match *id {
-            "pet.deskhud.specs" => {
-                registry.register_pet(Arc::new(BuiltinSpecsPet::default()) as Arc<dyn PetKind>);
+            "pet.deskhud.mochi" => {
+                registry.register_pet(Arc::new(BuiltinMochiPet::default()) as Arc<dyn PetKind>);
+            }
+            "pet.deskhud.sesame" => {
+                registry.register_pet(Arc::new(BuiltinSesamePet::default()) as Arc<dyn PetKind>);
             }
             _ => unreachable!("unknown configured built-in pet: {id}"),
         }
@@ -35,7 +39,7 @@ fn register_builtins(registry: &mut EngineRegistry) {
     registry.register_plugin(Arc::new(DemoHudPlugin) as Arc<dyn Plugin>);
 }
 
-/// 启动时的默认宿主注册表（内置宠 + 演示 HUD），并扫描 `packages/`。
+/// 启动时的默认宿主注册表（内置宠 + 演示 HUD），并扫描 profile / 用户包目录。
 ///
 /// - 与内置 **同 ID** 的清单：仅记录发现（元数据覆盖留给后续）；不卸载内置实现。
 /// - 其它宠物包：通过沙箱化 Component Model Guest 后注册；失败只隔离该包。

@@ -1,6 +1,6 @@
 [package]
-name = "pet-deskhud-blob"
-description = "DeskHud community WASM pet: Blue Dot (pet.deskhud.blob)."
+name = "pet-deskhud-dumpling"
+description = "DeskHud external WASM pet: Little Dumpling (pet.deskhud.dumpling)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

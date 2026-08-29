@@ -2,7 +2,7 @@
 <h4 align="center">一个可扩展的桌宠引擎</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.7.0-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.8.0-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.95+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -15,7 +15,7 @@
 
 DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（外观 + 行为），并按需开关 **HUD 插件** 及其贡献条目。界面基于 **egui + winit / egui_glow**，支持多语言与本地社区包加载（商店能力后置）。
 
-当前版本：`0.7.0`。完成阶段 F 社区 WASM Guest：外部宠物包可在打包时自动构建、生成并加载，支持包预览图与配置项元数据。
+当前版本：`0.8.0`。完成糯米团与芝麻豆内置宠物、统一 `PetScene` 矢量渲染扩展，并修复跨透明边界拖拽与旧宠物偏好迁移。
 
 ## 功能概览
 
@@ -41,7 +41,7 @@ DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（�
 
 - 一套包 = **皮肤资源 + 行为逻辑**；切换包即切换外观与行为
 - 全 ID 约定：`pet.<组织>.<标识>`
-- 内置演示：`pet.deskhud.specs`（大眼球）、`pet.deskhud.blob`（蓝点）
+- 内置宠物：`pet.deskhud.mochi`（糯米团）、`pet.deskhud.sesame`（芝麻豆）
 - 包可声明 `PetConfigOption`（布尔行为项），在设置「当前宠物行为」中配置
 - 社区包目标形态：`.deskhud`（目录或 zip）+ WASM（路线图 Phase 3）
 
@@ -94,8 +94,6 @@ crates/apps/     应用入口（deskhud-egui、deskhud-native）
 crates/platform/ 平台抽象与 Windows/macOS/Linux 实现
 crates/packs/    内置宠物包与 HUD 包
 crates/tools/    构建与打包工具
-packages/        本地已安装 / 开发用包扫描根
-examples/        社区开发示例
 docs/            架构、扩展指南、路线图
 ```
 
@@ -116,14 +114,14 @@ cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime
 
 # 导出 crates/packs/ → target/packages/*.deskhud（manifest + assets + i18n）
 cargo pack-builtins
-cargo pack-builtin pet-deskhud-specs
+cargo pack-builtin pet-deskhud-mochi
 
 # 格式与静态检查
 cargo fmt
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-首次运行后，偏好与数据目录由引擎写入用户配置区（Windows 上通常在 `%APPDATA%/DeskHud` 一带）。本地包可放在仓库 [`packages/`](./packages/) 或用户 packages 目录，详见该目录说明。
+首次运行后，偏好与数据目录由引擎写入用户配置区（Windows 上通常在 `%APPDATA%/DeskHud` 一带）。构建产物位于 `target/<profile>/packages/`；长期安装的本地包应放在用户 packages 目录。
 
 ## 发布
 
@@ -141,8 +139,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud-egui
 
 # 4. 打 tag 并推送后，在 GitHub Release 上传二进制
-git tag -a v0.7.0 -m "DeskHud 0.7.0"
-git push origin v0.7.0
+git tag -a v0.8.0 -m "DeskHud 0.8.0"
+git push origin v0.8.0
 ```
 
 当前 CI（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）只做三端 `check` / 测试，**不会**自动发布安装包。
@@ -161,7 +159,6 @@ git push origin v0.7.0
 
 - [`docs/extension-guide.md`](./docs/extension-guide.md) — 宠物包 / HUD 插件契约、事件、**导出 `.deskhud`**
 - [`docs/architecture.md`](./docs/architecture.md) — crate 边界与依赖方向
-- [`packages/README.md`](./packages/README.md) — 本地包放置与用 `pack-builtins` 验证
 - [`docs/release.md`](./docs/release.md) — 发版与 `cargo pack-builtins` 说明
 
 包内典型结构：

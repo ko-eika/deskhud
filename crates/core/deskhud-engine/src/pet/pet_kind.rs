@@ -53,6 +53,8 @@ pub struct PetPaintCtx<'a> {
     pub config: PetConfigBag<'a>,
     /// 宿主已解析的明暗方案，供宠物决定是否跟随主题绘制气泡等附属内容。
     pub theme: PetTheme,
+    /// 性能设置中的阴影开关；关闭时宠物不应生成阴影节点。
+    pub shadows: bool,
 }
 
 /// 桌宠类型扩展点。

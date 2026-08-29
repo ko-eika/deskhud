@@ -34,6 +34,7 @@ pub struct Path {
     pub closed: bool,
     pub fill: Option<SceneColor>,
     pub stroke: Option<SceneColor>,
+    /// 描边宽度，使用与 `points` 相同的场景坐标单位。
     pub stroke_width: f32,
 }
 
@@ -60,6 +61,11 @@ pub enum SceneNode {
         opacity: f32,
     },
     Path(Path),
+    GradientPath {
+        path: Path,
+        top_color: SceneColor,
+        bottom_color: SceneColor,
+    },
     Shape {
         shape: Shape,
         color: SceneColor,
@@ -180,8 +186,22 @@ fn validate_node(node: &SceneNode) -> Result<(), SceneValidationError> {
             &[][..],
             p.points.iter().all(|p| p.iter().all(|v| v.is_finite()))
                 && p.stroke_width.is_finite()
+                && p.stroke_width >= 0.0
                 && p.fill.is_none_or(valid_color)
                 && p.stroke.is_none_or(valid_color),
+        ),
+        SceneNode::GradientPath {
+            path,
+            top_color,
+            bottom_color,
+        } => (
+            None,
+            &[(*top_color), (*bottom_color)][..],
+            path.points.iter().all(|p| p.iter().all(|v| v.is_finite()))
+                && path.stroke_width.is_finite()
+                && path.stroke_width >= 0.0
+                && path.fill.is_none_or(valid_color)
+                && path.stroke.is_none_or(valid_color),
         ),
         SceneNode::Shape { shape, color } => {
             (None, std::slice::from_ref(color), valid_shape(shape))

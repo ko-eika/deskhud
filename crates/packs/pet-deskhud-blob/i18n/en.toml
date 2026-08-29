@@ -1,8 +1,0 @@
-display_name = "Blue Dot"
-description = "Simple blob; reacts to drag and docking"
-"hover_pulse.label" = "Hover effect"
-"hover_pulse.description" = "Slightly enlarges and breathes while the pointer rests on the pet"
-"dock_tint.label" = "Dock effect"
-"dock_tint.description" = "Provides visual feedback when attached to a screen edge"
-"drag_react.label" = "Drag effect"
-"drag_react.description" = "Provides visual feedback while dragging the pet"

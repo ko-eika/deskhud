@@ -83,7 +83,7 @@ docs/agent/README.md      ← 本目录索引
 docs/                     架构、覆盖层迁移、扩展指南、版本、发版、路线图
 .codex/                   Codex 项目配置预留（非规则真相源）
 crates/core/ … crates/apps/ … crates/platform/ … crates/packs/ … crates/tools/
-packages/ … examples/
+target/<profile>/packages/ …
 .cursor/rules/            Cursor 薄指针（勿当第二真相源）
 ```
 
@@ -114,7 +114,7 @@ cargo test
 cargo run -p deskhud-egui
 cargo build -p deskhud-egui --release   # 产物见 docs/release.md
 cargo pack-builtins                     # crates/packs/ → target/packages/*.deskhud
-cargo pack-builtin <dir>                # 单个，如 pet-deskhud-specs
+cargo pack-builtin <dir>                # 单个，如 pet-deskhud-mochi
 cargo fmt
 cargo clippy --workspace --all-targets -- -D warnings
 ```

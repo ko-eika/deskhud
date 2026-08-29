@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <defs>
+        <!-- 身体渐变 -->
+        <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#A8D8FF"/>
+            <stop offset="100%" style="stop-color:#E6F4FF"/>
+        </linearGradient>
+        <!-- 瞳孔渐变 -->
+        <radialGradient id="pupilGrad" cx="30%" cy="30%" r="75%">
+            <stop offset="0%" stop-color="#4A6FA5"/>
+            <stop offset="100%" stop-color="#1A3B6D"/>
+        </radialGradient>
+        <!-- 地面阴影 -->
+        <radialGradient id="groundShadow" cx="50%" cy="50%" r="50%">
+            <stop offset="60%" stop-color="#000" stop-opacity="0.2"/>
+            <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+        </radialGradient>
+    </defs>
+
+    <!-- 地面投影 -->
+    <ellipse cx="256" cy="442" rx="152" ry="24" fill="url(#groundShadow)"/>
+
+    <!-- 身体轮廓：已修改为更圆润的头顶 -->
+    <path d="M85 308
+           C79 232, 95 128, 236 111
+           C244 110, 251 110, 256 110
+           C261 110, 268 110, 276 111
+           C417 128, 433 232, 427 308
+           C421 363, 387 397, 354 378
+           C326 430, 293 430, 256 384
+           C219 430, 186 430, 158 378
+           C125 397, 91 363, 85 308 Z"
+          fill="url(#bodyGrad)" stroke="#8CC6FF" stroke-width="9" stroke-linejoin="round"/>
+
+    <!-- 眼睛白色部分 -->
+    <ellipse cx="174" cy="250" rx="55" ry="61" fill="white"/>
+    <ellipse cx="338" cy="250" rx="55" ry="61" fill="white"/>
+
+    <!-- 瞳孔 -->
+    <circle cx="180" cy="256" r="24" fill="url(#pupilGrad)"/>
+    <circle cx="344" cy="256" r="24" fill="url(#pupilGrad)"/>
+
+    <!-- 眼睛高光 -->
+    <circle cx="171" cy="247" r="7.5" fill="white" opacity="0.8"/>
+    <circle cx="335" cy="247" r="7.5" fill="white" opacity="0.8"/>
+
+    <!-- 微笑嘴巴 -->
+    <path d="M232 332 Q256 354 280 332" stroke="#1A3B6D" stroke-width="9" stroke-linecap="round" fill="none"/>
+</svg>

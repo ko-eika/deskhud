@@ -78,7 +78,8 @@ pub fn load() -> Result<UiPreferences, PersistError> {
             recovered.ok_or(PersistError::Parse(primary_error))?
         }
     };
-    let prefs = prefs_from_value(value);
+    let mut prefs = prefs_from_value(value);
+    prefs.normalize_ids();
     Ok(prefs)
 }
 

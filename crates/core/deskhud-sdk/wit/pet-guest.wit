@@ -53,6 +53,7 @@ interface pet-api {
     mouse: mouse-state,
     config: list<config-entry>,
     theme-dark: bool,
+    shadows: bool,
   }
 
   record transform { translation: tuple<f32, f32>, rotation-radians: f32, scale: tuple<f32, f32> }
@@ -65,12 +66,14 @@ interface pet-api {
     closed: bool,
     fill: option<color>,
     stroke: option<color>,
+    /// Stroke width in the same scene-space units as `points`.
     stroke-width: f32,
   }
   variant node {
     sprite(tuple<string, tuple<f32, f32>, f32>),
     atlas-frame(tuple<string, u32, tuple<f32, f32>, f32>),
     path(path),
+    gradient-path(tuple<path, color, color>),
     shape(tuple<shape, color>),
     text(tuple<string, color, f32>),
     bubble(tuple<string, color, color, f32>),

@@ -1,7 +1,7 @@
 # 宠物引擎核心实施计划
 
 状态：阶段 F 已完成
-当前版本：0.7.0
+当前版本：0.8.0
 首个运行态后端：`deskhud-egui`
 
 ## 目标
@@ -49,7 +49,7 @@
 - [x] 将眨眼、跟随指针、拖拽反馈、贴边反馈保留在宠物包行为中。
 - [x] 用宠物包自己的状态和时间控制首版动画，不在宿主内置宠物动画状态机。
 - [x] 清理 `deskhud-egui` 中固定的两眼绘制逻辑。
-- [x] 内置 Blob 宠物也输出同一种 `PetScene`。
+- [x] 内置 Sesame 宠物也输出同一种 `PetScene`。
 - [x] 设置页预览继续只使用包的 `preview` / `icon`。
 
 验收：删除或替换眼睛资源后，宿主不会自动补画眼睛；切换宠物不会继承前一个宠物的视觉状态。
@@ -117,7 +117,7 @@
 - 开始日期：2026-08-27
 - 完成日期：2026-08-27
 - 实际改动：新增 EguiSceneRenderer、局部命中与事件派发、阈值拖拽、跨平台贴边与 macOS 全局指针/鼠标输入；运行态按 config→events→tick→scene→validate→renderer 运行；气泡由独立透明工具窗承载并按工作区避让。
-- 验证命令：`cargo fmt --all`、`cargo check -p deskhud-egui -p pet-deskhud-specs -p pet-deskhud-blob`、`cargo test -p deskhud-engine`、`cargo run -p deskhud-egui`（启动后手动中断）。
+- 验证命令：`cargo fmt --all`、`cargo check -p deskhud-egui -p pet-deskhud-mochi -p pet-deskhud-sesame`、`cargo test -p deskhud-engine`、`cargo run -p deskhud-egui`（启动后手动中断）。
 - 阶段 E 改动：新增 `PackResource`/atlas 帧索引、包内路径与入口门闸、位图损坏/尺寸/帧边界校验；目录包和 ZIP 在发现、打包、打开三个入口统一校验；新增 `PackInstance`/`PetInstanceSlot`，切换失败会清理旧实例；坏包按单包失败隔离。
 - 阶段 E 验证命令：`cargo fmt --all`、`cargo test -p deskhud-package -p deskhud-runtime`、`cargo check -p deskhud-egui`。
 - 遗留问题：WASM Guest runtime 属于阶段 F；全 workspace 检查仍受既有 windows-future/windows-core 依赖错配影响。

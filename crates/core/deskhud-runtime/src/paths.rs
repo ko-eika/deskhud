@@ -12,7 +12,7 @@ mod platform;
 #[path = "paths/fallback.rs"]
 mod platform;
 
-/// 默认扫描根：开发树 `./packages`，以及用户数据目录下的 `packages`（若可解析）。
+/// 默认扫描根：可执行文件旁的 profile 包目录，以及用户数据目录下的 `packages`。
 pub fn default_package_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     // Release and debug binaries load sibling packages, which makes
@@ -22,7 +22,6 @@ pub fn default_package_dirs() -> Vec<PathBuf> {
     {
         dirs.push(parent.join("packages"));
     }
-    dirs.push(PathBuf::from("../../../../packages"));
     if let Some(data) = platform::user_data_packages() {
         dirs.push(data);
     }

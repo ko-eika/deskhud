@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <!-- 定义渐变，增加立体感 -->
+    <defs>
+        <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#FFFDF7;stop-opacity:1"/>
+            <stop offset="58%" style="stop-color:#FFF7E8;stop-opacity:1"/>
+            <stop offset="100%" style="stop-color:#F2C18D;stop-opacity:1"/>
+        </linearGradient>
+        <radialGradient id="groundShadow" cx="50%" cy="50%" r="50%">
+            <stop offset="20%" stop-color="#000000" stop-opacity=".28"/>
+            <stop offset="75%" stop-color="#000000" stop-opacity=".12"/>
+            <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="pupilGrad" cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stop-color="#6B493F"/>
+            <stop offset="55%" stop-color="#4A302C"/>
+            <stop offset="100%" stop-color="#2B1D1C"/>
+        </radialGradient>
+    </defs>
+
+    <!-- 所有坐标已直接换算自原 transform：x'=x*2.56，y'=y*2.56+25.6 -->
+    <!-- 地面投影：宽而扁的椭圆，模拟接触面 -->
+    <ellipse cx="256" cy="430.08" rx="179.2" ry="23.04" fill="url(#groundShadow)"/>
+
+    <!-- 汤圆主体：压扁的贝塞尔曲线 -->
+    <!-- 顶部圆润，两侧向外鼓出，底部平缓 -->
+    <path d="M256 115.2
+           C371.2 115.2, 435.2 192, 435.2 294
+           C435.2 384, 384 422.4, 256 422.4
+           C128 422.4, 76.8 384, 76.8 294
+           C76.8 192, 140.8 115.2, 256 115.2 Z"
+          fill="url(#bodyGrad)" stroke="#5B4036" stroke-width="8.96" stroke-linejoin="round"/>
+
+    <!-- 五官组：位置与原图一致 -->
+    <g fill="#8D5A60">
+        <circle cx="192" cy="256" r="28.16"/>
+        <circle cx="320" cy="256" r="28.16"/>
+    </g>
+
+    <!-- 瞳孔与高光：深色瞳孔配清晰的小面积反光 -->
+    <g fill="url(#pupilGrad)">
+        <circle cx="192" cy="256" r="14.08"/>
+        <circle cx="320" cy="256" r="14.08"/>
+    </g>
+    <g fill="#FFFFFF">
+        <circle cx="186.88" cy="247.808" r="5.632"/>
+        <circle cx="314.88" cy="247.808" r="5.632"/>
+    </g>
+
+    <!-- 嘴巴：更宽的微笑弧度 -->
+    <path d="M225.28 320 Q256 353.68, 286.72 320" fill="none" stroke="#5B4036" stroke-width="7.68"
+          stroke-linecap="round"/>
+
+    <!-- 腮红：位置随脸型下移 -->
+    <ellipse cx="153.6" cy="307.2" rx="25.6" ry="15.36" fill="#FFB7B2" opacity="0.8"/>
+    <ellipse cx="358.4" cy="307.2" rx="25.6" ry="15.36" fill="#FFB7B2" opacity="0.8"/>
+</svg>

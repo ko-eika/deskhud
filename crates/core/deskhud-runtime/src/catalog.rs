@@ -9,14 +9,14 @@ use crate::{DiscoveredPack, PackageLoader};
 fn merge_builtin_pack_catalogs(store: &mut CatalogStore) {
     const BUILTINS: &[(&str, &str, &str)] = &[
         (
-            "pet.deskhud.specs.",
-            include_str!("../../../packs/pet-deskhud-specs/i18n/zh-CN.toml"),
-            include_str!("../../../packs/pet-deskhud-specs/i18n/en.toml"),
+            "pet.deskhud.mochi.",
+            include_str!("../../../packs/pet-deskhud-mochi/i18n/zh-CN.toml"),
+            include_str!("../../../packs/pet-deskhud-mochi/i18n/en.toml"),
         ),
         (
-            "pet.deskhud.blob.",
-            include_str!("../../../packs/pet-deskhud-blob/i18n/zh-CN.toml"),
-            include_str!("../../../packs/pet-deskhud-blob/i18n/en.toml"),
+            "pet.deskhud.sesame.",
+            include_str!("../../../packs/pet-deskhud-sesame/i18n/zh-CN.toml"),
+            include_str!("../../../packs/pet-deskhud-sesame/i18n/en.toml"),
         ),
         (
             "hud.deskhud.demo.",
@@ -80,16 +80,16 @@ mod tests {
     fn builtin_pet_catalogs_are_available_to_settings_in_chinese() {
         let store = build_catalog_store(&[], Locale::ZhCn);
         assert_eq!(
-            store.get(Locale::ZhCn, "pet.deskhud.specs.display_name"),
-            Some("大眼球")
+            store.get(Locale::ZhCn, "pet.deskhud.mochi.display_name"),
+            Some("糯米团")
         );
         assert_eq!(
-            store.get(Locale::ZhCn, "pet.deskhud.blob.display_name"),
-            Some("蓝点")
+            store.get(Locale::ZhCn, "pet.deskhud.sesame.display_name"),
+            Some("芝麻豆")
         );
         assert_eq!(
-            store.get(Locale::En, "pet.deskhud.specs.follow_eyes.label"),
-            Some("Pointer tracking")
+            store.get(Locale::En, "pet.deskhud.mochi.follow_eyes.label"),
+            Some("Eye effect")
         );
     }
 }

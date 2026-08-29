@@ -1,6 +1,6 @@
 [package]
-name = "pet-deskhud-specs"
-description = "DeskHud builtin pet: Big Eyes (pet.deskhud.specs)."
+name = "pet-deskhud-sesame"
+description = "DeskHud builtin pet: Sesame (pet.deskhud.sesame)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

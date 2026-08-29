@@ -1,0 +1,13 @@
+id = "pet.deskhud.mochi"
+kind = "pet"
+load = "builtin"
+version = "0.8.0"
+engine = "0.8"
+api_version = 3
+display_name = "Mochi"
+description = "A steady blue mascot with natural blinking, pointer tracking, and responsive poses"
+author = "DeskHud"
+homepage = "https://github.com/ko-eika/deskhud"
+window_width = 192
+window_height = 192
+preview = "assets/preview.svg"

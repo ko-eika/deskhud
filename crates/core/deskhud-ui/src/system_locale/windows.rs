@@ -11,12 +11,11 @@ pub(super) fn system_locale() -> Option<LanguageTag> {
             buffer.len() as i32,
         )
     };
-    if length > 1 {
-        if let Ok(value) = String::from_utf16(&buffer[..length as usize - 1]) {
-            if let Some(locale) = LanguageTag::parse(&value) {
-                return Some(locale);
-            }
-        }
+    if length > 1
+        && let Ok(value) = String::from_utf16(&buffer[..length as usize - 1])
+        && let Some(locale) = LanguageTag::parse(&value)
+    {
+        return Some(locale);
     }
     ["LANGUAGE", "LC_ALL", "LANG"].into_iter().find_map(|name| {
         std::env::var(name)

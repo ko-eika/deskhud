@@ -21,6 +21,7 @@
 | 2026-08-23 | 产品版本 PATCH 升至 `0.6.11`，engine 兼容族保持 `0.6` | 完成 egui 应用与全局资源目录迁移；统一使用 `assets/fonts/Inter.ttc`；修复 macOS 原生宠物 hover、指针方向、点击与全局键鼠事件；修正 Windows 包缓存并发告警 |
 | 2026-08-28 | 产品与内置包 PATCH 升至 `0.6.26`，engine 兼容族保持 `0.6`；修复三平台 CI 与跨平台字体家族 ID | Windows 依赖仅在 Windows target 引入；Source Han Sans 家族 ID 跨平台统一；CI 与当前依赖最低 Rust 版本同步为 1.95 |
 | 2026-08-29 | 产品与内置包 MINOR 升至 `0.7.0`，engine 兼容族升至 `0.7`，Guest `api_version` 升至 2 | 阶段 F 完成社区 WASM Guest；外部包在 `pack-external` 时自动构建 Component；Guest 提供预览图与配置项元数据，蓝点不再以内置 Rust 宠物注册 |
+| 2026-08-30 | 产品与内置包 MINOR 升至 `0.8.0`，engine 兼容族升至 `0.8`，Guest `api_version` 升至 3 | 完成糯米团与芝麻豆内置宠物及 `PetScene` 渲染扩展；新增渐变路径、阴影上下文、坐标化描边和拖拽状态修复；旧 `specs` 偏好迁移至 external Dumpling |
 | 2026-08-14 | 设置页/宠物菜单/图像解码与字体枚举仅 Windows/macOS 接入；Linux（宠物运行态专用）将 `settings`、`pet_menu`、`image_decode`、`fonts` 以 `#[cfg_attr(target_os="linux", allow(dead_code))]` 关闭死代码，`native_host` 相应 cfg 修正；三平台 `cargo check --workspace --all-targets -D warnings` 均通过 | Windows 死代码报错来自 `overlay_control`（`OpenMenu`/`PetDragStarted`/`PetDragEnded`），Linux 来自上述 UI 模块；非行为变更 |
 | 2026-08-14 | **缺陷（Windows 原生菜单不随应用/系统主题）**：`deskhud-egui/src/native_menu.rs` 用经典 `CreatePopupMenu`/`TrackPopupMenuEx`，Win10/11 经典菜单不自动跟随暗色；已验证 uxtheme `SetPreferredAppMode`/`AllowDarkModeForWindow` + owner `DwmSetWindowAttribute` 三套钩子在本机均不生效；owner-draw 自绘主题菜单曾试制但导致菜单异常，代码已回滚。定为缺陷待后续原生方案处理，Rest on 计划 C（C0 部分试制已回滚；C1 跨平台原生视图 trait 待做），不在本次继续调整代码 | 桌宠覆盖层已是 DirectComposition（原生）；国际化/主题契约在 `deskhud-ui`（无 egui），脱离 egui 不影响 |
 | 2026-08-14 | **修复（Windows native UI GL context 报错）**：设置/菜单窗口隐藏或销毁时，winit 仍可能投递一次排队的 `RedrawRequested`；此前 `native_host::draw` 直接对已不可用的 surface 调用 `make_current`，产生 Win32 error 6（句柄无效）或 error 2004（转换操作不支持），且会重复刷日志。现仅在控制窗可见时绘制，并对仍发生的短暂失败按 1 秒节流记录后跳过当前帧；错误不再按 ERROR 级别刷屏。 |
@@ -102,6 +103,7 @@
 | 2026-08-28 | 产品与内置包 PATCH 升至 `0.6.21`，engine 兼容族保持 `0.6`；修复 macOS 宠物拖拽与贴边行为 | 禁止系统窗口平铺接管宠物拖拽；修复贴边状态、越界回弹及气泡跟随窗口实际位置 |
 | 2026-08-28 | 产品与内置包 PATCH 升至 `0.6.22`，engine 兼容族保持 `0.6`；字体改为外置递归扫描与 `ttf-parser` 元数据解析 | 字体不再嵌入可执行文件；构建复制 `assets/fonts/` 到 `target/<profile>/fonts/`，运行时支持按字簇、语言和样式组织字体并默认优先 Source Han Sans |
 | 2026-08-28 | 产品与内置包 PATCH 升至 `0.6.23`，engine 兼容族保持 `0.6`；修复配置/预设持久化、Windows 全局键鼠监听、宠物拖拽位置保存与气泡焦点问题，并完善大眼宠物的平滑跟随与点击反馈 | 启动只加载已有配置，配置和窗口预设按明确事件保存；气泡保持鼠标穿透且不主动抢焦点；大眼宠物空闲回正、点击时瞳孔短暂朝指针探出 |
+| 2026-08-30 | 内置宠物改为糯米团（Mochi）与芝麻豆（Sesame），外置 `pet.deskhud.dumpling` 保留为小汤圆并同步 192×192 尺寸 | 新内置宠物统一输出中性 `PetScene`；Dumpling 继续作为旧 `specs` 偏好的迁移目标 |
 
 ## 已知上游限制（勿当「本仓库可修」）
 

@@ -2,7 +2,7 @@
 <h4 align="center">An extensible desktop pet engine</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.7.0-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.8.0-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.95+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -13,7 +13,7 @@
 
 [简体中文](./README.md) | English
 
-DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.7.0`, with community WASM Guest packs that are built during packaging and can provide previews and settings metadata.
+DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.8.0`, with rebuilt Mochi and Sesame built-in pets, expanded `PetScene` rendering, and safer drag/prefs migration behavior.
 
 ## Features
 
@@ -39,7 +39,7 @@ Preferences are persisted (locale, theme, font, active pet, HUD switches, window
 
 - One pack = **skin assets + behavior**; switching packs switches both
 - Full ID: `pet.<org>.<name>`
-- Built-ins: `pet.deskhud.specs` (Big Eyes), `pet.deskhud.blob` (Blue Dot)
+- Built-ins: `pet.deskhud.mochi` (Mochi), `pet.deskhud.sesame` (Sesame)
 - Packs may declare `PetConfigOption` (boolean options) under Settings → active pet behavior
 - Community target: `.deskhud` (directory or zip) + WASM (roadmap Phase 3)
 
@@ -88,8 +88,6 @@ Repository layout:
 
 ```
 crates/          Crate sources
-packages/        Local installed / dev pack scan root
-examples/        Community authoring examples
 docs/            Architecture, extension guide, roadmap
 ```
 
@@ -110,14 +108,14 @@ cargo test -p deskhud-package -p deskhud-ui -p deskhud-engine -p deskhud-runtime
 
 # Export packs/ → target/packages/*.deskhud (manifest + assets + i18n)
 cargo pack-builtins
-cargo pack-builtin pet-deskhud-specs
+cargo pack-builtin pet-deskhud-mochi
 
 # Format & lint
 cargo fmt
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-After the first run, preferences live under the user config area (on Windows, typically under `%APPDATA%/DeskHud`). Local packs can go in [`packages/`](./packages/) or the user packages directory; see that folder’s README.
+After the first run, preferences live under the user config area (on Windows, typically under `%APPDATA%/DeskHud`). Build artifacts are placed under `target/<profile>/packages/`; long-lived local packs belong in the user packages directory.
 
 ## Release
 
@@ -135,8 +133,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud-egui
 
 # 4. Tag, push, and attach binaries on a GitHub Release
-git tag -a v0.7.0 -m "DeskHud 0.7.0"
-git push origin v0.7.0
+git tag -a v0.8.0 -m "DeskHud 0.8.0"
+git push origin v0.8.0
 ```
 
 CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs cross-platform `check` / tests only; it does **not** publish installers yet.
@@ -155,7 +153,6 @@ For community authors:
 
 - [`docs/extension-guide.md`](./docs/extension-guide.md) — pet / HUD contracts, events, pack layout
 - [`docs/architecture.md`](./docs/architecture.md) — crate boundaries and dependency direction
-- [`packages/README.md`](./packages/README.md) — where to put local packs
 
 Typical pack layout:
 

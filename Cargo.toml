@@ -20,7 +20,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 rust-version = "1.95"
 license = "Apache-2.0"
@@ -41,8 +41,8 @@ deskhud-package = { path = "crates/core/deskhud-package" }
 deskhud-sdk = { path = "crates/core/deskhud-sdk" }
 
 # 内置宠物 / HUD 包：由 deskhud-runtime 注册，不属于 UI 壳。
-pet-deskhud-specs = { path = "crates/packs/pet-deskhud-specs" }
-pet-deskhud-blob = { path = "crates/packs/pet-deskhud-blob" }
+pet-deskhud-mochi = { path = "crates/packs/pet-deskhud-mochi" }
+pet-deskhud-sesame = { path = "crates/packs/pet-deskhud-sesame" }
 hud-deskhud-demo = { path = "crates/packs/hud-deskhud-demo" }
 
 # 平台中性契约与平台实现；OS 类型只允许出现在这些平台 crate 内。

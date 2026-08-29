@@ -240,6 +240,18 @@ fn list_external_pack_crates(packs: &Path) -> Result<Vec<PathBuf>, String> {
         })
 }
 
+fn list_builtin_pack_crates(packs: &Path) -> Result<Vec<PathBuf>, String> {
+    list_pack_crates(packs)?
+        .into_iter()
+        .try_fold(Vec::new(), |mut builtins, path| {
+            let manifest = read_manifest_dir(&path).map_err(|e| e.to_string())?;
+            if !manifest.is_external() {
+                builtins.push(path);
+            }
+            Ok(builtins)
+        })
+}
+
 fn external_source(root: &Path, value: &str) -> PathBuf {
     let path = PathBuf::from(value);
     if path.exists() {
@@ -293,9 +305,9 @@ fn main() -> ExitCode {
             let out = parse_out(&args);
             let release = is_release(&args);
             fs::create_dir_all(&out).expect("create out");
-            let crates = list_external_pack_crates(&packs).expect("list packs");
+            let crates = list_builtin_pack_crates(&packs).expect("list packs");
             if crates.is_empty() {
-                eprintln!("no external packs with entry under {}", packs.display());
+                eprintln!("no builtin packs under {}", packs.display());
                 return ExitCode::FAILURE;
             }
             for c in crates {

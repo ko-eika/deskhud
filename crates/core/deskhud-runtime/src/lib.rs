@@ -1,6 +1,6 @@
 //! # deskhud-runtime
 //!
-//! 本地包发现与加载：把 `packages/` 下的 `.deskhud` 变成可注册的
+//! 本地包发现与加载：把 profile / 用户数据目录下的 `.deskhud` 变成可注册的
 //! [`PetKind`](deskhud_engine::PetKind) / [`Plugin`](deskhud_engine::Plugin)。
 //!
 //! - **内置**：`packs/*` 原生 crate（`pet-*` / `hud-*`），由本 crate 引导注册进空的 [`EngineRegistry`](deskhud_engine::EngineRegistry)。

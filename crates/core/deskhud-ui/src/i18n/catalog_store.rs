@@ -45,10 +45,10 @@ impl CatalogStore {
         if let Some(v) = self.layers.get(primary).and_then(|m| m.get(key)) {
             return Some(v.as_str());
         }
-        if primary != "en" {
-            if let Some(v) = self.layers.get("en").and_then(|m| m.get(key)) {
-                return Some(v.as_str());
-            }
+        if primary != "en"
+            && let Some(v) = self.layers.get("en").and_then(|m| m.get(key))
+        {
+            return Some(v.as_str());
         }
         None
     }

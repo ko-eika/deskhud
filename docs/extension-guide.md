@@ -12,6 +12,7 @@
 Component。宿主只提供中性输入和场景数据；不会提供 WASI、文件系统、网络、egui、窗口句柄或操作系统 API。
 `render` 返回的 Sprite/atlas、路径、基础图形、文字、气泡和命中区域会统一转换为
 `deskhud_engine::PetScene`，再由宿主校验与渲染。
+路径的 `stroke-width` 与路径点使用相同的场景坐标单位，因此窗口缩放时描边会与图形同比缩放。
 
 ---
 
@@ -67,7 +68,7 @@ impl PetKind for MyPet {
 | `mouse.hovering` / `Mouse*`（无 Global 前缀） | 仅宠可点区域 | 点宠、悬停高亮 |
 | `Key*` | 宠窗获焦 | 焦点内按键（透明窗常难获焦，优先用 GlobalKey） |
 
-**默认宠物 `pet.deskhud.specs`**：全局光标跟眼；短提示气泡（`左键` / `Ctrl+Shift+X` / `滚轮↑`）；悬停高亮。其它包可选用或忽略。
+**内置宠物 `pet.deskhud.mochi` / `pet.deskhud.sesame`**：分别提供沉稳与灵巧的吉祥物行为，包括眼神跟随、悬停、拖拽和贴边反馈。其它包可选用或忽略。
 
 优先用上下文字段做「稳态」表现；用 `on_event` 做「边沿」触发。
 
@@ -108,7 +109,7 @@ impl PetKind for MyPet {
 出厂包源在 [`crates/packs/`](../crates/packs/)（`pet-*` / `hud-*`），目录布局与分发包一致：
 
 ```text
-crates/packs/pet-deskhud-specs/   # 示例
+crates/packs/pet-deskhud-mochi/   # 糯米团包源码
   Cargo.toml               # 原生实现（compile-in；不会打进 .deskhud）
   manifest.toml
   assets/preview.svg
@@ -130,7 +131,7 @@ cargo pack-external crates/packs/pet-your-pack
 cargo pack-external --release
 
 # 导出单个目录名（crates/packs/ 下的文件夹名）
-cargo pack-builtin pet-deskhud-specs
+cargo pack-builtin pet-deskhud-mochi
 cargo pack-builtin hud-deskhud-demo
 
 # 自定义输出目录
@@ -151,8 +152,8 @@ cargo pack-builtins --out path/to/out
 
 ### 1.7 内置演示
 
-- `pet.deskhud.specs`：全局跟鼠标看；短提示（`左键` / `Ctrl+Shift+X` / `滚轮↑`）；悬停高亮；贴边变色。
-- 蓝点若作为社区包，必须以 `guest.wasm` Component 提供，不再作为内置 Rust 宠物注册。
+- `pet.deskhud.mochi`：沉稳的鼠标跟随、眨眼、气泡、悬停、拖拽和贴边反馈。
+- `pet.deskhud.sesame`：轻盈摆动、灵活鼠标跟随、拖拽回弹和方向性贴边姿态。
 
 ---
 
@@ -241,8 +242,8 @@ my-hud.deskhud/
 id = "hud.acme.clock"
 kind = "plugin"
 version = "1.0.0"
-engine = "0.2"
-api_version = 2
+engine = "0.8"
+api_version = 3
 display_name = "时钟"
 icon = "assets/icon.svg"
 
@@ -261,7 +262,7 @@ icon = "assets/clock.svg"
 
 | 类型 | 格式 | 示例 |
 |------|------|------|
-| 宠物包 | `pet.<组织>.<标识>` | `pet.deskhud.specs` |
+| 宠物包 | `pet.<组织>.<标识>` | `pet.deskhud.mochi` |
 | HUD 插件 | `hud.<组织>.<标识>` | `hud.deskhud.demo` |
 | HUD 条目 | 插件内短名（再拼到全 ID 后） | `clock` → 配置键见下 |
 
@@ -303,12 +304,12 @@ style = "Regular"
 size = 13.0
 
 [pet]
-"pet.global.kind" = "pet.deskhud.specs"
+"pet.global.kind" = "pet.deskhud.mochi"
 "pet.global.size" = [140.0, 140.0]
 "pet.global.layer" = "top"
 "pet.global.picker_mode" = "grid"
-"pet.deskhud.specs.follow_eyes" = true
-"pet.deskhud.specs.key_tips" = false
+"pet.deskhud.mochi.follow_eyes" = true
+"pet.deskhud.mochi.key_tips" = false
 
 [hud]
 "hud.global.enable" = true

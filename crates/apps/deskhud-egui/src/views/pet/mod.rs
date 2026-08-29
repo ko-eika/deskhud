@@ -132,15 +132,23 @@ pub(crate) fn run(
             pet.on_event(PetEvent::MouseHover { inside });
             *last_hit = inside;
         }
-        let dragging = ctx.input(|input| {
-            input.pointer.primary_down()
-                && input.pointer.press_origin().is_some_and(|origin| {
-                    input
-                        .pointer
-                        .interact_pos()
-                        .is_some_and(|position| position.distance_sq(origin) >= 16.0)
-                })
-        }) && inside;
+        // Once a drag has crossed the pet's transparent edge, the local hit
+        // test may become false even though the mouse button is still down.
+        // Keep the drag state until release; otherwise the snap-back path can
+        // race the native drag and make the window jump back and forth.
+        let dragging = if *last_drag {
+            ctx.input(|input| input.pointer.primary_down())
+        } else {
+            ctx.input(|input| {
+                input.pointer.primary_down()
+                    && input.pointer.press_origin().is_some_and(|origin| {
+                        input
+                            .pointer
+                            .interact_pos()
+                            .is_some_and(|position| position.distance_sq(origin) >= 16.0)
+                    })
+            }) && inside
+        };
         if dragging != *last_drag {
             pet.on_event(if dragging {
                 PetEvent::DragStarted
@@ -166,6 +174,7 @@ pub(crate) fn run(
                     egui::Theme::Light => PetTheme::Light,
                     egui::Theme::Dark => PetTheme::Dark,
                 },
+                shadows: prefs.graphics.shadows,
             })
         }));
         let scene = scene_result.unwrap_or_else(|_| {

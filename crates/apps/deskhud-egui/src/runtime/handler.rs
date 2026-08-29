@@ -279,8 +279,10 @@ impl App {
             return false;
         }
         let Some(pointer) = crate::input::global_pointer_position() else {
-            self.drag_follow = None;
-            return false;
+            // Keep the active drag alive across a transient global-pointer
+            // sampling failure. Clearing it here makes the pet stop following
+            // while the button is still down and can desynchronize drag state.
+            return true;
         };
         let Some(pet_window_id) = self.pet_window_id else {
             self.drag_follow = None;

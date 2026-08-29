@@ -39,7 +39,7 @@ pub struct PetPrefs {
     /// 是否允许向宠物包派发桌面全局鼠标事件；默认关闭以保护隐私。
     #[serde(default)]
     pub global_mouse_input: bool,
-    /// 包自定义布尔选项（扁平键，如 `pet.deskhud.specs.follow_eyes`）。
+    /// 包自定义布尔选项（扁平键，如 `pet.deskhud.tangyuan.follow_eyes`）。
     #[serde(default, flatten)]
     pub options: HashMap<String, bool>,
 }
@@ -63,7 +63,7 @@ pub struct PetPosition {
 }
 
 fn default_kind() -> String {
-    "pet.deskhud.specs".into()
+    "pet.deskhud.mochi".into()
 }
 
 fn default_size() -> f32 {
