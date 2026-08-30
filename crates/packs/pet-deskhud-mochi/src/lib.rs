@@ -24,6 +24,7 @@ pub struct BuiltinMochiPet {
     hover_highlight: AtomicBool,
     dock_tint: AtomicBool,
     click_ms: AtomicU32,
+    dock_anim_ms: AtomicU32,
     last_pointer: Mutex<[i8; 2]>,
     idle_ms: AtomicU32,
     eye_motion: Mutex<EyeMotion>,
@@ -144,6 +145,7 @@ impl Default for BuiltinMochiPet {
             hover_highlight: AtomicBool::new(true),
             dock_tint: AtomicBool::new(true),
             click_ms: AtomicU32::new(0),
+            dock_anim_ms: AtomicU32::new(700),
             last_pointer: Mutex::new([0, 0]),
             idle_ms: AtomicU32::new(0),
             eye_motion: Mutex::new(EyeMotion::default()),
@@ -414,6 +416,7 @@ impl PetKind for BuiltinMochiPet {
 
     fn tick(&self, dt_secs: f32) {
         let dec = (dt_secs * 1000.0).max(0.0) as u32;
+        self.dock_anim_ms.fetch_add(dec, Ordering::Relaxed);
         let _ = self
             .bubble_ms
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
@@ -444,6 +447,7 @@ impl PetKind for BuiltinMochiPet {
             }
             PetEvent::DockChanged { to, .. } => {
                 self.last_dock_bits.store(dock_bits(to), Ordering::Relaxed);
+                self.dock_anim_ms.store(0, Ordering::Relaxed);
             }
             PetEvent::GlobalMousePressed { button, .. } => {
                 if button == PetMouseButton::Primary {
@@ -614,7 +618,11 @@ impl PetKind for BuiltinMochiPet {
         let target = if self.follow_eyes.load(Ordering::Relaxed) && (!idle || click > 0.0) {
             [
                 ctx.pointer_dir[0].clamp(-1.0, 1.0),
-                ctx.pointer_dir[1].clamp(-1.0, 1.0),
+                if ctx.dock.top {
+                    -ctx.pointer_dir[1].clamp(-1.0, 1.0)
+                } else {
+                    ctx.pointer_dir[1].clamp(-1.0, 1.0)
+                },
             ]
         } else {
             [0.0, 0.0]
@@ -632,7 +640,10 @@ impl PetKind for BuiltinMochiPet {
             pupil_offset[1] - neutral_pupil[1],
         ];
         let mut items = Vec::new();
-        if ctx.shadows {
+        if ctx.shadows
+            && (!(ctx.dock.left || ctx.dock.right || ctx.dock.top || ctx.dock.bottom)
+                || ctx.drag.is_dragging())
+        {
             for (scale, alpha) in [(1.22, 0.025), (1.08, 0.04), (0.92, 0.06)] {
                 items.push(SceneItem {
                     transform: Transform2D {
@@ -747,12 +758,55 @@ impl PetKind for BuiltinMochiPet {
                 stroke_width: 9.0 / 160.0,
             }),
         });
-        let sway = (ctx.time_secs as f32 * 2.2).sin() * 0.018;
+        let dock_enabled = ctx.config.get("dock_tint", true);
+        let docked = ctx.dock.left || ctx.dock.right || ctx.dock.top || ctx.dock.bottom;
+        let sway = if docked && !ctx.drag.is_dragging() {
+            0.0
+        } else {
+            (ctx.time_secs as f32 * 2.2).sin() * 0.018
+        };
+        let tuck_progress = if docked && dock_enabled && !ctx.drag.is_dragging() {
+            let elapsed = self.dock_anim_ms.load(Ordering::Relaxed);
+            (elapsed.saturating_sub(140) as f32 / 560.0).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let (dock_x, dock_y) = if dock_enabled {
+            dock_pose_offset(
+                ctx.dock,
+                ctx.time_secs,
+                tuck_progress,
+                ctx.mouse.hovering,
+                ctx.drag.is_dragging(),
+            )
+        } else {
+            (0.0, 0.0)
+        };
+        let (hit_x, hit_y) = if dock_enabled {
+            dock_pose_offset(ctx.dock, ctx.time_secs, 1.0, false, ctx.drag.is_dragging())
+        } else {
+            (0.0, 0.0)
+        };
         for item in &mut items[pet_start..] {
-            translate_scene_item(item, 0.0, sway);
-        }
-        for item in &mut items[pet_start..] {
-            scale_scene_item(item, [0.0, sway], drag_scale);
+            if ctx.dock.top
+                && !ctx.drag.is_dragging()
+                && !matches!(item.node, SceneNode::HitRegion { .. })
+            {
+                // A pet coming down from the top hangs head-first.
+                scale_scene_item(item, [0.0, 0.0], [1.0, -1.0]);
+            }
+            let (x, y) = if matches!(item.node, SceneNode::HitRegion { .. }) {
+                (hit_x, hit_y)
+            } else {
+                (dock_x, dock_y)
+            };
+            translate_scene_item(item, x, y + sway);
+            if !matches!(item.node, SceneNode::HitRegion { .. }) {
+                scale_scene_item(item, [0.0, sway], drag_scale);
+                if !ctx.drag.is_dragging() {
+                    rotate_scene_item(item, dock_tilt(ctx.dock), [x, y + sway]);
+                }
+            }
         }
         if let Some(text) = paint.bubble_text {
             let (color, background, corner_radius) = match paint.bubble_style {
@@ -821,6 +875,58 @@ fn drag_squash_scale(time_secs: f64, dragging: bool, enabled: bool) -> [f32; 2] 
     [1.0 + pulse * 0.07, 1.0 - pulse * 0.07]
 }
 
+/// Gives each edge a distinct, restrained pose without changing the window.
+/// Makes a docked pet peek toward and retreat from the corresponding edge.
+fn dock_pose_offset(
+    dock: DockState,
+    time_secs: f64,
+    tuck_progress: f32,
+    hovering: bool,
+    dragging: bool,
+) -> (f32, f32) {
+    if dragging {
+        return (0.0, 0.0);
+    }
+    let motion = if dock.left || dock.right || dock.top || dock.bottom {
+        0.0
+    } else {
+        (time_secs as f32 * 4.0).sin() * 0.014
+    };
+    let corner = (dock.left || dock.right) && (dock.top || dock.bottom);
+    let horizontal_only = (dock.left || dock.right) && !corner;
+    let settled_distance: f32 = if corner {
+        1.05
+    } else if horizontal_only {
+        1.65
+    } else {
+        1.45
+    };
+    let distance = if hovering {
+        // Hovering a docked pet reveals only a little more of it.
+        (settled_distance - 0.25).max(0.75)
+    } else {
+        // First leave the window completely, then return to a half-visible
+        // mounted pose. The scene remains one rigid piece so facial features
+        // cannot separate during docking.
+        2.7 - tuck_progress * (2.7 - settled_distance)
+    };
+    let x = if dock.left {
+        -distance - motion
+    } else if dock.right {
+        distance + motion
+    } else {
+        0.0
+    };
+    let y = if dock.top {
+        -distance - motion
+    } else if dock.bottom {
+        distance + motion
+    } else {
+        0.0
+    };
+    (x, y)
+}
+
 fn scale_scene_item(item: &mut SceneItem, pivot: [f32; 2], scale: [f32; 2]) {
     match &mut item.node {
         SceneNode::Path(path) | SceneNode::GradientPath { path, .. } => {
@@ -837,6 +943,43 @@ fn scale_scene_item(item: &mut SceneItem, pivot: [f32; 2], scale: [f32; 2]) {
             item.transform.scale[0] *= scale[0];
             item.transform.scale[1] *= scale[1];
         }
+    }
+}
+
+fn rotate_scene_item(item: &mut SceneItem, angle: f32, pivot: [f32; 2]) {
+    if angle == 0.0 {
+        return;
+    }
+    let (sin, cos) = angle.sin_cos();
+    let rotate = |point: &mut [f32; 2]| {
+        let [x, y] = [point[0] - pivot[0], point[1] - pivot[1]];
+        *point = [pivot[0] + x * cos - y * sin, pivot[1] + x * sin + y * cos];
+    };
+    match &mut item.node {
+        SceneNode::Path(path) | SceneNode::GradientPath { path, .. } => {
+            for point in &mut path.points {
+                rotate(point);
+            }
+        }
+        _ => rotate(&mut item.transform.translation),
+    }
+}
+
+fn dock_tilt(dock: DockState) -> f32 {
+    let horizontal = if dock.left {
+        1.0
+    } else if dock.right {
+        -1.0
+    } else {
+        0.0
+    };
+    let horizontal = if dock.top { -horizontal } else { horizontal };
+    if horizontal == 0.0 {
+        0.0
+    } else if dock.top || dock.bottom {
+        horizontal * 0.785
+    } else {
+        horizontal * 0.524
     }
 }
 
@@ -968,6 +1111,25 @@ mod tests {
             status_line: "",
             dock: DockState::FREE,
             drag,
+            mouse: MouseState::IDLE,
+            config: PetConfigBag::new(config),
+            theme: PetTheme::Light,
+            shadows: true,
+        })
+    }
+
+    fn scene_at_docked(
+        pet: &BuiltinMochiPet,
+        config: &HashMap<String, bool>,
+        time_secs: f64,
+        dock: DockState,
+    ) -> PetScene {
+        pet.scene(PetPaintCtx {
+            time_secs,
+            pointer_dir: [0.0, 0.0],
+            status_line: "",
+            dock,
+            drag: DragState::IDLE,
             mouse: MouseState::IDLE,
             config: PetConfigBag::new(config),
             theme: PetTheme::Light,
@@ -1157,6 +1319,47 @@ mod tests {
         let (resting_min, resting_max) = body_width(&resting);
         let (squashed_min, squashed_max) = body_width(&squashed);
         assert!((squashed_max - squashed_min) > (resting_max - resting_min));
+    }
+
+    #[test]
+    fn docked_mochi_scene_moves_over_time() {
+        let config = HashMap::new();
+        let pet = BuiltinMochiPet::default();
+        pet.dock_anim_ms
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        let first = scene_at_docked(
+            &pet,
+            &config,
+            0.0,
+            DockState {
+                left: true,
+                ..DockState::FREE
+            },
+        );
+        pet.dock_anim_ms
+            .store(700, std::sync::atomic::Ordering::Relaxed);
+        let second = scene_at_docked(
+            &pet,
+            &config,
+            0.0,
+            DockState {
+                left: true,
+                ..DockState::FREE
+            },
+        );
+        let path_x = |scene: &PetScene| {
+            scene
+                .items
+                .iter()
+                .find_map(|item| match &item.node {
+                    SceneNode::GradientPath { path, .. } if item.z_index == 0 => {
+                        path.points.first().map(|p| p[0])
+                    }
+                    _ => None,
+                })
+                .expect("mochi body path")
+        };
+        assert_ne!(path_x(&first), path_x(&second));
     }
 
     #[test]

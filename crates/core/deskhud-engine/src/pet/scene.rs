@@ -294,4 +294,39 @@ mod tests {
         assert!(scene.hit_test([0.5, 0.0]));
         assert!(!scene.hit_test([1.1, 0.0]));
     }
+
+    #[test]
+    fn rejects_non_finite_transforms_before_rendering() {
+        let scene = PetScene {
+            items: vec![SceneItem {
+                transform: Transform2D {
+                    translation: [f32::NAN, 0.0],
+                    ..Transform2D::default()
+                },
+                z_index: 0,
+                node: SceneNode::Shape {
+                    shape: Shape::Circle { radius: 1.0 },
+                    color: [1.0; 4],
+                },
+            }],
+        };
+        assert_eq!(scene.validate(), Err(SceneValidationError::InvalidNumber));
+    }
+
+    #[test]
+    fn rejects_nodes_over_the_host_limit() {
+        let scene = PetScene {
+            items: (0..=PetScene::MAX_NODES)
+                .map(|_| SceneItem {
+                    transform: Transform2D::default(),
+                    z_index: 0,
+                    node: SceneNode::Shape {
+                        shape: Shape::Circle { radius: 1.0 },
+                        color: [1.0; 4],
+                    },
+                })
+                .collect(),
+        };
+        assert_eq!(scene.validate(), Err(SceneValidationError::TooManyNodes));
+    }
 }

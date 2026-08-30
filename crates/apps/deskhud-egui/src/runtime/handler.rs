@@ -167,7 +167,23 @@ impl ApplicationHandler<UserEvent> for App {
                                 .request_inner_size(winit::dpi::PhysicalSize::new(width, height));
                         }
                         WindowCommand::Move { position } => {
-                            window.set_outer_position(position);
+                            if self.bubble_window_id == Some(window_id) {
+                                // Bubble moves can be queued by the render thread while the
+                                // pet is being dragged. The queued anchor may already be stale
+                                // by the time this main-thread event is handled (opening
+                                // Settings makes this more likely because it increases the
+                                // number of render passes). Recompute from the pet's current
+                                // native position so an old bubble command cannot move it back
+                                // and create visible lag/trails.
+                                if let Some(pet_window_id) = self.pet_window_id
+                                    && let Some(pet) = self.windows.get(&pet_window_id)
+                                    && let Ok(pet_position) = pet.outer_position()
+                                {
+                                    self.position_bubble_for_pet(pet_window_id, pet_position);
+                                }
+                            } else {
+                                window.set_outer_position(position);
+                            }
                         }
                         #[cfg(target_os = "macos")]
                         WindowCommand::SetDockIcon { visible } => {

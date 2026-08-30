@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use deskhud_engine::{
-    Path, PetBubbleStyle, PetConfigBag, PetConfigOption, PetEvent, PetKind, PetKindInfo,
+    DockState, Path, PetBubbleStyle, PetConfigBag, PetConfigOption, PetEvent, PetKind, PetKindInfo,
     PetMouseButton, PetPaint, PetPaintCtx, PetScene, PetTheme, SceneItem, SceneNode, Shape,
     Transform2D,
 };
@@ -20,6 +20,7 @@ pub struct BuiltinSesamePet {
     key_tips: AtomicBool,
     mouse_tips: AtomicBool,
     bubble_ms: AtomicU32,
+    dock_anim_ms: AtomicU32,
     bubble_text: Mutex<String>,
     last_pointer: Mutex<[i8; 2]>,
     idle_ms: AtomicU32,
@@ -152,6 +153,7 @@ impl PetKind for BuiltinSesamePet {
 
     fn on_event(&self, event: PetEvent) {
         match event {
+            PetEvent::DockChanged { .. } => self.dock_anim_ms.store(0, Ordering::Relaxed),
             PetEvent::GlobalMousePressed { button, .. } | PetEvent::MousePressed { button, .. }
                 if self.mouse_tips.load(Ordering::Relaxed) =>
             {
@@ -178,6 +180,7 @@ impl PetKind for BuiltinSesamePet {
 
     fn tick(&self, dt_secs: f32) {
         let elapsed = (dt_secs.max(0.0) * 1000.0) as u32;
+        self.dock_anim_ms.fetch_add(elapsed, Ordering::Relaxed);
         let _ = self
             .bubble_ms
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
@@ -210,30 +213,47 @@ impl PetKind for BuiltinSesamePet {
         }
         let idle = self.idle_ms.load(Ordering::Relaxed) >= 900;
         let target = if self.follow_eyes.load(Ordering::Relaxed) && !idle {
-            ctx.pointer_dir
+            [
+                ctx.pointer_dir[0],
+                if ctx.dock.top {
+                    -ctx.pointer_dir[1]
+                } else {
+                    ctx.pointer_dir[1]
+                },
+            ]
         } else {
             [0.0, 0.0]
         };
         let pointer = self.smooth_eye_target(target, ctx.time_secs);
         let blink = sesame_blink_open(ctx.time_secs);
-        let sway = (ctx.time_secs as f32 * 2.2).sin() * 0.018;
-        let dock_x = if !self.dock_tint.load(Ordering::Relaxed) {
+        let dock_enabled = self.dock_tint.load(Ordering::Relaxed);
+        let docked = ctx.dock.left || ctx.dock.right || ctx.dock.top || ctx.dock.bottom;
+        let sway = if docked && !ctx.drag.is_dragging() {
             0.0
-        } else if ctx.dock.left {
-            -0.045
-        } else if ctx.dock.right {
-            0.045
+        } else {
+            (ctx.time_secs as f32 * 2.2).sin() * 0.018
+        };
+        let tuck_progress = if docked && !ctx.drag.is_dragging() {
+            let elapsed = self.dock_anim_ms.load(Ordering::Relaxed);
+            (elapsed.saturating_sub(140) as f32 / 560.0).clamp(0.0, 1.0)
         } else {
             0.0
         };
-        let dock_y = if !self.dock_tint.load(Ordering::Relaxed) {
-            0.0
-        } else if ctx.dock.top {
-            -0.035
-        } else if ctx.dock.bottom {
-            0.035
+        let (dock_x, dock_y) = if dock_enabled {
+            dock_pose_offset(
+                ctx.dock,
+                ctx.time_secs,
+                tuck_progress,
+                ctx.mouse.hovering,
+                ctx.drag.is_dragging(),
+            )
         } else {
-            0.0
+            (0.0, 0.0)
+        };
+        let (hit_x, hit_y) = if dock_enabled {
+            dock_pose_offset(ctx.dock, ctx.time_secs, 1.0, false, ctx.drag.is_dragging())
+        } else {
+            (0.0, 0.0)
         };
         let drag_scale = drag_squash_scale(
             ctx.time_secs,
@@ -242,7 +262,7 @@ impl PetKind for BuiltinSesamePet {
         );
         let pet_y = dock_y + sway;
         let mut items = Vec::new();
-        if ctx.shadows {
+        if ctx.shadows && (!docked || ctx.drag.is_dragging()) {
             for (scale, alpha) in [(1.22, 0.025), (1.08, 0.04), (0.92, 0.06)] {
                 items.push(SceneItem {
                     transform: Transform2D {
@@ -395,7 +415,24 @@ impl PetKind for BuiltinSesamePet {
             },
         ]);
         for item in &mut items[pet_start..] {
-            scale_scene_item(item, [dock_x, pet_y], drag_scale);
+            if ctx.dock.top
+                && !ctx.drag.is_dragging()
+                && !matches!(item.node, SceneNode::HitRegion { .. })
+            {
+                // A pet coming down from the top hangs head-first.
+                scale_scene_item(item, [0.0, 0.0], [1.0, -1.0]);
+                // The scene already contains the docking translation. Undo
+                // the translation's flip so only the pet pose is inverted.
+                translate_scene_item(item, 0.0, pet_y * 2.0);
+            }
+            if matches!(item.node, SceneNode::HitRegion { .. }) {
+                item.transform.translation = [hit_x, hit_y + sway];
+            } else {
+                scale_scene_item(item, [dock_x, pet_y], drag_scale);
+            }
+            if !ctx.drag.is_dragging() && !matches!(item.node, SceneNode::HitRegion { .. }) {
+                rotate_scene_item(item, dock_tilt(ctx.dock), [dock_x, pet_y]);
+            }
         }
         if let Some(text) = paint.bubble_text {
             let (color, background, corner_radius) = match paint.bubble_style {
@@ -503,6 +540,56 @@ fn drag_squash_scale(time_secs: f64, dragging: bool, enabled: bool) -> [f32; 2] 
     [1.0 + pulse * 0.07, 1.0 - pulse * 0.07]
 }
 
+/// Gives each edge a distinct, restrained pose without changing the window.
+/// Makes a docked pet peek toward and retreat from the corresponding edge.
+fn dock_pose_offset(
+    dock: DockState,
+    time_secs: f64,
+    tuck_progress: f32,
+    hovering: bool,
+    dragging: bool,
+) -> (f32, f32) {
+    if dragging {
+        return (0.0, 0.0);
+    }
+    let motion = if dock.left || dock.right || dock.top || dock.bottom {
+        0.0
+    } else {
+        (time_secs as f32 * 4.0).sin() * 0.014
+    };
+    let corner = (dock.left || dock.right) && (dock.top || dock.bottom);
+    let horizontal_only = (dock.left || dock.right) && !corner;
+    let settled_distance: f32 = if corner {
+        1.05
+    } else if horizontal_only {
+        1.65
+    } else {
+        1.45
+    };
+    let distance = if hovering {
+        // Hovering a docked pet reveals only a little more of it.
+        (settled_distance - 0.25).max(0.75)
+    } else {
+        // Leave the window first, then settle into one rigid half-visible pose.
+        2.7 - tuck_progress * (2.7 - settled_distance)
+    };
+    let x = if dock.left {
+        -distance - motion
+    } else if dock.right {
+        distance + motion
+    } else {
+        0.0
+    };
+    let y = if dock.top {
+        -distance - motion
+    } else if dock.bottom {
+        distance + motion
+    } else {
+        0.0
+    };
+    (x, y)
+}
+
 fn scale_scene_item(item: &mut SceneItem, pivot: [f32; 2], scale: [f32; 2]) {
     match &mut item.node {
         SceneNode::Path(path) | SceneNode::GradientPath { path, .. } => {
@@ -519,6 +606,43 @@ fn scale_scene_item(item: &mut SceneItem, pivot: [f32; 2], scale: [f32; 2]) {
             item.transform.scale[0] *= scale[0];
             item.transform.scale[1] *= scale[1];
         }
+    }
+}
+
+fn rotate_scene_item(item: &mut SceneItem, angle: f32, pivot: [f32; 2]) {
+    if angle == 0.0 {
+        return;
+    }
+    let (sin, cos) = angle.sin_cos();
+    let rotate = |point: &mut [f32; 2]| {
+        let [x, y] = [point[0] - pivot[0], point[1] - pivot[1]];
+        *point = [pivot[0] + x * cos - y * sin, pivot[1] + x * sin + y * cos];
+    };
+    match &mut item.node {
+        SceneNode::Path(path) | SceneNode::GradientPath { path, .. } => {
+            for point in &mut path.points {
+                rotate(point);
+            }
+        }
+        _ => rotate(&mut item.transform.translation),
+    }
+}
+
+fn dock_tilt(dock: DockState) -> f32 {
+    let horizontal = if dock.left {
+        1.0
+    } else if dock.right {
+        -1.0
+    } else {
+        0.0
+    };
+    let horizontal = if dock.top { -horizontal } else { horizontal };
+    if horizontal == 0.0 {
+        0.0
+    } else if dock.top || dock.bottom {
+        horizontal * 0.785
+    } else {
+        horizontal * 0.524
     }
 }
 
@@ -926,6 +1050,25 @@ mod tests {
         })
     }
 
+    fn scene_at_docked(
+        pet: &BuiltinSesamePet,
+        config: &HashMap<String, bool>,
+        time_secs: f64,
+        dock: DockState,
+    ) -> PetScene {
+        pet.scene(PetPaintCtx {
+            time_secs,
+            pointer_dir: [0.0, 0.0],
+            status_line: "",
+            dock,
+            drag: DragState::IDLE,
+            mouse: MouseState::IDLE,
+            config: PetConfigBag::new(config),
+            theme: PetTheme::Light,
+            shadows: true,
+        })
+    }
+
     #[test]
     fn scene_contains_sesame_bow_and_vector_artwork() {
         let config = HashMap::new();
@@ -1103,6 +1246,48 @@ mod tests {
         let (resting_min, resting_max) = body_width(&resting);
         let (squashed_min, squashed_max) = body_width(&squashed);
         assert!((squashed_max - squashed_min) > (resting_max - resting_min));
+    }
+
+    #[test]
+    fn docked_sesame_scene_moves_over_time() {
+        let config = HashMap::from([("dock_tint".to_owned(), true)]);
+        let pet = BuiltinSesamePet::default();
+        pet.apply_config(PetConfigBag::new(&config));
+        pet.dock_anim_ms
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        let first = scene_at_docked(
+            &pet,
+            &config,
+            0.0,
+            DockState {
+                top: true,
+                ..DockState::FREE
+            },
+        );
+        pet.dock_anim_ms
+            .store(700, std::sync::atomic::Ordering::Relaxed);
+        let second = scene_at_docked(
+            &pet,
+            &config,
+            0.0,
+            DockState {
+                top: true,
+                ..DockState::FREE
+            },
+        );
+        let path_y = |scene: &PetScene| {
+            scene
+                .items
+                .iter()
+                .find_map(|item| match &item.node {
+                    SceneNode::GradientPath { path, .. } if item.z_index == 0 => {
+                        path.points.first().map(|p| p[1])
+                    }
+                    _ => None,
+                })
+                .expect("sesame body path")
+        };
+        assert_ne!(path_y(&first), path_y(&second));
     }
 
     #[test]
