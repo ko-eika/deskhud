@@ -12,6 +12,7 @@ use winit::{
     window::WindowId,
 };
 
+use super::dock;
 use crate::area;
 use crate::runtime::{
     viewport::{UserEvent, Viewport, WindowLayer},
@@ -450,66 +451,81 @@ impl PetWindow {
     }
 
     fn current_dock(&self) -> deskhud_engine::DockState {
-        let Some(position) = self.viewport.window().outer_position().ok() else {
+        let window = self.viewport.window();
+        let Some(position) = window.outer_position().ok() else {
             return deskhud_engine::DockState::FREE;
         };
-        let Some(area) = self.activity_area else {
+        let size = window.outer_size();
+        let Some(area) = self.activity_area_at(position, size) else {
             return deskhud_engine::DockState::FREE;
         };
-        let size = self.viewport.window().outer_size();
-        let right = position.x + size.width as i32;
-        let bottom = position.y + size.height as i32;
-        let tolerance = 16;
-        deskhud_engine::DockState {
-            left: position.x <= area.position.x + tolerance,
-            top: position.y <= area.position.y + tolerance,
-            right: right >= area.position.x + area.size.width as i32 - tolerance,
-            bottom: bottom >= area.position.y + area.size.height as i32 - tolerance,
-        }
+        dock::dock_state(
+            dock::Rect::new(position.x, position.y, size.width, size.height),
+            dock::Rect::new(
+                area.position.x,
+                area.position.y,
+                area.size.width,
+                area.size.height,
+            ),
+            16,
+        )
     }
 
     fn snap_to_activity_area(&self) {
         let window = self.viewport.window();
-        let Some(area) = self.activity_area else {
-            return;
-        };
         let Ok(position) = window.outer_position() else {
             return;
         };
         let size = window.outer_size();
-        let right = position.x + size.width as i32;
-        let bottom = position.y + size.height as i32;
-        let area_right = area.position.x + area.size.width as i32;
-        let area_bottom = area.position.y + area.size.height as i32;
-        let mut snapped = position;
-        if position.x <= area.position.x + 16 {
-            snapped.x = area.position.x;
-        } else if right >= area_right - 16 {
-            snapped.x = area_right - size.width as i32;
-        }
-        if position.y <= area.position.y + 16 {
-            snapped.y = area.position.y;
-        } else if bottom >= area_bottom - 16 {
-            snapped.y = area_bottom - size.height as i32;
-        }
-        if snapped != position {
-            self.viewport.request_outer_position(snapped);
+        let Some(area) = self.activity_area_at(position, size) else {
+            return;
+        };
+        let snapped = dock::snap_position(
+            [position.x, position.y],
+            [size.width, size.height],
+            dock::Rect::new(
+                area.position.x,
+                area.position.y,
+                area.size.width,
+                area.size.height,
+            ),
+            16,
+        );
+        if snapped != [position.x, position.y] {
+            self.viewport
+                .request_outer_position(winit::dpi::PhysicalPosition::new(snapped[0], snapped[1]));
         }
     }
 
     fn is_outside_activity_area(&self) -> bool {
-        let Some(area) = self.activity_area else {
-            return false;
-        };
         let window = self.viewport.window();
         let Ok(position) = window.outer_position() else {
             return false;
         };
         let size = window.outer_size();
+        let Some(area) = self.activity_area_at(position, size) else {
+            return false;
+        };
         position.x < area.position.x
             || position.y < area.position.y
             || position.x + size.width as i32 > area.position.x + area.size.width as i32
             || position.y + size.height as i32 > area.position.y + area.size.height as i32
+    }
+
+    fn activity_area_at(
+        &self,
+        position: winit::dpi::PhysicalPosition<i32>,
+        size: winit::dpi::PhysicalSize<u32>,
+    ) -> Option<area::ActivityArea> {
+        let center = winit::dpi::PhysicalPosition::new(
+            position
+                .x
+                .saturating_add(size.width.min(i32::MAX as u32) as i32 / 2),
+            position
+                .y
+                .saturating_add(size.height.min(i32::MAX as u32) as i32 / 2),
+        );
+        area::get_at(self.viewport.window(), center).or(self.activity_area)
     }
 
     /// 按正确的 OpenGL 资源顺序销毁 Pet 窗口。

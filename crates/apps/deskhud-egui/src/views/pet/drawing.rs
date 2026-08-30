@@ -4,12 +4,20 @@
 pub(super) struct EguiSceneRenderer;
 
 impl EguiSceneRenderer {
-    pub(super) fn render(ui: &mut egui::Ui, scene: &deskhud_engine::PetScene) {
-        draw_scene(ui, scene);
+    pub(super) fn render(
+        ui: &mut egui::Ui,
+        pet: &dyn deskhud_engine::PetKind,
+        scene: &deskhud_engine::PetScene,
+    ) {
+        draw_scene(ui, pet, scene);
     }
 }
 
-fn draw_scene(ui: &mut egui::Ui, scene: &deskhud_engine::PetScene) {
+fn draw_scene(
+    ui: &mut egui::Ui,
+    pet: &dyn deskhud_engine::PetKind,
+    scene: &deskhud_engine::PetScene,
+) {
     let rect = ui.max_rect();
     let base = rect.width().min(rect.height()) * 0.32;
     let center = ui.max_rect().center();
@@ -28,7 +36,22 @@ fn draw_scene(ui: &mut egui::Ui, scene: &deskhud_engine::PetScene) {
                 (rgba[3].clamp(0.0, 1.0) * 255.0) as u8,
             )
         };
-        if let deskhud_engine::SceneNode::Shape { shape, color: fill } = &item.node {
+        if let deskhud_engine::SceneNode::Sprite {
+            asset,
+            size,
+            opacity,
+        }
+        | deskhud_engine::SceneNode::AtlasFrame {
+            asset,
+            size,
+            opacity,
+            ..
+        } = &item.node
+        {
+            draw_asset(
+                ui, pet, painter, asset, item, *size, *opacity, base, position,
+            );
+        } else if let deskhud_engine::SceneNode::Shape { shape, color: fill } = &item.node {
             match shape {
                 deskhud_engine::Shape::Circle { radius } => {
                     painter.circle_filled(
@@ -166,6 +189,80 @@ fn draw_scene(ui: &mut egui::Ui, scene: &deskhud_engine::PetScene) {
             );
         }
     }
+}
+
+fn draw_asset(
+    ui: &egui::Ui,
+    pet: &dyn deskhud_engine::PetKind,
+    painter: &egui::Painter,
+    asset_id: &deskhud_engine::AssetId,
+    item: &deskhud_engine::SceneItem,
+    size: [f32; 2],
+    opacity: f32,
+    base: f32,
+    position: egui::Pos2,
+) {
+    let Some(asset) = pet.asset(&asset_id.0) else {
+        return;
+    };
+    let Ok(image) = image::load_from_memory(asset.bytes) else {
+        return;
+    };
+    let rgba = image.to_rgba8();
+    let dimensions = [rgba.width() as usize, rgba.height() as usize];
+    let cache_id = egui::Id::new(("deskhud.pet.asset", pet.info().id, &asset_id.0));
+    let texture = ui
+        .ctx()
+        .data(|data| data.get_temp::<egui::TextureHandle>(cache_id));
+    let texture = texture.unwrap_or_else(|| {
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(dimensions, rgba.as_raw());
+        let texture = ui.ctx().load_texture(
+            format!("deskhud.pet.asset.{}", asset_id.0),
+            color_image,
+            egui::TextureOptions::LINEAR,
+        );
+        ui.ctx()
+            .data_mut(|data| data.insert_temp(cache_id, texture.clone()));
+        texture
+    });
+    let frame = match &item.node {
+        deskhud_engine::SceneNode::AtlasFrame { frame, .. } => {
+            if !matches!(
+                asset.kind,
+                deskhud_engine::AssetKind::Atlas | deskhud_engine::AssetKind::Sequence
+            ) {
+                return;
+            }
+            asset.frames.get(*frame as usize)
+        }
+        _ => None,
+    };
+    if matches!(&item.node, deskhud_engine::SceneNode::AtlasFrame { .. }) && frame.is_none() {
+        return;
+    }
+    let uv = frame.map_or(egui::Rect::EVERYTHING, |frame| {
+        egui::Rect::from_min_max(
+            egui::pos2(
+                frame.x as f32 / dimensions[0] as f32,
+                frame.y as f32 / dimensions[1] as f32,
+            ),
+            egui::pos2(
+                (frame.x + frame.width) as f32 / dimensions[0] as f32,
+                (frame.y + frame.height) as f32 / dimensions[1] as f32,
+            ),
+        )
+    });
+    let [sx, sy] = item.transform.scale;
+    let rect = egui::Rect::from_center_size(
+        position,
+        egui::vec2(size[0] * base * sx.abs(), size[1] * base * sy.abs()),
+    );
+    painter.image(
+        texture.id(),
+        rect,
+        uv,
+        egui::Color32::from_white_alpha((opacity.clamp(0.0, 1.0) * 255.0) as u8),
+    );
 }
 
 fn filled_polygon(points: &[egui::Pos2], fill: egui::Color32) -> egui::Shape {

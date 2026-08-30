@@ -12,6 +12,12 @@ DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布
 2. [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) 中的 version 徽章
 3. （可选）`CHANGELOG` / Release 说明正文
 
+### 0.8.2 变更摘要
+
+- 接通社区宠物包的图片、图集和序列资源，从包索引加载并在 egui 场景渲染器中绘制。
+- 加强 WASM Guest 宠物元数据、配置项数量/文本/重复键和窗口尺寸校验，并将 SDK 的 `API_VERSION` 与当前 `api_version = 3` 契约对齐。
+- 按拖拽窗口中心所在显示器进行贴边判定和吸附，避免跨显示器拖拽时沿用旧屏幕区域。
+
 ### 0.8.1 变更摘要
 
 - 改进糯米团与芝麻豆在四边贴靠时的姿态、翻转、倾斜、阴影和眼神方向，并保留拖拽中的自由姿态。

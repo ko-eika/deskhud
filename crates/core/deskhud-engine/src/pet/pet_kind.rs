@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use super::{
-    DockState, DragState, MouseState, PetConfigOption, PetEvent, PetKindInfo, PetPaint, PetScene,
-    PetTheme, SceneItem, SceneNode, Shape, Transform2D,
+    DockState, DragState, MouseState, PetAsset, PetConfigOption, PetEvent, PetKindInfo, PetPaint,
+    PetScene, PetTheme, SceneItem, SceneNode, Shape, Transform2D,
 };
 
 /// 当前帧可读的宠配置（短键 → 布尔；由壳从 `[pet.config]` 解析）。
@@ -77,6 +77,12 @@ pub trait PetKind: Send + Sync {
 
     /// 响应宿主事件（默认空）。需要可变状态时用内部 `Mutex` 等。
     fn on_event(&self, _event: PetEvent) {}
+
+    /// Resolves a scene asset. Built-in vector pets return `None`; package
+    /// adapters provide validated bytes and atlas metadata here.
+    fn asset(&self, _id: &str) -> Option<PetAsset<'_>> {
+        None
+    }
 
     /// 根据上下文生成一帧外观。
     fn paint(&self, ctx: PetPaintCtx<'_>) -> PetPaint;

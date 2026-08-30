@@ -14,7 +14,7 @@ pub mod registry;
 /// 引擎产品 SemVer（与 workspace / 本 crate 版本一致）。
 pub const ENGINE_PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// 引擎兼容族：`0.x` 为 `MAJOR.MINOR`（与当前 workspace `0.8.1` / 族 `0.8` 对齐）。
+/// 引擎兼容族：`0.x` 为 `MAJOR.MINOR`（与当前 workspace `0.8.2` / 族 `0.8` 对齐）。
 pub const ENGINE_COMPAT_FAMILY: &str = "0.8";
 
 pub use overlay::{
@@ -24,9 +24,10 @@ pub use overlay::{
     OverlayWindowId, OverlayWindowLevel, OverlayWindowRole,
 };
 pub use pet::{
-    AssetId, DockState, DragState, MouseState, Path, PetBubbleStyle, PetConfigBag, PetConfigOption,
-    PetEvent, PetKey, PetKind, PetKindInfo, PetModifiers, PetMouseButton, PetPaint, PetPaintCtx,
-    PetScene, PetTheme, SceneColor, SceneItem, SceneNode, SceneValidationError, Shape, Transform2D,
+    AssetFrame, AssetId, AssetKind, DockState, DragState, MouseState, Path, PetAsset,
+    PetBubbleStyle, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind, PetKindInfo,
+    PetModifiers, PetMouseButton, PetPaint, PetPaintCtx, PetScene, PetTheme, SceneColor, SceneItem,
+    SceneNode, SceneValidationError, Shape, Transform2D,
 };
 pub use plugin::{HudContribution, HudFrame, HudVisual, Plugin, PluginInfo};
 pub use registry::EngineRegistry;

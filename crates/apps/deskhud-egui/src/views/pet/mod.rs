@@ -1,5 +1,6 @@
 //! Pet 主视口的 UI 入口。
 
+mod dock;
 mod drawing;
 pub(crate) mod menu;
 mod window;
@@ -194,7 +195,7 @@ pub(crate) fn run(
             .frame(egui::Frame::NONE.fill(egui::Color32::TRANSPARENT))
             .show(ctx, |ui| {
                 if valid_scene {
-                    drawing::EguiSceneRenderer::render(ui, &scene);
+                    drawing::EguiSceneRenderer::render(ui, pet, &scene);
                 }
             });
     });

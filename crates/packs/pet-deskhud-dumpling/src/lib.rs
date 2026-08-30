@@ -43,7 +43,7 @@ impl Guest for BigEyesGuest {
                 "A gentle, people-loving companion with a sensitive heart, Little Dumpling enjoys both lively moments and quiet time, always finding a soft way to respond".into(),
             author: "DeskHud".into(),
             homepage: Some("https://github.com/ko-eika/deskhud".into()),
-            version: "0.8.1".into(),
+            version: "0.8.2".into(),
             engine: "0.8".into(),
             window_width: 192.0,
             window_height: 192.0,

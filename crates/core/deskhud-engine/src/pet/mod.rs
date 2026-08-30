@@ -27,6 +27,6 @@ pub use pet_kind_info::PetKindInfo;
 pub use pet_paint::{PetBubbleStyle, PetPaint};
 pub use pet_theme::PetTheme;
 pub use scene::{
-    AssetId, Path, PetScene, SceneColor, SceneItem, SceneNode, SceneValidationError, Shape,
-    Transform2D,
+    AssetFrame, AssetId, AssetKind, Path, PetAsset, PetScene, SceneColor, SceneItem, SceneNode,
+    SceneValidationError, Shape, Transform2D,
 };

@@ -18,7 +18,9 @@ pub mod bindings {
 }
 
 /// Guest ABI main version; this must match the package manifest.
-pub const API_VERSION: u32 = 2;
+/// Must match `PackManifest::SUPPORTED_API_VERSION` and the WIT contract
+/// consumed by the host runtime.
+pub const API_VERSION: u32 = 3;
 
 /// Guest ABI trait implemented by a community pet.
 pub use bindings::exports::deskhud::guest::pet_api::Guest;

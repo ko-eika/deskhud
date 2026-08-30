@@ -2,14 +2,14 @@
 
 use std::sync::Arc;
 
-use deskhud_engine::{EngineRegistry, PetKind, Plugin};
+use deskhud_engine::{AssetFrame, AssetKind, EngineRegistry, PetKind, Plugin};
 use deskhud_package::PackKind;
 use hud_deskhud_demo::DemoHudPlugin;
 use pet_deskhud_mochi::BuiltinMochiPet;
 use pet_deskhud_sesame::BuiltinSesamePet;
 use tracing::{info, warn};
 
-use crate::{DiscoveredPack, PackageLoader, RuntimeError, WasmLimits, WasmPet};
+use crate::{DiscoveredPack, GuestAsset, PackageLoader, RuntimeError, WasmLimits, WasmPet};
 
 /// 引导结果：可运行的宿主注册表 + 已发现包清单。
 pub struct Bootstrap {
@@ -92,8 +92,45 @@ pub fn bootstrap_registry_result() -> Result<Bootstrap, RuntimeError> {
                     .as_deref()
                     .map(|path| std::fs::read(pack.root.join(path)))
                     .transpose()?;
-                WasmPet::load_with_preview(&bytes, WasmLimits::default(), preview)
-                    .map_err(|e| std::io::Error::other(e.to_string()))
+                let assets = pack
+                    .manifest
+                    .resources
+                    .iter()
+                    .map(|resource| {
+                        let bytes = std::fs::read(pack.root.join(&resource.path))?;
+                        let kind = match resource.kind {
+                            deskhud_package::PackResourceKind::Image => AssetKind::Image,
+                            deskhud_package::PackResourceKind::Atlas => AssetKind::Atlas,
+                            deskhud_package::PackResourceKind::Sequence => AssetKind::Sequence,
+                            deskhud_package::PackResourceKind::Other => AssetKind::Other,
+                        };
+                        let frames = resource
+                            .frames
+                            .iter()
+                            .map(|frame| AssetFrame {
+                                x: frame.x,
+                                y: frame.y,
+                                width: frame.width,
+                                height: frame.height,
+                            })
+                            .collect();
+                        Ok::<_, std::io::Error>((
+                            resource.id.clone(),
+                            GuestAsset {
+                                bytes,
+                                kind,
+                                frames,
+                            },
+                        ))
+                    })
+                    .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
+                WasmPet::load_with_preview_and_assets(
+                    &bytes,
+                    WasmLimits::default(),
+                    preview,
+                    assets,
+                )
+                .map_err(|e| std::io::Error::other(e.to_string()))
             }) {
                 Ok(pet) => {
                     registry.register_pet(pet as Arc<dyn PetKind>);

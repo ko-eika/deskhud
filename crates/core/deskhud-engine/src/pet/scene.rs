@@ -6,6 +6,32 @@
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AssetId(pub String);
 
+/// Resource category understood by the first-party scene renderers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssetKind {
+    Image,
+    Atlas,
+    Sequence,
+    Other,
+}
+
+/// A validated package resource exposed to a renderer without platform types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PetAsset<'a> {
+    pub bytes: &'a [u8],
+    pub kind: AssetKind,
+    pub frames: &'a [AssetFrame],
+}
+
+/// A rectangle in an atlas or sequence image, expressed in source pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AssetFrame {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
 /// 二维仿射变换（平移、旋转、缩放）。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Transform2D {

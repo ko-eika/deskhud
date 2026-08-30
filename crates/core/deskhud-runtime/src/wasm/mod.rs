@@ -3,10 +3,14 @@
 //! The adapter is deliberately the only layer that knows Wasmtime. The engine
 //! crate remains a neutral contract and the SDK remains guest-only.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use deskhud_engine::{PetEvent, PetKind, PetKindInfo, PetPaint, PetPaintCtx, PetScene};
+use deskhud_engine::{
+    AssetFrame, AssetKind, PetAsset, PetEvent, PetKind, PetKindInfo, PetPaint, PetPaintCtx,
+    PetScene,
+};
 use wasmtime::{Config, Engine, Store, component::Component};
 
 use crate::RuntimeError;
@@ -47,6 +51,7 @@ pub struct WasmPet {
     config_options: &'static [deskhud_engine::PetConfigOption],
     guest: Mutex<GuestState>,
     limits: WasmLimits,
+    assets: HashMap<String, GuestAsset>,
 }
 
 /// Loads a community pet component with the default sandbox limits.
@@ -77,6 +82,17 @@ impl WasmPet {
         limits: WasmLimits,
         preview: Option<Vec<u8>>,
     ) -> Result<Arc<Self>, RuntimeError> {
+        Self::load_with_preview_and_assets(wasm_bytes, limits, preview, HashMap::new())
+    }
+
+    /// Loads a component and injects resources already validated by the
+    /// package layer. The Guest still only receives scene-neutral data.
+    pub fn load_with_preview_and_assets(
+        wasm_bytes: &[u8],
+        limits: WasmLimits,
+        preview: Option<Vec<u8>>,
+        assets: HashMap<String, GuestAsset>,
+    ) -> Result<Arc<Self>, RuntimeError> {
         let mut config = Config::new();
         config.consume_fuel(true);
         config.wasm_component_model(true);
@@ -103,6 +119,7 @@ impl WasmPet {
             config_options,
             guest: Mutex::new(GuestState { store, guest }),
             limits,
+            assets,
         });
         Ok(pet)
     }
@@ -165,6 +182,9 @@ impl PetKind for WasmPet {
             });
         }
     }
+    fn asset(&self, id: &str) -> Option<PetAsset<'_>> {
+        self.assets.get(id).map(GuestAsset::view)
+    }
     fn paint(&self, _ctx: PetPaintCtx<'_>) -> PetPaint {
         PetPaint::default()
     }
@@ -184,6 +204,27 @@ impl PetKind for WasmPet {
     }
 }
 
+/// Resource data copied from the package index into the WASM pet adapter.
+#[derive(Debug, Clone)]
+pub struct GuestAsset {
+    /// Raw validated resource bytes.
+    pub bytes: Vec<u8>,
+    /// Neutral resource category.
+    pub kind: AssetKind,
+    /// Atlas or sequence frame rectangles.
+    pub frames: Vec<AssetFrame>,
+}
+
+impl GuestAsset {
+    fn view(&self) -> PetAsset<'_> {
+        PetAsset {
+            bytes: &self.bytes,
+            kind: self.kind,
+            frames: &self.frames,
+        }
+    }
+}
+
 fn wasm_error(error: impl std::fmt::Display) -> RuntimeError {
     RuntimeError::Wasm(error.to_string())
 }
@@ -192,13 +233,32 @@ fn info_to_engine(
     info: pet_api::PetInfo,
     preview: Option<Vec<u8>>,
 ) -> Result<(PetKindInfo, &'static [deskhud_engine::PetConfigOption]), RuntimeError> {
-    if info.id.is_empty()
-        || info.display_name.is_empty()
+    if !valid_guest_text(&info.id)
+        || !valid_guest_text(&info.display_name)
+        || !valid_guest_text(&info.description)
+        || !valid_guest_text(&info.author)
+        || info.homepage.as_ref().is_some_and(|s| !valid_guest_text(s))
+        || !valid_guest_text(&info.version)
+        || !valid_guest_text(&info.engine)
         || !info.window_width.is_finite()
         || !info.window_height.is_finite()
+        || !(1.0..=4096.0).contains(&info.window_width)
+        || !(1.0..=4096.0).contains(&info.window_height)
+        || info.config_options.len() > 64
     {
         return Err(RuntimeError::Wasm(
             "guest returned invalid pet metadata".into(),
+        ));
+    }
+    let mut option_keys = std::collections::HashSet::new();
+    if info.config_options.iter().any(|option| {
+        !valid_guest_text(&option.key)
+            || !valid_guest_text(&option.label)
+            || !valid_guest_text(&option.description)
+            || !option_keys.insert(option.key.as_str())
+    }) {
+        return Err(RuntimeError::Wasm(
+            "guest returned invalid or duplicate config option".into(),
         ));
     }
     let config_options = info
@@ -230,6 +290,10 @@ fn info_to_engine(
         },
         config_options,
     ))
+}
+
+fn valid_guest_text(text: &str) -> bool {
+    !text.trim().is_empty() && text.chars().count() <= 4096
 }
 
 fn ctx_to_guest(ctx: PetPaintCtx<'_>) -> pet_api::PaintContext {
@@ -530,5 +594,38 @@ mod tests {
         assert_eq!(info.preview, Some([1, 2, 3].as_slice()));
         assert_eq!(options.len(), 1);
         assert_eq!(options[0].key, "enabled");
+    }
+
+    #[test]
+    fn rejects_invalid_guest_dimensions_and_duplicate_options() {
+        let mut info = pet_api::PetInfo {
+            id: "pet.example.test".into(),
+            display_name: "Test Pet".into(),
+            description: "test".into(),
+            author: "DeskHud".into(),
+            homepage: None,
+            version: "1.0.0".into(),
+            engine: "0.8".into(),
+            window_width: 0.0,
+            window_height: 96.0,
+            config_options: vec![],
+        };
+        assert!(info_to_engine(info.clone(), None).is_err());
+        info.window_width = 96.0;
+        info.config_options = vec![
+            pet_api::ConfigOption {
+                key: "same".into(),
+                label: "One".into(),
+                description: "one".into(),
+                default: true,
+            },
+            pet_api::ConfigOption {
+                key: "same".into(),
+                label: "Two".into(),
+                description: "two".into(),
+                default: false,
+            },
+        ];
+        assert!(info_to_engine(info, None).is_err());
     }
 }

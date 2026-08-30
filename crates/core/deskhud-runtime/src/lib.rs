@@ -20,4 +20,4 @@ pub use catalog::build_catalog_store;
 pub use error::RuntimeError;
 pub use loader::{DiscoveredPack, PackInstance, PackageLoader, PetInstanceSlot};
 pub use paths::default_package_dirs;
-pub use wasm::{WasmLimits, WasmPet, load_wasm_guest};
+pub use wasm::{GuestAsset, WasmLimits, WasmPet, load_wasm_guest};
