@@ -33,17 +33,36 @@ fn init_logging() {
     if std::fs::create_dir_all(parent).is_err() {
         return;
     }
-    let Ok(file) = std::fs::OpenOptions::new()
+    let (active_log_path, file) = match std::fs::OpenOptions::new()
         .create(true)
-        .append(true)
+        .write(true)
+        .truncate(true)
         .open(&log_path)
-    else {
-        return;
+    {
+        Ok(file) => (log_path.clone(), file),
+        Err(_) => {
+            // A previous GUI process or an external log viewer may still hold
+            // the shared log file. Keep diagnostics available instead of
+            // silently starting with no log at all.
+            let fallback = log_path.with_file_name(format!("deskhud-{}.log", std::process::id()));
+            let Ok(file) = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&fallback)
+            else {
+                return;
+            };
+            (fallback, file)
+        }
     };
     let _ = tracing_subscriber::fmt()
         .with_ansi(false)
+        // The application uses the Windows GUI subsystem and has no console;
+        // keep the persistent file log useful without recording every egui
+        // frame and platform event.
         .with_max_level(tracing::Level::INFO)
         .with_writer(file)
         .try_init();
-    tracing::info!(path = ?log_path, "logging initialized");
+    tracing::info!(path = ?active_log_path, "logging initialized");
 }

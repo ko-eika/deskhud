@@ -20,7 +20,7 @@ interface pet-api {
   enum key {
     escape, tab, enter, space, backspace, delete, insert, clear,
     arrow-up, arrow-down, arrow-left, arrow-right, home, end, page-up,
-    page-down, shift, ctrl, alt, super, caps-lock, num-lock, numpad-enter,
+    page-down, print-screen, scroll-lock, pause, context-menu, shift, ctrl, alt, super, caps-lock, num-lock, numpad-enter,
     numpad-add, numpad-subtract, numpad-multiply, numpad-divide,
     numpad-decimal, numpad-separator,
   }
@@ -41,6 +41,7 @@ interface pet-api {
     global-key-pressed(tuple<key-value, modifiers>),
     global-key-released(tuple<key-value, modifiers>),
     key-pressed(tuple<key-value, modifiers>),
+    key-combination-pressed(tuple<key-value, modifiers>),
     key-released(tuple<key-value, modifiers>),
   }
 

@@ -4,9 +4,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use deskhud_engine::{
-    DockState, Path, PetBubbleStyle, PetConfigBag, PetConfigOption, PetEvent, PetKind, PetKindInfo,
-    PetMouseButton, PetPaint, PetPaintCtx, PetScene, PetTheme, SceneItem, SceneNode, Shape,
-    Transform2D,
+    DockState, Path, PetBubbleStyle, PetConfigBag, PetConfigOption, PetEvent, PetKey, PetKind,
+    PetKindInfo, PetModifiers, PetPaint, PetPaintCtx, PetScene, PetTheme, SceneItem, SceneNode,
+    Shape, Transform2D,
 };
 
 /// 芝麻豆 `pet.deskhud.sesame`。
@@ -41,44 +41,44 @@ const SESAME_BUBBLE_CORNER_RADIUS: f32 = 12.0;
 const OPTIONS: &[PetConfigOption] = &[
     PetConfigOption {
         key: "custom_bubble",
-        label: "个性气泡",
-        description: "使用宠物包定义的气泡颜色和圆角",
+        label: "custom_bubble.label",
+        description: "custom_bubble.description",
         default: false,
     },
     PetConfigOption {
         key: "follow_eyes",
-        label: "眼睛效果",
-        description: "眼睛随鼠标方向灵活转动",
+        label: "follow_eyes.label",
+        description: "follow_eyes.description",
         default: true,
     },
     PetConfigOption {
         key: "hover_highlight",
-        label: "悬停效果",
-        description: "指针停在宠物上时提供视觉反馈",
+        label: "hover_highlight.label",
+        description: "hover_highlight.description",
         default: true,
     },
     PetConfigOption {
         key: "drag_tint",
-        label: "拖拽效果",
-        description: "拖拽宠物时提供视觉反馈",
+        label: "drag_tint.label",
+        description: "drag_tint.description",
         default: true,
     },
     PetConfigOption {
         key: "dock_tint",
-        label: "贴边效果",
-        description: "吸附屏幕边缘时提供视觉反馈",
+        label: "dock_tint.label",
+        description: "dock_tint.description",
         default: true,
     },
     PetConfigOption {
         key: "key_tips",
-        label: "按键提示",
-        description: "键盘按下时显示短气泡",
+        label: "key_tips.label",
+        description: "key_tips.description",
         default: true,
     },
     PetConfigOption {
         key: "mouse_tips",
-        label: "鼠标提示",
-        description: "鼠标按键或滚轮时显示短气泡",
+        label: "mouse_tips.label",
+        description: "mouse_tips.description",
         default: true,
     },
 ];
@@ -89,8 +89,8 @@ impl PetKind for BuiltinSesamePet {
             id: "pet.deskhud.sesame",
             version: deskhud_engine::ENGINE_PRODUCT_VERSION,
             engine: deskhud_engine::ENGINE_COMPAT_FAMILY,
-            display_name: "芝麻豆",
-            description: "芝麻豆温柔细腻又充满好奇，喜欢留意身边的小变化；她不喧闹，却总能用灵巧的回应让日常变得轻快。",
+            display_name: "display_name",
+            description: "description",
             author: "DeskHud",
             homepage: Some("https://github.com/ko-eika/deskhud"),
             window_width: 192.0,
@@ -157,22 +157,30 @@ impl PetKind for BuiltinSesamePet {
             PetEvent::GlobalMousePressed { button, .. } | PetEvent::MousePressed { button, .. }
                 if self.mouse_tips.load(Ordering::Relaxed) =>
             {
-                let text = match button {
-                    PetMouseButton::Primary => "左键",
-                    PetMouseButton::Secondary => "右键",
-                    PetMouseButton::Middle => "中键",
-                };
-                self.show_bubble(text, 1000);
+                self.show_bubble(button.i18n_key(), 1000);
             }
             PetEvent::MouseWheel { delta, .. } | PetEvent::GlobalMouseWheel { delta, .. }
                 if self.mouse_tips.load(Ordering::Relaxed) && delta != 0 =>
             {
-                self.show_bubble(if delta > 0 { "滚轮↑" } else { "滚轮↓" }, 800);
+                self.show_bubble(
+                    if delta > 0 {
+                        "InputKeyWheelUp"
+                    } else {
+                        "InputKeyWheelDown"
+                    },
+                    800,
+                );
             }
-            PetEvent::GlobalKeyPressed { .. } | PetEvent::KeyPressed { .. }
+            PetEvent::GlobalKeyPressed { key, modifiers }
+            | PetEvent::KeyPressed { key, modifiers }
                 if self.key_tips.load(Ordering::Relaxed) =>
             {
-                self.show_bubble("按键", 1000)
+                self.show_bubble(format_shortcut(modifiers, key), 1000)
+            }
+            PetEvent::KeyCombinationPressed { key, modifiers }
+                if self.key_tips.load(Ordering::Relaxed) =>
+            {
+                self.show_bubble(format_shortcut(modifiers, key), 1000)
             }
             _ => {}
         }
@@ -462,6 +470,33 @@ impl PetKind for BuiltinSesamePet {
         }
         PetScene { items }
     }
+}
+
+fn format_shortcut(modifiers: PetModifiers, key: PetKey) -> String {
+    let mut parts = Vec::new();
+    if modifiers.ctrl {
+        parts.push(PetKey::Ctrl.i18n_key());
+    }
+    if modifiers.shift {
+        parts.push(PetKey::Shift.i18n_key());
+    }
+    if modifiers.alt {
+        parts.push(PetKey::Alt.i18n_key());
+    }
+    if modifiers.meta {
+        parts.push(PetKey::Super.i18n_key());
+    }
+    if !is_modifier_key(key) || parts.is_empty() {
+        parts.push(key.i18n_key());
+    }
+    parts.join(" + ")
+}
+
+fn is_modifier_key(key: PetKey) -> bool {
+    matches!(
+        key,
+        PetKey::Shift | PetKey::Ctrl | PetKey::Alt | PetKey::Super
+    )
 }
 
 impl BuiltinSesamePet {

@@ -1,0 +1,179 @@
+msgid ""
+msgstr ""
+
+msgid "InputKey.Escape"
+msgstr "Esc"
+
+msgid "InputKey.Tab"
+msgstr "Tab"
+
+msgid "InputKey.Enter"
+msgstr "回车"
+
+msgid "InputKey.Space"
+msgstr "空格"
+
+msgid "InputKey.Backspace"
+msgstr "退格"
+
+msgid "InputKey.Delete"
+msgstr "删除"
+
+msgid "InputKey.Insert"
+msgstr "插入"
+
+msgid "InputKey.Clear"
+msgstr "清除"
+
+msgid "InputKey.ArrowUp"
+msgstr "↑"
+
+msgid "InputKey.ArrowDown"
+msgstr "↓"
+
+msgid "InputKey.ArrowLeft"
+msgstr "←"
+
+msgid "InputKey.ArrowRight"
+msgstr "→"
+
+msgid "InputKey.Home"
+msgstr "Home"
+
+msgid "InputKey.End"
+msgstr "End"
+
+msgid "InputKey.PageUp"
+msgstr "上翻页"
+
+msgid "InputKey.PageDown"
+msgstr "下翻页"
+
+msgid "InputKey.Shift"
+msgstr "Shift"
+
+msgid "InputKey.Ctrl"
+msgstr "Ctrl"
+
+msgid "InputKey.Alt"
+msgstr "Alt"
+
+msgid "InputKey.Super"
+msgstr "Win"
+
+msgid "InputKey.CapsLock"
+msgstr "大写锁定"
+
+msgid "InputKey.NumLock"
+msgstr "数字锁定"
+
+msgid "InputKey.NumpadEnter"
+msgstr "小键盘回车"
+
+msgid "InputKey.NumpadAdd"
+msgstr "小键盘 +"
+
+msgid "InputKey.NumpadSubtract"
+msgstr "小键盘 -"
+
+msgid "InputKey.NumpadMultiply"
+msgstr "小键盘 ×"
+
+msgid "InputKey.NumpadDivide"
+msgstr "小键盘 ÷"
+
+msgid "InputKey.NumpadDecimal"
+msgstr "小键盘 ."
+
+msgid "InputKey.NumpadSeparator"
+msgstr "小键盘 ,"
+
+msgid "InputKey.F1"
+msgstr "F1"
+
+msgid "InputKey.F2"
+msgstr "F2"
+
+msgid "InputKey.F3"
+msgstr "F3"
+
+msgid "InputKey.F4"
+msgstr "F4"
+
+msgid "InputKey.F5"
+msgstr "F5"
+
+msgid "InputKey.F6"
+msgstr "F6"
+
+msgid "InputKey.F7"
+msgstr "F7"
+
+msgid "InputKey.F8"
+msgstr "F8"
+
+msgid "InputKey.F9"
+msgstr "F9"
+
+msgid "InputKey.F10"
+msgstr "F10"
+
+msgid "InputKey.F11"
+msgstr "F11"
+
+msgid "InputKey.F12"
+msgstr "F12"
+
+msgid "InputKey.F13"
+msgstr "F13"
+
+msgid "InputKey.F14"
+msgstr "F14"
+
+msgid "InputKey.F15"
+msgstr "F15"
+
+msgid "InputKey.F16"
+msgstr "F16"
+
+msgid "InputKey.F17"
+msgstr "F17"
+
+msgid "InputKey.F18"
+msgstr "F18"
+
+msgid "InputKey.F19"
+msgstr "F19"
+
+msgid "InputKey.F20"
+msgstr "F20"
+
+msgid "InputKey.F21"
+msgstr "F21"
+
+msgid "InputKey.F22"
+msgstr "F22"
+
+msgid "InputKey.F23"
+msgstr "F23"
+
+msgid "InputKey.F24"
+msgstr "F24"
+
+msgid "InputKey.PrintScreen"
+msgstr "截屏"
+
+msgid "InputKey.ScrollLock"
+msgstr "滚动锁定"
+
+msgid "InputKey.Pause"
+msgstr "暂停"
+
+msgid "InputKey.ContextMenu"
+msgstr "菜单"
+
+msgid "InputKey.Command"
+msgstr "Command"
+
+msgid "InputKey.Option"
+msgstr "Option"

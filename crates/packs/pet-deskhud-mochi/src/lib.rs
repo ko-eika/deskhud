@@ -154,99 +154,47 @@ impl Default for BuiltinMochiPet {
     }
 }
 
-#[allow(dead_code)]
-const SPECS_OPTIONS: &[PetConfigOption] = &[
-    PetConfigOption {
-        key: "follow_eyes",
-        label: "眼睛跟随指针",
-        description: "瞳孔跟随桌面光标方向转动",
-        default: true,
-    },
-    PetConfigOption {
-        key: "hover_highlight",
-        label: "按键提示",
-        description: "键盘按下时显示短气泡（如 Ctrl+C）",
-        default: true,
-    },
-    PetConfigOption {
-        key: "drag_tint",
-        label: "鼠标提示",
-        description: "全局鼠标按键 / 滚轮时显示短气泡",
-        default: true,
-    },
-    PetConfigOption {
-        key: "dock_tint",
-        label: "悬停高亮",
-        description: "指针停在宠上时身体略提亮",
-        default: true,
-    },
-    PetConfigOption {
-        key: "key_tips",
-        label: "贴边变色",
-        description: "吸附屏幕边缘时改变身体颜色",
-        default: true,
-    },
-    PetConfigOption {
-        key: "mouse_tips",
-        label: "点击瞪眼",
-        description: "点击宠物时短暂瞪大眼睛",
-        default: true,
-    },
-    PetConfigOption {
-        key: "drag_tint",
-        label: "空闲回正",
-        description: "鼠标停止移动一段时间后恢复正视前方",
-        default: true,
-    },
-    PetConfigOption {
-        key: "mouse_tips",
-        label: "拖拽变色",
-        description: "拖拽宠物时改变身体颜色",
-        default: true,
-    },
-];
-
 const SPECS_OPTIONS_ORDERED: &[PetConfigOption] = &[
     PetConfigOption {
         key: "custom_bubble",
-        label: "个性气泡",
-        description: "使用宠物包定义的气泡颜色和圆角",
+        label: "custom_bubble.label",
+        description: "custom_bubble.description",
         default: false,
     },
     PetConfigOption {
         key: "follow_eyes",
-        label: "眼睛效果",
-        description: "鼠标移动时跟随，空闲后回正，点击时短暂朝鼠标方向瞪眼",
+        label: "follow_eyes.label",
+        description: "follow_eyes.description",
         default: true,
     },
     PetConfigOption {
         key: "hover_highlight",
-        label: "悬停高亮",
-        description: "指针停在宠物上时身体略微提亮",
+        label: "hover_highlight.label",
+        description: "hover_highlight.description",
         default: true,
     },
     PetConfigOption {
         key: "drag_tint",
-        label: "拖拽效果",
-        description: "拖拽宠物时提供视觉反馈",
+        label: "drag_tint.label",
+        description: "drag_tint.description",
         default: true,
     },
     PetConfigOption {
         key: "dock_tint",
-        label: "贴边效果",
-        description: "吸附屏幕边缘时提供视觉反馈",
+        label: "dock_tint.label",
+        description: "dock_tint.description",
         default: true,
     },
     PetConfigOption {
         key: "key_tips",
-        label: "按键提示",
-        description: "键盘按下时显示短气泡",
+        label: "key_tips.label",
+        description: "key_tips.description",
         default: true,
     },
     PetConfigOption {
         key: "mouse_tips",
-        label: "鼠标提示",
-        description: "鼠标按键或滚轮时显示短气泡",
+        label: "mouse_tips.label",
+        description: "mouse_tips.description",
         default: true,
     },
 ];
@@ -270,40 +218,7 @@ fn is_modifier_key(key: PetKey) -> bool {
 }
 
 fn key_label(key: PetKey) -> String {
-    match key {
-        PetKey::Space => "空格".into(),
-        PetKey::Escape => "Esc".into(),
-        PetKey::Tab => "Tab".into(),
-        PetKey::Enter => mac_key_label("Return", "Enter"),
-        PetKey::Backspace => "Backspace".into(),
-        PetKey::Delete => "Del".into(),
-        PetKey::Insert => "Insert".into(),
-        PetKey::Clear => "Clear".into(),
-        PetKey::ArrowUp => "↑".into(),
-        PetKey::ArrowDown => "↓".into(),
-        PetKey::ArrowLeft => "←".into(),
-        PetKey::ArrowRight => "→".into(),
-        PetKey::Home => "Home".into(),
-        PetKey::End => "End".into(),
-        PetKey::PageUp => "PgUp".into(),
-        PetKey::PageDown => "PgDn".into(),
-        PetKey::Shift => mac_key_label("Shift", "Shift"),
-        PetKey::Ctrl => mac_key_label("Control", "Ctrl"),
-        PetKey::Alt => mac_key_label("Option", "Alt"),
-        PetKey::Super => mac_key_label("Command", "Win"),
-        PetKey::CapsLock => "Caps".into(),
-        PetKey::NumLock => "NumLock".into(),
-        PetKey::NumpadEnter => "Num Enter".into(),
-        PetKey::NumpadDigit(n) => format!("Num {n}"),
-        PetKey::NumpadAdd => "Num +".into(),
-        PetKey::NumpadSubtract => "Num -".into(),
-        PetKey::NumpadMultiply => "Num ×".into(),
-        PetKey::NumpadDivide => "Num ÷".into(),
-        PetKey::NumpadDecimal => "Num .".into(),
-        PetKey::NumpadSeparator => "Num ,".into(),
-        PetKey::Function(n) => format!("F{n}"),
-        PetKey::Letter(c) | PetKey::Digit(c) | PetKey::Punct(c) => c.to_string(),
-    }
+    key.i18n_key()
 }
 
 fn format_shortcut(mods: PetModifiers, key: PetKey) -> String {
@@ -311,48 +226,42 @@ fn format_shortcut(mods: PetModifiers, key: PetKey) -> String {
     {
         let mut parts: Vec<String> = Vec::new();
         if mods.ctrl {
-            parts.push("Control".into());
+            parts.push(PetKey::Ctrl.i18n_key());
         }
         if mods.alt {
-            parts.push("Option".into());
+            parts.push(PetKey::Alt.i18n_key());
         }
         if mods.shift {
-            parts.push("Shift".into());
+            parts.push(PetKey::Shift.i18n_key());
         }
         if mods.meta {
-            parts.push("Command".into());
+            parts.push(PetKey::Super.i18n_key());
         }
-        parts.push(key_label(key));
-        return parts.join("+");
+        if !is_modifier_key(key) || parts.is_empty() {
+            parts.push(key_label(key));
+        }
+        return parts.join(" + ");
     }
     #[cfg(not(target_os = "macos"))]
     {
         let mut parts: Vec<String> = Vec::new();
         if mods.ctrl {
-            parts.push("Ctrl".into());
+            parts.push(PetKey::Ctrl.i18n_key());
         }
         if mods.shift {
-            parts.push("Shift".into());
+            parts.push(PetKey::Shift.i18n_key());
         }
         if mods.alt {
-            parts.push("Alt".into());
+            parts.push(PetKey::Alt.i18n_key());
         }
         if mods.meta {
-            parts.push("Win".into());
+            parts.push(PetKey::Super.i18n_key());
         }
-        parts.push(key_label(key));
-        parts.join("+")
+        if !is_modifier_key(key) || parts.is_empty() {
+            parts.push(key_label(key));
+        }
+        parts.join(" + ")
     }
-}
-
-#[cfg(target_os = "macos")]
-fn mac_key_label(mac: &str, _other: &str) -> String {
-    mac.into()
-}
-
-#[cfg(not(target_os = "macos"))]
-fn mac_key_label(_mac: &str, other: &str) -> String {
-    other.into()
 }
 
 impl BuiltinMochiPet {
@@ -385,8 +294,8 @@ impl PetKind for BuiltinMochiPet {
             id: "pet.deskhud.mochi",
             version: deskhud_engine::ENGINE_PRODUCT_VERSION,
             engine: deskhud_engine::ENGINE_COMPAT_FAMILY,
-            display_name: "糯米团",
-            description: "糯米团性格沉稳可靠，遇事总想站出来照看大家；熟悉之后也会露出顽皮的一面，是让人安心的陪伴者。",
+            display_name: "display_name",
+            description: "description",
             author: "DeskHud",
             homepage: Some("https://github.com/ko-eika/deskhud"),
             window_width: 192.0,
@@ -457,12 +366,7 @@ impl PetKind for BuiltinMochiPet {
                 if !self.mouse_tips.load(Ordering::Relaxed) {
                     return;
                 }
-                let text = match button {
-                    PetMouseButton::Primary => "左键",
-                    PetMouseButton::Secondary => "右键",
-                    PetMouseButton::Middle => "中键",
-                };
-                self.show_bubble(text, 1000);
+                self.show_bubble(button.i18n_key(), 1000);
             }
             PetEvent::MouseClicked {
                 button: PetMouseButton::Primary,
@@ -479,21 +383,16 @@ impl PetKind for BuiltinMochiPet {
                 if !self.mouse_tips.load(Ordering::Relaxed) {
                     return;
                 }
-                let text = match button {
-                    PetMouseButton::Primary => "左键",
-                    PetMouseButton::Secondary => "右键",
-                    PetMouseButton::Middle => "中键",
-                };
-                self.show_bubble(text, 1000);
+                self.show_bubble(button.i18n_key(), 1000);
             }
             PetEvent::MouseWheel { delta, .. } | PetEvent::GlobalMouseWheel { delta, .. } => {
                 if !self.mouse_tips.load(Ordering::Relaxed) {
                     return;
                 }
                 if delta > 0 {
-                    self.show_bubble("滚轮↑", 800);
+                    self.show_bubble("InputKeyWheelUp", 800);
                 } else if delta < 0 {
-                    self.show_bubble("滚轮↓", 800);
+                    self.show_bubble("InputKeyWheelDown", 800);
                 }
             }
             PetEvent::GlobalKeyPressed { key, modifiers }
@@ -506,6 +405,11 @@ impl PetKind for BuiltinMochiPet {
                     return;
                 }
                 self.show_bubble(format_shortcut(modifiers, key), 1400);
+            }
+            PetEvent::KeyCombinationPressed { key, modifiers } => {
+                if self.key_tips.load(Ordering::Relaxed) {
+                    self.show_bubble(format_shortcut(modifiers, key), 1400);
+                }
             }
             PetEvent::GlobalMouseReleased { .. }
             | PetEvent::GlobalKeyReleased { .. }

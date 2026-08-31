@@ -1,0 +1,50 @@
+msgid ""
+msgstr ""
+
+msgid "AppName"
+msgstr "DeskHud"
+
+msgid "ActionCancel"
+msgstr "取消"
+
+msgid "ActionApply"
+msgstr "应用"
+
+msgid "ActionReset"
+msgstr "重置"
+
+msgid "MenuQuit"
+msgstr "退出"
+
+msgid "MenuSettings"
+msgstr "设置"
+
+msgid "SettingsNavPet"
+msgstr "宠物"
+
+msgid "SettingsNavHud"
+msgstr "插件"
+
+msgid "SettingsNavGeneral"
+msgstr "常规"
+
+msgid "SettingsNavPerformance"
+msgstr "性能"
+
+msgid "MenuHudLayout"
+msgstr "插件布局"
+
+msgid "MenuPluginLayer"
+msgstr "插件层级"
+
+msgid "MenuLayerTop"
+msgstr "置顶"
+
+msgid "MenuLayerNormal"
+msgstr "正常"
+
+msgid "MenuLayerBottom"
+msgstr "置底"
+
+
+

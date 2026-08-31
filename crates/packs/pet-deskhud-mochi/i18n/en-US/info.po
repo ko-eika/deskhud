@@ -1,0 +1,11 @@
+msgid ""
+msgstr ""
+
+msgid "display_name"
+msgstr "Mochi"
+
+msgid "description"
+msgstr "Mochi is steady and dependable, always ready to look after everyone; once he feels at home, his playful side comes out, making him a reassuring companion"
+
+
+

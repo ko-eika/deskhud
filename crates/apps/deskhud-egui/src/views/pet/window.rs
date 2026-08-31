@@ -102,6 +102,10 @@ impl PetWindow {
         self.viewport.window_id()
     }
 
+    pub(crate) fn local_modifiers(&self) -> PetModifiers {
+        self.local_modifiers
+    }
+
     /// 返回供主线程执行原生窗口操作的共享句柄。
     pub(crate) fn window_handle(&self) -> std::sync::Arc<winit::window::Window> {
         self.viewport.window_handle()
@@ -123,23 +127,6 @@ impl PetWindow {
                     alt: modifiers.state().alt_key(),
                     meta: modifiers.state().super_key(),
                 };
-            }
-            WindowEvent::KeyboardInput { event, .. } => {
-                if let winit::keyboard::PhysicalKey::Code(code) = event.physical_key
-                    && let Some(key) = crate::input::winit_key_to_pet_key(code)
-                {
-                    self.pet.on_event(if event.state == ElementState::Pressed {
-                        PetEvent::KeyPressed {
-                            key,
-                            modifiers: self.local_modifiers,
-                        }
-                    } else {
-                        PetEvent::KeyReleased {
-                            key,
-                            modifiers: self.local_modifiers,
-                        }
-                    });
-                }
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let delta = match delta {
@@ -222,9 +209,8 @@ impl PetWindow {
         self.viewport.cursor_screen_position().or_else(|| {
             // 某些 Linux 窗口管理器在首次右键时可能不会先发送 CursorMoved。
             // 使用窗口中心作为兜底锚点，确保菜单仍然可以打开。
-            let window = self.viewport.window();
-            if let Ok(position) = window.outer_position() {
-                let size = window.outer_size();
+            if let Some(position) = self.native_position {
+                let size = self.native_size;
                 return Some(winit::dpi::PhysicalPosition::new(
                     position.x + size.width.saturating_div(2) as i32,
                     position.y + size.height.saturating_div(2) as i32,
@@ -266,10 +252,11 @@ impl PetWindow {
             position.x + size.width as i32 / 2,
             position.y + size.height as i32 / 2,
         );
-        // 气泡位置在渲染线程中计算。macOS 上 `NSScreen` 只能在主线程访问，
-        // 因此这里使用 `get_at`：它会回退到 winit 的显示器范围，而不是让
-        // 锚点丢失并把气泡错误地放到屏幕左上角。
-        let Some(area) = area::get_at(self.viewport.window(), center) else {
+        // 气泡位置在渲染线程中计算。窗口对象只能由 winit 线程访问，不能在
+        // 这里调用 `Window::outer_position/outer_size` 或 `area::get_at`。
+        // 创建/移动/缩放窗口时已经把几何状态同步到 native_* 字段；使用该
+        // 快照既避免跨线程访问，也保证按键到气泡的更新不被 winit 拒绝。
+        let Some(area) = self.activity_area_at(position, size) else {
             return Some(winit::dpi::PhysicalPosition::new(
                 center.x,
                 position.y - 52_i32 / 2 - 12,
@@ -327,7 +314,7 @@ impl PetWindow {
 
     /// 返回原生窗口的最新位置，供设置 Apply 保留拖拽产生的几何状态。
     pub(crate) fn current_position(&self) -> Option<winit::dpi::PhysicalPosition<i32>> {
-        self.viewport.window().outer_position().ok()
+        self.native_position
     }
 
     /// Copies the final native position into the applied preferences before
@@ -378,9 +365,8 @@ impl PetWindow {
             self.last_dock = dock;
         }
         self.viewport.apply_ui_preferences(&self.prefs);
-        let window = self.viewport.window();
-        let window_size = window.outer_size();
-        let screen_center = window.outer_position().ok().map(|position| {
+        let window_size = self.native_size;
+        let screen_center = self.native_position.map(|position| {
             [
                 position.x as f64 + window_size.width as f64 / 2.0,
                 position.y as f64 + window_size.height as f64 / 2.0,
@@ -451,11 +437,10 @@ impl PetWindow {
     }
 
     fn current_dock(&self) -> deskhud_engine::DockState {
-        let window = self.viewport.window();
-        let Some(position) = window.outer_position().ok() else {
+        let Some(position) = self.native_position else {
             return deskhud_engine::DockState::FREE;
         };
-        let size = window.outer_size();
+        let size = self.native_size;
         let Some(area) = self.activity_area_at(position, size) else {
             return deskhud_engine::DockState::FREE;
         };
@@ -472,11 +457,10 @@ impl PetWindow {
     }
 
     fn snap_to_activity_area(&self) {
-        let window = self.viewport.window();
-        let Ok(position) = window.outer_position() else {
+        let Some(position) = self.native_position else {
             return;
         };
-        let size = window.outer_size();
+        let size = self.native_size;
         let Some(area) = self.activity_area_at(position, size) else {
             return;
         };
@@ -498,11 +482,10 @@ impl PetWindow {
     }
 
     fn is_outside_activity_area(&self) -> bool {
-        let window = self.viewport.window();
-        let Ok(position) = window.outer_position() else {
+        let Some(position) = self.native_position else {
             return false;
         };
-        let size = window.outer_size();
+        let size = self.native_size;
         let Some(area) = self.activity_area_at(position, size) else {
             return false;
         };
@@ -514,18 +497,10 @@ impl PetWindow {
 
     fn activity_area_at(
         &self,
-        position: winit::dpi::PhysicalPosition<i32>,
-        size: winit::dpi::PhysicalSize<u32>,
+        _position: winit::dpi::PhysicalPosition<i32>,
+        _size: winit::dpi::PhysicalSize<u32>,
     ) -> Option<area::ActivityArea> {
-        let center = winit::dpi::PhysicalPosition::new(
-            position
-                .x
-                .saturating_add(size.width.min(i32::MAX as u32) as i32 / 2),
-            position
-                .y
-                .saturating_add(size.height.min(i32::MAX as u32) as i32 / 2),
-        );
-        area::get_at(self.viewport.window(), center).or(self.activity_area)
+        self.activity_area
     }
 
     /// 按正确的 OpenGL 资源顺序销毁 Pet 窗口。

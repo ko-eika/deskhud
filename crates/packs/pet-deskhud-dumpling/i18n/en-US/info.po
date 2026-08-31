@@ -1,0 +1,12 @@
+msgid ""
+msgstr ""
+
+msgid "display_name"
+msgstr "Little Dumpling"
+
+msgid "description"
+msgstr "A gentle, people-loving companion with a sensitive heart, Little Dumpling enjoys both lively moments and quiet time, always finding a soft way to respond"
+
+
+
+

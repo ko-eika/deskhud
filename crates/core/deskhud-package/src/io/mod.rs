@@ -174,12 +174,29 @@ pub fn write_manifest_dir(dir: &Path, manifest: &PackManifest) -> Result<(), Pac
 
 /// 读取包内 locale 目录；文件不存在则 `Ok(None)`。
 pub fn read_catalog_dir(dir: &Path, locale: &str) -> Result<Option<PackCatalog>, PackageError> {
-    let path = dir.join("i18n").join(format!("{locale}.toml"));
-    if !path.exists() {
+    let locale_dir = dir.join("i18n").join(locale);
+    let Ok(entries) = fs::read_dir(&locale_dir) else {
         return Ok(None);
+    };
+    let mut files = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("mo"))
+        })
+        .collect::<Vec<_>>();
+    files.sort();
+    let mut messages = std::collections::BTreeMap::new();
+    for path in files {
+        let catalog =
+            PackCatalog::parse_gettext(&fs::read(path)?).map_err(PackageError::InvalidResource)?;
+        messages.extend(catalog.messages);
     }
-    let text = fs::read_to_string(path)?;
-    Ok(Some(PackCatalog::parse_toml(&text)?))
+    Ok((!messages.is_empty()).then_some(PackCatalog { messages }))
 }
 
 /// 把目录打成 `.deskhud`（zip）。
@@ -338,7 +355,13 @@ mod tests {
         };
         write_manifest_dir(&dir, &manifest).unwrap();
         fs::create_dir_all(dir.join("i18n")).unwrap();
-        fs::write(dir.join("i18n/zh-CN.toml"), "display_name = \"往返\"\n").unwrap();
+        let catalog = PackCatalog {
+            messages: [("display_name".to_owned(), "往返".to_owned())]
+                .into_iter()
+                .collect(),
+        };
+        fs::create_dir_all(dir.join("i18n/zh-CN")).unwrap();
+        fs::write(dir.join("i18n/zh-CN/info.mo"), catalog.to_mo()).unwrap();
 
         let zip_path = temp_dir("out").with_extension("deskhud");
         pack_directory(&dir, &zip_path).unwrap();
@@ -404,7 +427,7 @@ mod tests {
     #[test]
     fn rejects_unsafe_manifest_paths() {
         let err = PackManifest::parse_toml(
-            r#"id="pet.example.path" kind="pet" version="0.8" engine="0.8" api_version=3 display_name="x" preview="../x""#,
+            r#"id="pet.example.path" kind="pet" version="0.9" engine="0.9" api_version=4 display_name="x" preview="../x""#,
         )
         .unwrap_err();
         assert!(format!("{err}").contains(".."));

@@ -1,0 +1,223 @@
+msgid ""
+msgstr ""
+
+msgid ""
+msgstr ""
+
+msgid "SettingsTitle"
+msgstr "设置"
+
+msgid "SettingsPerformanceIntro"
+msgstr "调整帧率、动画和特效偏好。"
+
+msgid "SettingsPerformanceFps"
+msgstr "帧率上限"
+
+msgid "SettingsPerformanceAuto"
+msgstr "自动"
+
+msgid "SettingsPerformanceAnimation"
+msgstr "动画质量"
+
+msgid "SettingsPerformanceLow"
+msgstr "低"
+
+msgid "SettingsPerformanceStandard"
+msgstr "标准"
+
+msgid "SettingsPerformanceHigh"
+msgstr "高"
+
+msgid "SettingsPerformancePower"
+msgstr "性能模式"
+
+msgid "SettingsPerformanceSaving"
+msgstr "省电"
+
+msgid "SettingsPerformanceBalanced"
+msgstr "平衡"
+
+msgid "SettingsPerformanceSmooth"
+msgstr "流畅"
+
+msgid "SettingsPerformanceEffects"
+msgstr "特效"
+
+msgid "SettingsPerformanceBubbles"
+msgstr "气泡"
+
+msgid "SettingsPerformanceShadows"
+msgstr "阴影"
+
+msgid "SettingsAboutIntro"
+msgstr "DeskHud 应用信息与版本。"
+
+msgid "SettingsAboutVersion"
+msgstr "版本"
+
+msgid "SettingsAboutLicense"
+msgstr "许可证"
+
+msgid "SettingsAboutStack"
+msgstr "基于 Rust 与 egui 构建的桌宠引擎。"
+
+msgid "SettingsPetIntro"
+msgstr "「选择」并「应用」后生效，第三方宠物可能监听键鼠等输入，存在隐私与安全风险，请仅安装可信来源的包。"
+
+msgid "SettingsPetWindowSize"
+msgstr "窗口"
+
+msgid "SettingsPetOptions"
+msgstr "当前宠物行为"
+
+msgid "SettingsPetList"
+msgstr "宠物列表"
+
+msgid "SettingsPetConfig"
+msgstr "宠物配置"
+
+msgid "SettingsPetGlobal"
+msgstr "全局配置"
+
+msgid "SettingsPetBubbles"
+msgstr "消息气泡"
+
+msgid "SettingsPetBubblesHint"
+msgstr "控制宠物消息气泡的显示。"
+
+msgid "SettingsPetKeyboardInput"
+msgstr "全局键盘监听"
+
+msgid "SettingsPetKeyboardInputHint"
+msgstr "允许当前宠物接收桌面范围的键盘事件。"
+
+msgid "SettingsPetMouseInput"
+msgstr "全局鼠标监听"
+
+msgid "SettingsPetMouseInputHint"
+msgstr "允许当前宠物接收桌面范围的鼠标事件。"
+
+msgid "HudSettingsIntro"
+msgstr "「开启」并「应用」后生效，第三方插件可能读取系统信息或展示内容，存在隐私与安全风险，请仅启用可信来源的插件。"
+
+msgid "HudSettingsEmpty"
+msgstr "当前没有可配置的插件贡献。"
+
+msgid "MetaAuthor"
+msgstr "作者"
+
+msgid "MetaVersion"
+msgstr "版本"
+
+msgid "MetaEngine"
+msgstr "引擎"
+
+msgid "HudItemsEnabled"
+msgstr "条开启"
+
+msgid "MetaHomepage"
+msgstr "主页"
+
+msgid "SettingsLocale"
+msgstr "语言"
+
+msgid "SettingsTheme"
+msgstr "主题"
+
+msgid "OptThemeLight"
+msgstr "浅色"
+
+msgid "OptThemeDark"
+msgstr "深色"
+
+msgid "OptThemeSystem"
+msgstr "使用系统设置"
+
+msgid "SettingsUiFont"
+msgstr "字体"
+
+msgid "SettingsUiFontFamily"
+msgstr "字簇"
+
+msgid "SettingsUiFontStyle"
+msgstr "样式"
+
+msgid "SettingsUiFontSize"
+msgstr "大小"
+
+msgid "SettingsUiFontPreview"
+msgstr "海浪的声音平静了我的心灵。DeskHud 123"
+
+msgid "HudPluginDisabledHint"
+msgstr "插件已关闭，条目暂时不会显示"
+
+msgid "HudMasterEnable"
+msgstr "启用插件"
+
+msgid "HudMasterEnableHint"
+msgstr "关闭后所有 HUD 均不显示"
+
+msgid "HudMasterDisabledHint"
+msgstr "已关闭：所有 HUD 均不显示"
+
+msgid "HudLayoutEdit"
+msgstr "插件布局"
+
+msgid "HudLayoutEditingHint"
+msgstr "布局编辑已打开：拖移条目；顶栏可重置/取消/应用"
+
+msgid "HudLayoutDone"
+msgstr "应用"
+
+msgid "HudLayoutCancel"
+msgstr "取消"
+
+msgid "HudLayoutHint"
+msgstr "点击选中 · 拖移/拖角按格跟手"
+
+msgid "HudLayoutResetSize"
+msgstr "重置大小"
+
+msgid "HudLayoutResetSizeHint"
+msgstr "恢复为默认 1× 尺寸"
+
+msgid "SettingsTopmost"
+msgstr "置顶"
+
+msgid "SettingsTopmostHint"
+msgstr "仅让宠物和 HUD 保持置顶；设置窗口仍是普通窗口。"
+
+msgid "SettingsPetLayer"
+msgstr "宠物层级"
+
+msgid "SettingsPetLayerHint"
+msgstr "设置宠物在桌面窗口中的层级。"
+
+msgid "OptLocaleZh"
+msgstr "简体中文"
+
+msgid "OptLocaleSystem"
+msgstr "跟随系统"
+
+msgid "OptLocaleEn"
+msgstr "English"
+
+msgid "InputKeyPrimary"
+msgstr "左键"
+
+msgid "InputKeySecondary"
+msgstr "右键"
+
+msgid "InputKeyMiddle"
+msgstr "中键"
+
+msgid "InputKeyWheelUp"
+msgstr "滚轮↑"
+
+msgid "InputKeyWheelDown"
+msgstr "滚轮↓"
+
+msgid "InputKeyPress"
+msgstr "按键"
+
+

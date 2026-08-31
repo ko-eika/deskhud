@@ -51,8 +51,8 @@
 | 内置扩展 | 原生 Rust `PetKind` / `Plugin` | 性能好、调试方便 |
 | 社区扩展 | **WASM**（wasmtime）+ `deskhud-sdk` | 可带行为逻辑且可沙箱，适合下载分发 |
 | 包格式 | `.deskhud`（目录或 zip）+ `manifest.toml` | 宠物包 / HUD 插件同构，靠 `kind` 区分 |
-| 配置 / 清单 | `serde` + `toml` | prefs、manifest、包内 i18n |
-| i18n | 多源 TOML 目录合并 | `shell.*` / `pet.<id>.*` / `plugin.<id>.*`，缺键回退 |
+| 配置 / 清单 | `serde` + `toml`；包内 i18n 使用 gettext | prefs、manifest、PO/MO 目录合并 |
+| i18n | 多源 gettext PO/MO 目录合并 | PO 为源文件，MO 为发布文件；`shell.*` / `pet.<id>.*` / `plugin.<id>.*`，缺键回退 |
 
 **不做（本阶段）**：插件商店、原生 dll 社区包、插件直接使用 egui、UI 依赖 `git2`。
 
@@ -101,10 +101,10 @@ target/<profile>/packages/ …
 - [x] 桌宠引擎化（`deskhud-engine`）+ 包 `version`/`engine` 适配门闸
 - [x] 内置宠/插件独立 crate + `cargo pack-builtins`
 - [x] HUD 全屏布局（多屏归一化矩形 + 设置页调整布局）；运行态每屏一合成窗同层绘制
-- [ ] 宠物引擎中性场景帧与 egui 渲染链
+- [x] 宠物引擎中性场景帧与 egui 渲染链
 - [ ] 宠物行为事件完善（更多 `PetEvent`）与更中性绘制帧
 - [x] HUD 插件真实帧数据（扫描 registry contribution，按总开关 ∧ 插件 ∧ 条目绘制 `HudFrame`）
-- [ ] WASM runtime + SDK + 示例包
+- [x] WASM runtime + SDK + 示例包
 
 ## 常用命令
 

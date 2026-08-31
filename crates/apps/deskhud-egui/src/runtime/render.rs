@@ -58,6 +58,8 @@ pub(crate) enum WindowCommand {
     Move {
         position: winit::dpi::PhysicalPosition<i32>,
     },
+    /// 显示或隐藏不应抢占焦点的工具窗口。
+    SetVisibleWithoutFocus { visible: bool },
     /// macOS：切换应用是否以普通应用显示在 Dock 中。
     #[cfg(target_os = "macos")]
     SetDockIcon { visible: bool },
@@ -150,7 +152,13 @@ fn run(
                 // 宠物原生拖动产生 Moved。必须立即更新气泡锚点，不能等到下一
                 // 个定时帧；限定为 Pet 窗口，避免气泡自身移动引发重绘循环。
                 let mut should_render_immediately = manager.is_pet_window(window_id)
-                    && matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_));
+                    && matches!(
+                        event,
+                        WindowEvent::Moved(_)
+                            | WindowEvent::Resized(_)
+                            | WindowEvent::KeyboardInput { .. }
+                            | WindowEvent::ModifiersChanged(_)
+                    );
                 if manager.handle_event(window_id, event) {
                     let _ = proxy.send_event(UserEvent::RenderResult(RenderResult::ShouldClose));
                     break;
@@ -168,7 +176,13 @@ fn run(
                     match receiver.try_recv() {
                         Ok(RenderCommand::WindowEvent { window_id, event }) => {
                             should_render_immediately |= manager.is_pet_window(window_id)
-                                && matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_));
+                                && matches!(
+                                    event,
+                                    WindowEvent::Moved(_)
+                                        | WindowEvent::Resized(_)
+                                        | WindowEvent::KeyboardInput { .. }
+                                        | WindowEvent::ModifiersChanged(_)
+                                );
                             if manager.handle_event(window_id, event) {
                                 let _ = proxy
                                     .send_event(UserEvent::RenderResult(RenderResult::ShouldClose));

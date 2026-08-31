@@ -35,6 +35,14 @@ pub enum PetKey {
     PageUp,
     /// PageDown。
     PageDown,
+    /// PrintScreen。
+    PrintScreen,
+    /// ScrollLock。
+    ScrollLock,
+    /// Pause/Break。
+    Pause,
+    /// Context menu key。
+    ContextMenu,
     /// 左/右 Shift（合并为一种）。
     Shift,
     /// 左/右 Ctrl。
@@ -71,4 +79,58 @@ pub enum PetKey {
     Digit(char),
     /// 标点（按键主铭文，US 布局未按下 Shift 时的字符）。
     Punct(char),
+}
+
+impl PetKey {
+    /// Returns the stable PO key used by the host when displaying this key.
+    pub fn i18n_key(self) -> String {
+        match self {
+            Self::Escape => "InputKey.Escape".into(),
+            Self::Tab => "InputKey.Tab".into(),
+            Self::Enter => "InputKey.Enter".into(),
+            Self::Space => "InputKey.Space".into(),
+            Self::Backspace => "InputKey.Backspace".into(),
+            Self::Delete => "InputKey.Delete".into(),
+            Self::Insert => "InputKey.Insert".into(),
+            Self::Clear => "InputKey.Clear".into(),
+            Self::ArrowUp => "InputKey.ArrowUp".into(),
+            Self::ArrowDown => "InputKey.ArrowDown".into(),
+            Self::ArrowLeft => "InputKey.ArrowLeft".into(),
+            Self::ArrowRight => "InputKey.ArrowRight".into(),
+            Self::Home => "InputKey.Home".into(),
+            Self::End => "InputKey.End".into(),
+            Self::PageUp => "InputKey.PageUp".into(),
+            Self::PageDown => "InputKey.PageDown".into(),
+            Self::Shift => "InputKey.Shift".into(),
+            Self::Ctrl => "InputKey.Ctrl".into(),
+            Self::Alt => if cfg!(target_os = "macos") {
+                "InputKey.Option"
+            } else {
+                "InputKey.Alt"
+            }
+            .into(),
+            Self::Super => if cfg!(target_os = "macos") {
+                "InputKey.Command"
+            } else {
+                "InputKey.Super"
+            }
+            .into(),
+            Self::CapsLock => "InputKey.CapsLock".into(),
+            Self::NumLock => "InputKey.NumLock".into(),
+            Self::NumpadEnter => "InputKey.NumpadEnter".into(),
+            Self::NumpadDigit(n) => format!("InputKey.NumpadDigit.{n}"),
+            Self::NumpadAdd => "InputKey.NumpadAdd".into(),
+            Self::NumpadSubtract => "InputKey.NumpadSubtract".into(),
+            Self::NumpadMultiply => "InputKey.NumpadMultiply".into(),
+            Self::NumpadDivide => "InputKey.NumpadDivide".into(),
+            Self::NumpadDecimal => "InputKey.NumpadDecimal".into(),
+            Self::NumpadSeparator => "InputKey.NumpadSeparator".into(),
+            Self::PrintScreen => "InputKey.PrintScreen".into(),
+            Self::ScrollLock => "InputKey.ScrollLock".into(),
+            Self::Pause => "InputKey.Pause".into(),
+            Self::ContextMenu => "InputKey.ContextMenu".into(),
+            Self::Function(n) => format!("InputKey.F{n}"),
+            Self::Letter(c) | Self::Digit(c) | Self::Punct(c) => c.to_string(),
+        }
+    }
 }

@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use deskhud_engine::PetEvent;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -83,17 +84,10 @@ impl ApplicationHandler<UserEvent> for App {
             self.windows = handles.into_iter().collect();
             self.pet_window_id = Some(pet_window_id);
             self.bubble_window_id = Some(bubble_window_id);
-            #[cfg(target_os = "macos")]
-            {
-                let (keyboard, mouse) = windows.global_input_monitoring();
-                self.set_global_input_monitoring(keyboard, mouse);
-            }
-            #[cfg(target_os = "windows")]
-            {
-                let (keyboard, mouse) = windows.global_input_monitoring();
-                self.set_global_input_monitoring(keyboard, mouse);
-            }
-            self.renderer = Some(Renderer::start(windows, self.proxy.clone()));
+            let (keyboard, mouse) = windows.global_input_monitoring();
+            self.set_global_input_monitoring(keyboard, mouse);
+            let renderer = Renderer::start(windows, self.proxy.clone());
+            self.renderer = Some(renderer);
         }
     }
 
@@ -125,14 +119,21 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             UserEvent::PetEvent(event) => {
+                if matches!(
+                    event,
+                    PetEvent::GlobalKeyPressed { .. } | PetEvent::GlobalKeyReleased { .. }
+                ) {
+                    tracing::info!(?event, "global keyboard event forwarded to renderer");
+                } else {
+                    tracing::debug!(?event, "global input event forwarded to renderer");
+                }
                 if let Some(renderer) = &self.renderer {
                     renderer.send(RenderCommand::PetEvent(event));
+                } else {
+                    tracing::warn!("global input event dropped: renderer unavailable");
                 }
             }
             UserEvent::SetGlobalInputMonitoring { keyboard, mouse } => {
-                #[cfg(target_os = "macos")]
-                self.set_global_input_monitoring(keyboard, mouse);
-                #[cfg(target_os = "windows")]
                 self.set_global_input_monitoring(keyboard, mouse);
                 #[cfg(not(target_os = "macos"))]
                 #[cfg(not(target_os = "windows"))]
@@ -183,6 +184,49 @@ impl ApplicationHandler<UserEvent> for App {
                                 }
                             } else {
                                 window.set_outer_position(position);
+                            }
+                        }
+                        WindowCommand::SetVisibleWithoutFocus { visible } => {
+                            #[cfg(target_os = "windows")]
+                            {
+                                use windows::Win32::Foundation::HWND;
+                                use windows::Win32::UI::WindowsAndMessaging::{
+                                    HWND_TOPMOST, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE,
+                                    SWP_NOMOVE, SWP_NOSIZE, SetWindowPos, ShowWindow,
+                                };
+                                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                                if let Ok(handle) = window.window_handle()
+                                    && let RawWindowHandle::Win32(handle) = handle.as_raw()
+                                {
+                                    unsafe {
+                                        let hwnd = HWND(handle.hwnd.get() as *mut _);
+                                        let _ = ShowWindow(
+                                            hwnd,
+                                            if visible { SW_SHOWNOACTIVATE } else { SW_HIDE },
+                                        );
+                                        if visible {
+                                            // 根菜单和子菜单都是 TOPMOST 窗口；显示子菜单
+                                            // 后仍需重新排序，否则后显示的根菜单可能盖住它。
+                                            let _ = SetWindowPos(
+                                                hwnd,
+                                                Some(HWND_TOPMOST),
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    window.set_visible(visible);
+                                }
+                            }
+                            #[cfg(not(target_os = "windows"))]
+                            window.set_visible(visible);
+                            if visible {
+                                let _ = window.set_cursor_hittest(true);
+                                window.request_redraw();
                             }
                         }
                         #[cfg(target_os = "macos")]
@@ -248,6 +292,12 @@ impl App {
                 "global input monitor unavailable; grant Accessibility permission to DeskHud"
             );
         }
+        tracing::info!(
+            keyboard,
+            mouse,
+            installed = self._global_key_monitor.is_some(),
+            "global input monitor state"
+        );
     }
 
     #[cfg(target_os = "windows")]
@@ -258,7 +308,16 @@ impl App {
         if (keyboard || mouse) && self._global_key_monitor.is_none() {
             tracing::warn!("global input monitor unavailable on Windows");
         }
+        tracing::info!(
+            keyboard,
+            mouse,
+            installed = self._global_key_monitor.is_some(),
+            "global input monitor state"
+        );
     }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    fn set_global_input_monitoring(&mut self, _keyboard: bool, _mouse: bool) {}
 
     /// 原生拖动事件抵达主线程时立即移动工具窗，避免经渲染线程往返一帧。
     fn follow_bubble_on_pet_move(

@@ -4,7 +4,7 @@
 //! 本模块只负责视口之间的协调和生命周期管理。
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use deskhud_engine::EngineRegistry;
+use deskhud_engine::{EngineRegistry, PetEvent, PetKeyTracker};
 use deskhud_runtime::{bootstrap_registry, build_catalog_store};
 use deskhud_ui::{
     CatalogStore, LayerPreference, PrefsWriteOrder, UiPreferences, load, save_ordered,
@@ -40,6 +40,7 @@ pub(crate) struct WindowManager {
     catalogs: CatalogStore,
     prefs: UiPreferences,
     frame_rate: u32,
+    key_tracker: PetKeyTracker,
 }
 
 impl WindowManager {
@@ -80,6 +81,7 @@ impl WindowManager {
             catalogs,
             prefs,
             frame_rate,
+            key_tracker: PetKeyTracker::default(),
         }
     }
 
@@ -373,9 +375,30 @@ impl WindowManager {
     }
 
     /// 将平台采集后的中性全局输入事件交给当前宠物实例。
-    pub(crate) fn dispatch_pet_event(&self, event: deskhud_engine::PetEvent) {
+    pub(crate) fn dispatch_pet_event(&mut self, event: PetEvent) {
+        if matches!(
+            event,
+            PetEvent::GlobalKeyPressed { .. } | PetEvent::GlobalKeyReleased { .. }
+        ) {
+            tracing::info!(?event, "global keyboard event dispatched to pet");
+        } else {
+            tracing::debug!(?event, "global input event dispatched to pet");
+        }
         if let Some(pet) = self.pet.as_ref() {
             pet.dispatch_event(event);
+        }
+        match event {
+            PetEvent::GlobalKeyPressed { key, modifiers } => {
+                if let Some(combo) = self.key_tracker.press(key, modifiers)
+                    && let Some(pet) = self.pet.as_ref()
+                {
+                    pet.dispatch_event(combo);
+                }
+            }
+            PetEvent::GlobalKeyReleased { modifiers, .. } => {
+                self.key_tracker.release(modifiers);
+            }
+            _ => {}
         }
     }
 
@@ -404,10 +427,46 @@ impl WindowManager {
                     self.hide_menu();
                 }
                 let open_menu = is_right_click(&event);
+                let local_key_event = match &event {
+                    WindowEvent::KeyboardInput { event, .. } => {
+                        let key = match event.physical_key {
+                            winit::keyboard::PhysicalKey::Code(code) => {
+                                crate::input::winit_key_to_pet_key(code)
+                            }
+                            winit::keyboard::PhysicalKey::Unidentified(_) => None,
+                        };
+                        key.map(|key| {
+                            if event.state == ElementState::Pressed {
+                                PetEvent::GlobalKeyPressed {
+                                    key,
+                                    modifiers: self
+                                        .pet
+                                        .as_ref()
+                                        .expect("pet viewport disappeared")
+                                        .local_modifiers(),
+                                }
+                            } else {
+                                PetEvent::GlobalKeyReleased {
+                                    key,
+                                    modifiers: self
+                                        .pet
+                                        .as_ref()
+                                        .expect("pet viewport disappeared")
+                                        .local_modifiers(),
+                                }
+                            }
+                        })
+                    }
+                    _ => None,
+                };
                 self.pet
                     .as_mut()
                     .expect("pet viewport disappeared")
                     .handle_event(&event);
+                if let Some(event) = local_key_event {
+                    tracing::info!(?event, "focused window keyboard event normalized");
+                    self.dispatch_pet_event(event);
+                }
                 if open_menu {
                     self.show_pet_menu();
                 }
@@ -493,12 +552,39 @@ impl WindowManager {
                 if let (Some(pet), Some(bubble)) = (self.pet.as_ref(), self.bubble.as_mut()) {
                     if let Some(anchor) = pet.bubble_anchor() {
                         let was_visible = bubble.is_visible();
-                        bubble.update(pet.bubble_content(), anchor, &self.prefs);
-                        if !was_visible && bubble.is_visible() {
+                        let content = pet.bubble_content().map(|mut content| {
+                            content.text = content
+                                .text
+                                .split('+')
+                                .map(|part| {
+                                    let part = part.trim();
+                                    #[cfg(target_os = "macos")]
+                                    let part = match part {
+                                        "InputKey.Super" => "InputKey.Command",
+                                        "InputKey.Alt" => "InputKey.Option",
+                                        other => other,
+                                    };
+                                    self.catalogs.t(self.prefs.locale, part, part)
+                                })
+                                .collect::<Vec<_>>()
+                                .join(" + ");
+                            content
+                        });
+                        let content_changed = bubble.update(content, anchor, &self.prefs);
+                        if content_changed || (!was_visible && bubble.is_visible()) {
+                            tracing::info!(
+                                visible_before = was_visible,
+                                visible_after = bubble.is_visible(),
+                                content_changed,
+                                anchor = ?anchor,
+                                "pet bubble content updated"
+                            );
+                        }
+                        if content_changed || (!was_visible && bubble.is_visible()) {
                             // The bubble is added to the next render list only
-                            // after this Pet pass. Render its first frame now
-                            // so event-triggered messages are not delayed or
-                            // lost before the next repaint request arrives.
+                            // after this Pet pass. Render immediately so both
+                            // newly shown and already visible bubbles reflect
+                            // event-triggered text changes in the same frame.
                             bubble.render();
                         }
                     } else {

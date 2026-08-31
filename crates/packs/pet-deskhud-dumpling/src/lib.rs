@@ -38,38 +38,29 @@ impl Guest for BigEyesGuest {
     fn info() -> pet_api::PetInfo {
         pet_api::PetInfo {
             id: "pet.deskhud.dumpling".into(),
-            display_name: "Little Dumpling".into(),
-            description:
-                "A gentle, people-loving companion with a sensitive heart, Little Dumpling enjoys both lively moments and quiet time, always finding a soft way to respond".into(),
+            display_name: "display_name".into(),
+            description: "description".into(),
             author: "DeskHud".into(),
             homepage: Some("https://github.com/ko-eika/deskhud".into()),
-            version: "0.8.2".into(),
+            version: "0.9.0".into(),
             engine: "0.8".into(),
             window_width: 192.0,
             window_height: 192.0,
             config_options: [
-                (
-                    "custom_bubble",
-                    "个性气泡",
-                    "使用宠物包定义的气泡颜色和圆角",
-                ),
-                ("follow_eyes", "眼睛效果", "让眼睛平滑跟随桌面光标方向"),
-                (
-                    "hover_highlight",
-                    "悬停效果",
-                    "指针停在宠物上时提供视觉反馈",
-                ),
-                ("drag_tint", "拖拽效果", "拖拽宠物时提供视觉反馈"),
-                ("dock_tint", "贴边效果", "吸附屏幕边缘时提供视觉反馈"),
-                ("key_tips", "按键提示", "键盘按下时显示短气泡"),
-                ("mouse_tips", "鼠标提示", "鼠标按键或滚轮时显示短气泡"),
+                ("custom_bubble", false),
+                ("follow_eyes", true),
+                ("hover_highlight", true),
+                ("drag_tint", true),
+                ("dock_tint", true),
+                ("key_tips", true),
+                ("mouse_tips", true),
             ]
             .into_iter()
-            .map(|(key, label, description)| pet_api::ConfigOption {
+            .map(|(key, default)| pet_api::ConfigOption {
                 key: key.into(),
-                label: label.into(),
-                description: description.into(),
-                default: key != "custom_bubble",
+                label: format!("{key}.label"),
+                description: format!("{key}.description"),
+                default,
             })
             .collect(),
         }
@@ -114,7 +105,7 @@ impl Guest for BigEyesGuest {
                 CLICK_MS.store(420, Ordering::Relaxed);
                 IDLE_MS.store(0, Ordering::Relaxed);
                 if MOUSE_TIPS.load(Ordering::Relaxed) {
-                    bubble("左键", 1000);
+                    bubble("InputKeyPrimary", 1000);
                 }
             }
             Event::MousePressed((button, _)) | Event::GlobalMousePressed((button, _))
@@ -122,9 +113,9 @@ impl Guest for BigEyesGuest {
             {
                 bubble(
                     match button {
-                        MouseButton::Secondary => "右键",
-                        MouseButton::Middle => "中键",
-                        MouseButton::Primary => "左键",
+                        MouseButton::Secondary => "InputKeySecondary",
+                        MouseButton::Middle => "InputKeyMiddle",
+                        MouseButton::Primary => "InputKeyPrimary",
                     },
                     1000,
                 );
@@ -132,12 +123,22 @@ impl Guest for BigEyesGuest {
             Event::MouseWheel((delta, _)) | Event::GlobalMouseWheel((delta, _))
                 if MOUSE_TIPS.load(Ordering::Relaxed) =>
             {
-                bubble(if delta > 0 { "滚轮↑" } else { "滚轮↓" }, 800);
+                bubble(
+                    if delta > 0 {
+                        "InputKeyWheelUp"
+                    } else {
+                        "InputKeyWheelDown"
+                    },
+                    800,
+                );
             }
-            Event::KeyPressed((_key, _)) | Event::GlobalKeyPressed((_key, _))
+            Event::KeyPressed((key, modifiers)) | Event::GlobalKeyPressed((key, modifiers))
                 if KEY_TIPS.load(Ordering::Relaxed) =>
             {
-                bubble("按键", 1000);
+                bubble(format_shortcut(key, modifiers), 1000);
+            }
+            Event::KeyCombinationPressed((key, modifiers)) if KEY_TIPS.load(Ordering::Relaxed) => {
+                bubble(format_shortcut(key, modifiers), 1000);
             }
             _ => {}
         }
@@ -409,11 +410,46 @@ impl Guest for BigEyesGuest {
     }
 }
 
-fn bubble(text: &str, duration: u32) {
+fn bubble(text: impl Into<String>, duration: u32) {
     if let Ok(mut current) = BUBBLE_TEXT.lock() {
         *current = text.into();
     }
     BUBBLE_MS.store(duration, Ordering::Relaxed);
+}
+
+fn key_i18n_key(key: pet_api::KeyValue) -> String {
+    match key {
+        pet_api::KeyValue::Named(name) => format!("InputKey.{name:?}"),
+        pet_api::KeyValue::Function(number) => format!("InputKey.F{number}"),
+        pet_api::KeyValue::Letter(value) | pet_api::KeyValue::Digit(value) => value.to_string(),
+        pet_api::KeyValue::Punct(value) => value.to_string(),
+        pet_api::KeyValue::NumpadDigit(value) => format!("Num {value}"),
+    }
+}
+
+fn format_shortcut(key: pet_api::KeyValue, modifiers: pet_api::Modifiers) -> String {
+    let mut parts = Vec::new();
+    if modifiers.ctrl {
+        parts.push("InputKey.Ctrl".to_owned());
+    }
+    if modifiers.shift {
+        parts.push("InputKey.Shift".to_owned());
+    }
+    if modifiers.alt {
+        parts.push("InputKey.Alt".to_owned());
+    }
+    if modifiers.meta {
+        parts.push("InputKey.Super".to_owned());
+    }
+    let key_label = key_i18n_key(key);
+    let modifier_key = matches!(
+        key_label.as_str(),
+        "InputKey.Ctrl" | "InputKey.Shift" | "InputKey.Alt" | "InputKey.Super"
+    );
+    if !modifier_key || parts.is_empty() {
+        parts.push(key_label);
+    }
+    parts.join(" + ")
 }
 
 fn dock_color(dock: pet_api::DockState) -> pet_api::Color {

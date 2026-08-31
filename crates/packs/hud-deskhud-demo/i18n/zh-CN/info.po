@@ -1,0 +1,9 @@
+msgid ""
+msgstr ""
+
+msgid "display_name"
+msgstr "演示 HUD"
+
+msgid "description"
+msgstr "示例插件：开关后在宠窗底部显示演示条（非真实数据源）"
+

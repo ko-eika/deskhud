@@ -1,0 +1,46 @@
+msgid ""
+msgstr ""
+
+msgid "custom_bubble.description"
+msgstr "Use the pet package's own bubble colors and corners"
+
+msgid "custom_bubble.label"
+msgstr "Personal bubble"
+
+msgid "follow_eyes.label"
+msgstr "Eye effect"
+
+msgid "follow_eyes.description"
+msgstr "Follow the pointer direction with smooth eye movement"
+
+msgid "hover_highlight.label"
+msgstr "Hover effect"
+
+msgid "hover_highlight.description"
+msgstr "Provide visual feedback while the pointer rests on the pet"
+
+msgid "drag_tint.label"
+msgstr "Drag effect"
+
+msgid "drag_tint.description"
+msgstr "Provide visual feedback while dragging the pet"
+
+msgid "dock_tint.label"
+msgstr "Dock effect"
+
+msgid "dock_tint.description"
+msgstr "Provide visual feedback when attached to a screen edge"
+
+msgid "key_tips.label"
+msgstr "Key tips"
+
+msgid "key_tips.description"
+msgstr "Show a short bubble on key press"
+
+msgid "mouse_tips.label"
+msgstr "Mouse tips"
+
+msgid "mouse_tips.description"
+msgstr "Show short bubbles for mouse buttons or the wheel"
+
+

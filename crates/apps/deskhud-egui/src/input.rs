@@ -7,6 +7,7 @@ use deskhud_engine::{PetEvent, PetKey, PetModifiers};
 use deskhud_engine::PetKey;
 
 /// 将获得焦点窗口的物理键码映射为宠物契约支持的完整标准键盘集合。
+#[allow(dead_code)]
 pub(crate) fn winit_key_to_pet_key(key: winit::keyboard::KeyCode) -> Option<PetKey> {
     use winit::keyboard::KeyCode as Key;
     Some(match key {
@@ -25,6 +26,10 @@ pub(crate) fn winit_key_to_pet_key(key: winit::keyboard::KeyCode) -> Option<PetK
         Key::End => PetKey::End,
         Key::PageUp => PetKey::PageUp,
         Key::PageDown => PetKey::PageDown,
+        Key::PrintScreen => PetKey::PrintScreen,
+        Key::ScrollLock => PetKey::ScrollLock,
+        Key::Pause => PetKey::Pause,
+        Key::ContextMenu => PetKey::ContextMenu,
         Key::ShiftLeft | Key::ShiftRight => PetKey::Shift,
         Key::ControlLeft | Key::ControlRight => PetKey::Ctrl,
         Key::AltLeft | Key::AltRight => PetKey::Alt,
@@ -61,6 +66,18 @@ pub(crate) fn winit_key_to_pet_key(key: winit::keyboard::KeyCode) -> Option<PetK
         Key::F10 => PetKey::Function(10),
         Key::F11 => PetKey::Function(11),
         Key::F12 => PetKey::Function(12),
+        Key::F13 => PetKey::Function(13),
+        Key::F14 => PetKey::Function(14),
+        Key::F15 => PetKey::Function(15),
+        Key::F16 => PetKey::Function(16),
+        Key::F17 => PetKey::Function(17),
+        Key::F18 => PetKey::Function(18),
+        Key::F19 => PetKey::Function(19),
+        Key::F20 => PetKey::Function(20),
+        Key::F21 => PetKey::Function(21),
+        Key::F22 => PetKey::Function(22),
+        Key::F23 => PetKey::Function(23),
+        Key::F24 => PetKey::Function(24),
         Key::KeyA => PetKey::Letter('A'),
         Key::KeyB => PetKey::Letter('B'),
         Key::KeyC => PetKey::Letter('C'),
@@ -442,12 +459,14 @@ pub(crate) fn global_pointer_position() -> Option<[f64; 2]> {
     }
 }
 
-/// Windows low-level hooks are listen-only and run on the winit thread, whose
-/// message pump remains alive for the lifetime of the application.
+/// Windows low-level hooks are listen-only. They run on a dedicated thread
+/// with its own Win32 message pump, because a low-level hook callback is
+/// delivered to the thread that installed it and must not share winit's
+/// window/event-loop workload.
 #[cfg(target_os = "windows")]
 pub(crate) struct GlobalKeyMonitor {
-    keyboard: windows::Win32::UI::WindowsAndMessaging::HHOOK,
-    mouse: windows::Win32::UI::WindowsAndMessaging::HHOOK,
+    thread_id: u32,
+    thread: Option<std::thread::JoinHandle<()>>,
 }
 
 #[cfg(target_os = "windows")]
@@ -464,38 +483,95 @@ pub(crate) fn install_global_key_monitor(
     mouse: bool,
 ) -> Option<GlobalKeyMonitor> {
     use windows::Win32::UI::WindowsAndMessaging::{
-        HHOOK, SetWindowsHookExW, WH_KEYBOARD_LL, WH_MOUSE_LL,
+        DispatchMessageW, GetMessageW, MSG, PM_NOREMOVE, PeekMessageW, SetWindowsHookExW,
+        TranslateMessage, WH_KEYBOARD_LL, WH_MOUSE_LL,
     };
 
     let slot = WINDOWS_PROXY.get_or_init(|| std::sync::Mutex::new(None));
     *slot.lock().ok()? = Some(proxy);
 
-    let keyboard_hook = if keyboard {
-        unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), None, 0).ok() }
-    } else {
-        None
-    };
-    let mouse_hook = if mouse {
-        unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), None, 0).ok() }
-    } else {
-        None
-    };
-    if (keyboard && keyboard_hook.is_none()) || (mouse && mouse_hook.is_none()) {
-        if let Some(hook) = keyboard_hook {
+    let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
+    let thread = std::thread::Builder::new()
+        .name("deskhud-global-hook".to_owned())
+        .spawn(move || {
+            use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+            use windows::Win32::System::Threading::GetCurrentThreadId;
+            use windows::Win32::UI::WindowsAndMessaging::UnhookWindowsHookEx;
+
+            let thread_id = unsafe { GetCurrentThreadId() };
+            let mut initial_message = MSG::default();
             unsafe {
-                let _ = windows::Win32::UI::WindowsAndMessaging::UnhookWindowsHookEx(hook);
+                let _ = PeekMessageW(&mut initial_message, None, 0, 0, PM_NOREMOVE);
             }
-        }
-        if let Some(hook) = mouse_hook {
-            unsafe {
-                let _ = windows::Win32::UI::WindowsAndMessaging::UnhookWindowsHookEx(hook);
+            let module = unsafe {
+                GetModuleHandleW(None)
+                    .ok()
+                    .map(|module| windows::Win32::Foundation::HINSTANCE(module.0))
+            };
+            let keyboard_hook = if keyboard {
+                unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), module, 0).ok() }
+            } else {
+                None
+            };
+            let mouse_hook = if mouse {
+                unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), module, 0).ok() }
+            } else {
+                None
+            };
+            tracing::info!(
+                thread_id,
+                module_loaded = module.is_some(),
+                keyboard_hook = keyboard_hook.is_some(),
+                mouse_hook = mouse_hook.is_some(),
+                "global hook thread initialized"
+            );
+            if (keyboard && keyboard_hook.is_none()) || (mouse && mouse_hook.is_none()) {
+                if let Some(hook) = keyboard_hook {
+                    unsafe {
+                        let _ = UnhookWindowsHookEx(hook);
+                    }
+                }
+                if let Some(hook) = mouse_hook {
+                    unsafe {
+                        let _ = UnhookWindowsHookEx(hook);
+                    }
+                }
+                let _ = ready_tx.send(Err(()));
+                return;
             }
+
+            let _ = ready_tx.send(Ok(thread_id));
+            tracing::info!(thread_id, "global hook message pump started");
+            let mut message = MSG::default();
+            while unsafe { GetMessageW(&mut message, None, 0, 0).as_bool() } {
+                unsafe {
+                    let _ = TranslateMessage(&message);
+                    let _ = DispatchMessageW(&message);
+                }
+            }
+            if let Some(hook) = keyboard_hook {
+                unsafe {
+                    let _ = UnhookWindowsHookEx(hook);
+                }
+            }
+            if let Some(hook) = mouse_hook {
+                unsafe {
+                    let _ = UnhookWindowsHookEx(hook);
+                }
+            }
+            tracing::info!(thread_id, "global hook message pump stopped");
+        })
+        .ok()?;
+    let thread_id = match ready_rx.recv() {
+        Ok(Ok(thread_id)) => thread_id,
+        _ => {
+            let _ = thread.join();
+            return None;
         }
-        return None;
-    }
+    };
     Some(GlobalKeyMonitor {
-        keyboard: keyboard_hook.unwrap_or(HHOOK::default()),
-        mouse: mouse_hook.unwrap_or(HHOOK::default()),
+        thread_id,
+        thread: Some(thread),
     })
 }
 
@@ -503,13 +579,16 @@ pub(crate) fn install_global_key_monitor(
 impl Drop for GlobalKeyMonitor {
     fn drop(&mut self) {
         unsafe {
-            use windows::Win32::UI::WindowsAndMessaging::UnhookWindowsHookEx;
-            if !self.keyboard.is_invalid() {
-                let _ = UnhookWindowsHookEx(self.keyboard);
-            }
-            if !self.mouse.is_invalid() {
-                let _ = UnhookWindowsHookEx(self.mouse);
-            }
+            use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_QUIT};
+            let _ = PostThreadMessageW(
+                self.thread_id,
+                WM_QUIT,
+                windows::Win32::Foundation::WPARAM(0),
+                windows::Win32::Foundation::LPARAM(0),
+            );
+        }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
         }
     }
 }
@@ -523,7 +602,14 @@ fn send_global(event: deskhud_engine::PetEvent) {
         .lock()
         && let Some(proxy) = guard.as_ref()
     {
-        let _ = proxy.send_event(crate::runtime::viewport::UserEvent::PetEvent(event));
+        if proxy
+            .send_event(crate::runtime::viewport::UserEvent::PetEvent(event))
+            .is_err()
+        {
+            tracing::warn!("global input event dropped: event loop proxy unavailable");
+        }
+    } else {
+        tracing::warn!("global input event dropped: event loop proxy not installed");
     }
 }
 
@@ -538,19 +624,28 @@ unsafe extern "system" fn keyboard_proc(
     };
     if code >= 0 {
         let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
-        if let Some(key) = windows_vk_to_pet_key(info.vkCode as u16) {
+        let vk = info.vkCode as u16;
+        tracing::info!(vk, message = wparam.0, "raw global keyboard hook event");
+        if let Some(key) = windows_vk_to_pet_key(vk) {
             let pressed = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
+            // GetAsyncKeyState may be sampled just before Windows updates the
+            // state for this hook callback. Include the current modifier event
+            // explicitly so a standalone Ctrl/Shift/Alt is never lost.
+            let modifiers = windows_modifiers_for_event(info.vkCode as u16, pressed);
+            tracing::info!(
+                vk = info.vkCode,
+                ?key,
+                pressed,
+                ?modifiers,
+                "global keyboard hook event"
+            );
             send_global(if pressed {
-                deskhud_engine::PetEvent::GlobalKeyPressed {
-                    key,
-                    modifiers: windows_modifiers(),
-                }
+                deskhud_engine::PetEvent::GlobalKeyPressed { key, modifiers }
             } else {
-                deskhud_engine::PetEvent::GlobalKeyReleased {
-                    key,
-                    modifiers: windows_modifiers(),
-                }
+                deskhud_engine::PetEvent::GlobalKeyReleased { key, modifiers }
             });
+        } else {
+            tracing::warn!(vk, "unmapped global keyboard hook event");
         }
     }
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
@@ -564,7 +659,7 @@ unsafe extern "system" fn mouse_proc(
 ) -> windows::Win32::Foundation::LRESULT {
     use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, MSLLHOOKSTRUCT, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
-        WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
+        WM_MOUSEHWHEEL, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
     };
     if code >= 0 {
         let _info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
@@ -590,7 +685,7 @@ unsafe extern "system" fn mouse_proc(
                 },
             );
         }
-        if message == WM_MOUSEWHEEL {
+        if matches!(message, WM_MOUSEWHEEL | WM_MOUSEHWHEEL) {
             let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
             let delta = ((info.mouseData >> 16) as i16).signum() as i8;
             if delta != 0 {
@@ -607,17 +702,30 @@ unsafe extern "system" fn mouse_proc(
 #[cfg(target_os = "windows")]
 fn windows_modifiers() -> deskhud_engine::PetModifiers {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, VK_CONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN,
+        GetAsyncKeyState, VK_CONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
     };
     let down = |key: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY| unsafe {
         GetAsyncKeyState(key.0 as i32) < 0
     };
     deskhud_engine::PetModifiers {
-        shift: down(VK_LSHIFT),
+        shift: down(VK_SHIFT) || down(VK_LSHIFT),
         ctrl: down(VK_CONTROL),
-        alt: down(VK_LMENU),
-        meta: down(VK_LWIN),
+        alt: down(VK_MENU) || down(VK_LMENU),
+        meta: down(VK_LWIN) || down(VK_RWIN),
     }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_modifiers_for_event(vk: u16, pressed: bool) -> deskhud_engine::PetModifiers {
+    let mut modifiers = windows_modifiers();
+    match vk {
+        0x10 | 0xA0 | 0xA1 => modifiers.shift = pressed, // VK_SHIFT / left/right
+        0x11 | 0xA2 | 0xA3 => modifiers.ctrl = pressed,  // VK_CONTROL / left/right
+        0x12 | 0xA4 | 0xA5 => modifiers.alt = pressed,   // VK_MENU / left/right
+        0x5B | 0x5C => modifiers.meta = pressed,         // VK_LWIN / VK_RWIN
+        _ => {}
+    }
+    modifiers
 }
 
 #[cfg(target_os = "windows")]
@@ -628,18 +736,48 @@ fn windows_vk_to_pet_key(vk: u16) -> Option<PetKey> {
         0x0D => PetKey::Enter,
         0x1B => PetKey::Escape,
         0x20 => PetKey::Space,
+        0x24 => PetKey::Home,
+        0x23 => PetKey::End,
+        0x21 => PetKey::PageUp,
+        0x22 => PetKey::PageDown,
         0x25 => PetKey::ArrowLeft,
         0x26 => PetKey::ArrowUp,
         0x27 => PetKey::ArrowRight,
         0x28 => PetKey::ArrowDown,
+        0x2D => PetKey::Insert,
         0x2E => PetKey::Delete,
-        0x10 => PetKey::Shift,
-        0x11 => PetKey::Ctrl,
-        0x12 => PetKey::Alt,
+        0x2C => PetKey::PrintScreen,
+        0x91 => PetKey::ScrollLock,
+        0x13 => PetKey::Pause,
+        0x5D => PetKey::ContextMenu,
+        0x10 | 0xA0 | 0xA1 => PetKey::Shift,
+        0x11 | 0xA2 | 0xA3 => PetKey::Ctrl,
+        0x12 | 0xA4 | 0xA5 => PetKey::Alt,
         0x5B | 0x5C => PetKey::Super,
+        0x14 => PetKey::CapsLock,
+        0x90 => PetKey::NumLock,
+        0x60..=0x69 => PetKey::NumpadDigit((vk - 0x60) as u8),
+        0x6A => PetKey::NumpadMultiply,
+        0x6B => PetKey::NumpadAdd,
+        0x6C => PetKey::NumpadSeparator,
+        0x6D => PetKey::NumpadSubtract,
+        0x6E => PetKey::NumpadDecimal,
+        0x6F => PetKey::NumpadDivide,
         0x70..=0x7B => PetKey::Function((vk - 0x6F) as u8),
+        0x7C..=0x87 => PetKey::Function((vk - 0x6F) as u8),
         0x30..=0x39 => PetKey::Digit((b'0' + (vk - 0x30) as u8) as char),
         0x41..=0x5A => PetKey::Letter((b'A' + (vk - 0x41) as u8) as char),
+        0xBA => PetKey::Punct(';'),
+        0xBB => PetKey::Punct('='),
+        0xBC => PetKey::Punct(','),
+        0xBD => PetKey::Punct('-'),
+        0xBE => PetKey::Punct('.'),
+        0xBF => PetKey::Punct('/'),
+        0xC0 => PetKey::Punct('`'),
+        0xDB => PetKey::Punct('['),
+        0xDC => PetKey::Punct('\\'),
+        0xDD => PetKey::Punct(']'),
+        0xDE => PetKey::Punct('\''),
         _ => return None,
     })
 }

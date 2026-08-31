@@ -1,0 +1,10 @@
+msgid ""
+msgstr ""
+
+msgid "display_name"
+msgstr "小汤圆"
+
+msgid "description"
+msgstr "温柔亲人的小汤圆，心思细腻，既喜欢热闹互动，也享受安静陪伴，总会用柔软的方式回应你。"
+
+

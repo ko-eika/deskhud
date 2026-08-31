@@ -1,0 +1,14 @@
+msgid ""
+msgstr ""
+
+msgid ""
+msgstr ""
+
+msgid "clock.label"
+msgstr "Demo clock strip"
+
+msgid "tip.label"
+msgstr "Demo tip strip"
+
+
+

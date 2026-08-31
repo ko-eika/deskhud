@@ -86,11 +86,12 @@ impl PetKind for MyPet {
 | `GlobalMousePressed` / `GlobalMouseReleased` | 桌面任意处鼠标键边沿（全局） |
 | `GlobalMouseWheel { delta }` | 桌面滚轮（全局低层钩子；正=上） |
 | `GlobalKeyPressed` / `GlobalKeyReleased` | 桌面键盘子集边沿（全局采样；含空格） |
+| `KeyCombinationPressed` | 引擎根据修饰键状态提升的组合键按下事件 |
 | `KeyPressed` / `KeyReleased` | 键盘（**需宠窗焦点**；透明 TOOLWINDOW 上常不可靠） |
 
 键鼠类型：`PetMouseButton`、`PetKey`、`PetModifiers`（均为中性枚举，无虚拟键码）。
 
-**键盘说明**：完整全局热键钩子不在本契约内。壳对修饰键（Ctrl/Shift/Alt/Win）、主键区字母数字、常用标点、F1–F12、方向与编辑键、小键盘数字/运算符/NumLock/扩展 Enter 等做低级 Hook，并以 `GetAsyncKeyState` 边沿采样回退，派发 `GlobalKey*`；获焦时另有 `Key*`。
+**键盘说明**：完整全局热键钩子不在本契约内。壳对修饰键（Ctrl/Shift/Alt/Win）、主键区字母数字、常用标点、F1–F12、方向与编辑键、小键盘数字/运算符/NumLock/扩展 Enter、PrintScreen、ScrollLock、Pause 和 ContextMenu 等做低级 Hook，并以 `GetAsyncKeyState` 边沿采样回退，派发 `GlobalKey*`；引擎会根据修饰键状态额外派发 `KeyCombinationPressed`；获焦时另有 `Key*`。
 
 外观：`PetPaint.bubble_text` 可选短句；当前 Windows 原生后端把它绘制在宿主管理的独立透明工具窗中，超长截断，并按工作区自动选择宠物上方或下方、限制在屏幕内。后续 `PetFrame` 会增加平台无关的首选方位、气泡皮肤、透明度、尾巴与文字样式；包不得直接创建平台窗口。
 
@@ -113,8 +114,10 @@ crates/packs/pet-deskhud-mochi/   # 糯米团包源码
   Cargo.toml               # 原生实现（compile-in；不会打进 .deskhud）
   manifest.toml
   assets/preview.svg
-  i18n/zh-CN.toml
-  i18n/en.toml
+  i18n/zh-CN/info.po
+  i18n/zh-CN/config.po
+  i18n/en-US/info.po
+  i18n/en-US/config.po
   src/lib.rs
 ```
 
@@ -233,8 +236,18 @@ my-hud.deskhud/
   guest.wasm
   assets/icon.svg
   assets/clock.svg
-  i18n/en.toml
+  i18n/en-US/info.mo
+  i18n/en-US/config.mo
 ```
+
+扩展使用 gettext 资源：源码目录按职责拆分为 `i18n/<locale>/info.po` 和
+`i18n/<locale>/config.po`，发布包对应为 `.mo`。PO 必须是 UTF-8；每个
+`msgid` 使用 DeskHud 的 i18n 键，空的 `msgstr` 会安全地视为缺失翻译。语言标签
+支持 `en-US`、`en`、`zh-CN`、`zh_CN` 等写法，运行时会自动发现并在设置页中
+显示新语言。
+
+从 0.9.0 起，包内国际化只支持上述 PO/MO 目录格式；旧版
+`i18n/<locale>.toml` 文件不再读取。
 
 `manifest.toml` 示例：
 
@@ -242,8 +255,8 @@ my-hud.deskhud/
 id = "hud.acme.clock"
 kind = "plugin"
 version = "1.0.0"
-engine = "0.8"
-api_version = 3
+engine = "0.9"
+api_version = 4
 display_name = "时钟"
 icon = "assets/icon.svg"
 

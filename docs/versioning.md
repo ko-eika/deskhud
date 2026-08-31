@@ -2,6 +2,10 @@
 
 DeskHud 区分三类版本，避免混用：
 
+当前发布线为 `0.9.0`：包兼容族为 `engine = "0.9"`，Guest / WIT 契约为
+`api_version = 4`。`0.8.x` 包应继续由对应的 `0.8` 运行时加载，不应直接混用到
+`0.9` 兼容族。
+
 | 名称 | 谁拥有 | 作用 |
 |------|--------|------|
 | **引擎产品版本** | DeskHud 自身（`Cargo.toml` / 关于页） | SemVer 发版号 |
@@ -30,7 +34,7 @@ id = "pet.community.cool_cat"
 kind = "pet"
 version = "1.0.3"    # 包自身
 engine = "0.4"       # 适配族
-api_version = 3      # Guest/契约 ABI
+api_version = 4      # Guest/契约 ABI
 ```
 
 ## `engine` 族匹配

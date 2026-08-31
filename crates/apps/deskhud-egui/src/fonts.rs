@@ -123,6 +123,9 @@ pub(crate) fn language_tag_for(locale: Locale) -> deskhud_ui::LanguageTag {
             deskhud_ui::LanguageTag::parse("en-US").expect("built-in English locale tag must parse")
         }
         Locale::System => current_locale().clone(),
+        Locale::Custom(tag) => {
+            deskhud_ui::LanguageTag::parse(&tag).unwrap_or_else(|| current_locale().clone())
+        }
     }
 }
 

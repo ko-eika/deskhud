@@ -32,8 +32,8 @@ my-cool-pet.deskhud/
   guest.wasm          # 社区包；内置可无此文件而由 host 原生注册
   assets/             # 可选皮肤资源
   i18n/
-    en.toml
-    zh-CN.toml
+    en-US/info.po      # 源码包
+    zh-CN/info.po
 ```
 
 `manifest.toml` 核心字段：
@@ -53,7 +53,7 @@ my-cool-pet.deskhud/
 Host 契约（当前）：
 
 - `tick(dt)`：自主状态 / 动画（默认空）
-- `on_event(PetEvent)`：贴边 / 拖拽 / 键鼠（`DockChanged`、`Drag*`、`Mouse*`、`Key*`）
+- `on_event(PetEvent)`：贴边 / 拖拽 / 键鼠（`DockChanged`、`Drag*`、`Mouse*`、`Key*`、`KeyCombinationPressed`）
 - `config_options()` / `apply_config`：声明布尔行为开关；prefs 键 `{pet_id}.{key}`
 - `paint(PetPaintCtx)`：输出 `PetPaint`；可读 `dock` / `drag` / `mouse` / `config` / 已解析的 `theme`
 - UI 壳负责工作区几何、拖动吸附与输入转发；宠物包不读 HWND / 屏幕坐标
@@ -102,13 +102,27 @@ Host 契约（当前）：
 
 1. 启动 / 加载包时扫描：
    - 外壳：`deskhud-ui` 内置目录
-   - 每个宠物包 / 插件包：`i18n/<locale>.toml`
+   - 外壳：`i18n/<locale>/interface.po`、`info.po`、`settings.po`；宠物包 / HUD 插件：`i18n/<locale>/info.po`、`config.po`
 2. 合并进 `CatalogStore`，键命名空间：
    - `shell.*`
    - `pet.<pack_id>.*`
    - `plugin.<pack_id>.*`
 3. 用户改语言 → 只切换查询 locale，目录已加载则无需重编译。
-4. 回退：请求 locale → `en` → 键名本身。
+4. 回退：请求 locale 的精确变体 → 语言族（如 `ja-JP` → `ja`）→ `en` → 键名/调用方默认文案。
+
+### 运行时 gettext 语言资源
+
+程序启动时会扫描可执行文件所在目录的 `i18n/`，以及当前工作目录的
+`i18n/`。每个语言目录可放置 `interface.mo`、`info.mo`、`settings.mo`，例如
+`i18n/zh_CN/interface.mo`、`info.mo`、`settings.mo`。标签会统一为 BCP-47 形式（`zh_CN`、`zh-CN`
+和 `zh-cn` 等价）。运行时只读取 MO；文件损坏或无效 MO 只会被记录并跳过，
+不影响其它语言和内置文案。资源在每次启动扫描，新增
+文件无需重新编译程序。
+
+gettext 的 `msgid` 是 DeskHud 的完整 i18n 键；包内资源在源码中使用 PO，发布时
+转换为 `i18n/<locale>/info.mo` 或 `config.mo`。合并顺序为
+外部运行时目录、内置包/已发现包按扫描顺序；同一层后加载值覆盖先加载值，
+查询时再按上述语言与文案回退规则处理。
 
 ## 安全边界（社区包）
 

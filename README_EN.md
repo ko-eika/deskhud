@@ -2,7 +2,7 @@
 <h4 align="center">An extensible desktop pet engine</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.8.2-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.9.0-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.95+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -13,7 +13,7 @@
 
 [简体中文](./README.md) | English
 
-DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.8.2`, with community pet asset rendering, stronger WASM metadata validation, and improved multi-display docking behavior.
+DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.9.0`, with an expanded WASM Guest input contract, PO/MO localization, and stronger cross-platform input and package runtime support.
 
 ## Features
 
@@ -65,7 +65,7 @@ Preferences are persisted (locale, theme, font, active pet, HUD switches, window
 | Built-in extensions | Native Rust `PetKind` / `Plugin` |
 | Community extensions | WASM (wasmtime) + `deskhud-sdk` (planned) |
 | Pack format | `.deskhud` + `manifest.toml` |
-| Config | `serde` + TOML prefs / manifest / pack i18n |
+| Config | `serde` + TOML prefs / manifest; pack i18n uses gettext PO/MO |
 
 **Out of scope for now**: plugin store, community native DLLs, plugins using egui directly, UI depending on `git2`.
 
@@ -133,8 +133,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud-egui
 
 # 4. Tag, push, and attach binaries on a GitHub Release
-git tag -a v0.8.2 -m "DeskHud 0.8.2"
-git push origin v0.8.2
+git tag -a v0.9.0 -m "DeskHud 0.9.0"
+git push origin v0.9.0
 ```
 
 CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs cross-platform `check` / tests only; it does **not** publish installers yet.
@@ -162,8 +162,12 @@ my-cool-pet.deskhud/
   guest.wasm          # community pack (planned)
   assets/
   i18n/
-    zh-CN.toml
-    en.toml
+    zh-CN/
+      info.mo
+      config.mo
+    en-US/
+      info.mo
+      config.mo
 ```
 
 ## Docs

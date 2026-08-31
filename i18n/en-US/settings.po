@@ -1,0 +1,225 @@
+msgid ""
+msgstr ""
+
+msgid ""
+msgstr ""
+
+msgid "SettingsTitle"
+msgstr "Settings"
+
+msgid "SettingsPerformanceIntro"
+msgstr "Adjust frame rate, animation, and effects preferences."
+
+msgid "SettingsPerformanceFps"
+msgstr "Frame rate limit"
+
+msgid "SettingsPerformanceAuto"
+msgstr "Auto"
+
+msgid "SettingsPerformanceAnimation"
+msgstr "Animation quality"
+
+msgid "SettingsPerformanceLow"
+msgstr "Low"
+
+msgid "SettingsPerformanceStandard"
+msgstr "Standard"
+
+msgid "SettingsPerformanceHigh"
+msgstr "High"
+
+msgid "SettingsPerformancePower"
+msgstr "Performance mode"
+
+msgid "SettingsPerformanceSaving"
+msgstr "Power saving"
+
+msgid "SettingsPerformanceBalanced"
+msgstr "Balanced"
+
+msgid "SettingsPerformanceSmooth"
+msgstr "Smooth"
+
+msgid "SettingsPerformanceEffects"
+msgstr "Effects"
+
+msgid "SettingsPerformanceBubbles"
+msgstr "Bubbles"
+
+msgid "SettingsPerformanceShadows"
+msgstr "Shadows"
+
+msgid "SettingsAboutIntro"
+msgstr "App info and version for DeskHud."
+
+msgid "SettingsAboutVersion"
+msgstr "Version"
+
+msgid "SettingsAboutLicense"
+msgstr "License"
+
+msgid "SettingsAboutStack"
+msgstr "A desktop pet engine built with Rust and egui."
+
+msgid "SettingsPetIntro"
+msgstr "Takes effect after you Select and Apply. Third-party pets may monitor keyboard/mouse input and pose privacy or security risks—only install packs from sources you trust."
+
+msgid "SettingsPetWindowSize"
+msgstr "Window"
+
+msgid "SettingsPetOptions"
+msgstr "Active pet behavior"
+
+msgid "SettingsPetList"
+msgstr "Pet list"
+
+msgid "SettingsPetConfig"
+msgstr "Pet configuration"
+
+msgid "SettingsPetGlobal"
+msgstr "Global configuration"
+
+msgid "SettingsPetBubbles"
+msgstr "Message bubbles"
+
+msgid "SettingsPetBubblesHint"
+msgstr "Show message bubbles for the pet."
+
+msgid "SettingsPetKeyboardInput"
+msgstr "Global keyboard input"
+
+msgid "SettingsPetKeyboardInputHint"
+msgstr "Allow the active pet to receive desktop-wide keyboard events."
+
+msgid "SettingsPetMouseInput"
+msgstr "Global mouse input"
+
+msgid "SettingsPetMouseInputHint"
+msgstr "Allow the active pet to receive desktop-wide mouse events."
+
+msgid "HudSettingsIntro"
+msgstr "Takes effect after you Enable and Apply. Third-party plugins may read system info or show content and pose privacy or security risks—only enable plugins from sources you trust."
+
+msgid "HudSettingsEmpty"
+msgstr "No plugin contributions available."
+
+msgid "MetaAuthor"
+msgstr "Author"
+
+msgid "MetaVersion"
+msgstr "Version"
+
+msgid "MetaEngine"
+msgstr "Engine"
+
+msgid "HudItemsEnabled"
+msgstr "enabled"
+
+msgid "MetaHomepage"
+msgstr "Homepage"
+
+msgid "SettingsLocale"
+msgstr "Language"
+
+msgid "SettingsTheme"
+msgstr "Theme"
+
+msgid "OptThemeLight"
+msgstr "Light"
+
+msgid "OptThemeDark"
+msgstr "Dark"
+
+msgid "OptThemeSystem"
+msgstr "Use system setting"
+
+msgid "SettingsUiFont"
+msgstr "Font"
+
+msgid "SettingsUiFontFamily"
+msgstr "Family"
+
+msgid "SettingsUiFontStyle"
+msgstr "Style"
+
+msgid "SettingsUiFontSize"
+msgstr "Size"
+
+msgid "SettingsUiFontPreview"
+msgstr "The sound of waves calms my mind. DeskHud 123"
+
+msgid "HudPluginDisabledHint"
+msgstr "Plugin is off; contributions stay hidden"
+
+msgid "HudMasterEnable"
+msgstr "Enable plugins"
+
+msgid "HudMasterEnableHint"
+msgstr "When off, no HUD is shown"
+
+msgid "HudMasterDisabledHint"
+msgstr "Off: all HUD stays hidden"
+
+msgid "HudLayoutEdit"
+msgstr "Plugin layout"
+
+msgid "HudLayoutEditingHint"
+msgstr "Layout editor is open: drag chips; Reset/Cancel/Apply at the top"
+
+msgid "HudLayoutDone"
+msgstr "Apply"
+
+msgid "HudLayoutCancel"
+msgstr "Cancel"
+
+msgid "HudLayoutHint"
+msgstr "Click to select · drag to move · corner scales by grid"
+
+msgid "HudLayoutResetSize"
+msgstr "Reset size"
+
+msgid "HudLayoutResetSizeHint"
+msgstr "Restore the default 1× size"
+
+msgid "SettingsTopmost"
+msgstr "Keep on top"
+
+msgid "SettingsTopmostHint"
+msgstr "Keep only the pet and HUD on top; Settings remains a normal window."
+
+msgid "SettingsPetLayer"
+msgstr "Pet layer"
+
+msgid "SettingsPetLayerHint"
+msgstr "Choose the pet's desktop window layer."
+
+msgid "OptLocaleZh"
+msgstr "简体中文"
+
+msgid "OptLocaleSystem"
+msgstr "System"
+
+msgid "OptLocaleEn"
+msgstr "English"
+
+msgid "InputKeyPrimary"
+msgstr "Left mouse button"
+
+msgid "InputKeySecondary"
+msgstr "Right mouse button"
+
+msgid "InputKeyMiddle"
+msgstr "Middle mouse button"
+
+msgid "InputKeyWheelUp"
+msgstr "Scroll up"
+
+msgid "InputKeyWheelDown"
+msgstr "Scroll down"
+
+msgid "InputKeyPress"
+msgstr "Key pressed"
+
+
+
+

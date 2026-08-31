@@ -2,6 +2,7 @@
 
 mod dock_state;
 mod drag_state;
+mod key_tracker;
 mod modifiers;
 mod mouse_button;
 mod mouse_state;
@@ -16,6 +17,7 @@ mod scene;
 
 pub use dock_state::DockState;
 pub use drag_state::DragState;
+pub use key_tracker::PetKeyTracker;
 pub use modifiers::PetModifiers;
 pub use mouse_button::PetMouseButton;
 pub use mouse_state::MouseState;

@@ -1,0 +1,11 @@
+msgid ""
+msgstr ""
+
+msgid "display_name"
+msgstr "Sesame"
+
+msgid "description"
+msgstr "Sesame is gentle, observant, and curious about small changes around her; she is never loud, but her clever little responses can make an ordinary day feel lighter"
+
+
+

@@ -1,7 +1,7 @@
 //! # deskhud-ui
 //!
 //! 与 egui 无关的壳偏好：i18n（外壳 + 包目录合并）、桌宠 prefs、HUD 开关。
-//! 包内 `i18n/*.toml` 的文件形状见 `deskhud-package`；合并见 [`CatalogStore`]。
+//! 包内 `i18n/<locale>/info.po` / `config.po`（发布为 `.mo`）的文件形状见 `deskhud-package`；合并见 [`CatalogStore`]。
 
 #![deny(missing_docs)]
 
@@ -18,7 +18,8 @@ pub mod system_locale;
 pub use font::{FontFace, FontFamilyEntry, FontSelection};
 pub use hud::{HudConfigValue, HudPrefs, HudSlotLayout};
 pub use i18n::{
-    CatalogStore, Locale, MessageKey, locale_file_candidates, locale_tag, seed_builtin_packs,
+    CatalogStore, Locale, MessageKey, locale_file_candidates, locale_tag, normalize_locale_tag,
+    seed_builtin_packs,
 };
 pub use persist::{
     PersistError, PrefsWriteOrder, format_prefs, format_prefs_ordered, load, load_or_default,

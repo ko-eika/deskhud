@@ -368,6 +368,10 @@ fn event_to_guest(event: PetEvent) -> Option<pet_api::Event> {
         PetKey::End => KeyValue::Named(pet_api::Key::End),
         PetKey::PageUp => KeyValue::Named(pet_api::Key::PageUp),
         PetKey::PageDown => KeyValue::Named(pet_api::Key::PageDown),
+        PetKey::PrintScreen => KeyValue::Named(pet_api::Key::PrintScreen),
+        PetKey::ScrollLock => KeyValue::Named(pet_api::Key::ScrollLock),
+        PetKey::Pause => KeyValue::Named(pet_api::Key::Pause),
+        PetKey::ContextMenu => KeyValue::Named(pet_api::Key::ContextMenu),
         PetKey::Shift => KeyValue::Named(pet_api::Key::Shift),
         PetKey::Ctrl => KeyValue::Named(pet_api::Key::Ctrl),
         PetKey::Alt => KeyValue::Named(pet_api::Key::Alt),
@@ -447,6 +451,10 @@ fn event_to_guest(event: PetEvent) -> Option<pet_api::Event> {
             key: k,
             modifiers: m,
         } => Event::KeyPressed((key(k), modifiers(m))),
+        PetEvent::KeyCombinationPressed {
+            key: k,
+            modifiers: m,
+        } => Event::KeyCombinationPressed((key(k), modifiers(m))),
         PetEvent::KeyReleased {
             key: k,
             modifiers: m,

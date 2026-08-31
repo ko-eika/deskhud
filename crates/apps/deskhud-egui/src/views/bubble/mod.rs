@@ -56,8 +56,10 @@ impl PetBubbleWindow {
         content: Option<BubbleContent>,
         anchor: PhysicalPosition<i32>,
         prefs: &UiPreferences,
-    ) {
+    ) -> bool {
         let was_visible = self.content.is_some();
+        let text_changed = self.content.as_ref().map(|current| current.text.as_str())
+            != content.as_ref().map(|next| next.text.as_str());
         self.content = content;
         self.font_size = prefs.shell.ui_font_size.max(10.0);
         self.viewport.apply_ui_preferences(prefs);
@@ -72,6 +74,7 @@ impl PetBubbleWindow {
             self.viewport
                 .set_visible_without_focus(self.content.is_some());
         }
+        text_changed
     }
     pub(crate) fn render(&mut self) {
         let content = self.content.clone();

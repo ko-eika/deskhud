@@ -96,6 +96,13 @@ pub enum PetEvent {
         /// 修饰键。
         modifiers: PetModifiers,
     },
+    /// 引擎根据当前修饰键状态提升出的组合键按下事件。
+    KeyCombinationPressed {
+        /// 当前按下的实体按键。
+        key: PetKey,
+        /// 组合键中的修饰键快照。
+        modifiers: PetModifiers,
+    },
     /// 键盘按下（需宠窗拥有键盘焦点；非全局热键）。
     KeyPressed {
         /// 按键。

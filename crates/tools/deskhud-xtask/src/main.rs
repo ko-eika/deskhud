@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-use deskhud_package::{pack_directory, read_manifest_dir};
+use deskhud_package::{PackCatalog, pack_directory, read_manifest_dir};
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -86,6 +86,13 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
         let to = dest.join(&name);
         if path.is_dir() {
             copy_dir_recursive(&path, &to)?;
+        } else if path.extension().and_then(|e| e.to_str()) == Some("po")
+            && src.components().any(|c| c.as_os_str() == "i18n")
+        {
+            let catalog = PackCatalog::parse_gettext(&fs::read(&path).map_err(|e| e.to_string())?)
+                .map_err(|e| format!("parse {}: {e}", path.display()))?;
+            let mo = to.with_extension("mo");
+            fs::write(mo, catalog.to_mo()).map_err(|e| e.to_string())?;
         } else {
             fs::write(&to, fs::read(&path).map_err(|e| e.to_string())?)
                 .map_err(|e| e.to_string())?;

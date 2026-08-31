@@ -171,9 +171,6 @@ impl MenuController {
         let root_output = self
             .window
             .render(definition, self.submenu_path.first().copied(), prefs);
-        if root_output.hovered_item.is_some() {
-            self.focus_lost_at = None;
-        }
         let mut parent_output = root_output;
         let mut selected_item = parent_output.selected_item.clone();
         let mut should_close = parent_output.viewport.should_close;
@@ -337,7 +334,10 @@ impl MenuController {
                 selected_item = child_output.selected_item.clone();
             }
             parent_output = child_output;
-            if parent_output.hovered_item.is_some() {
+            // 子菜单窗口不会主动获取焦点，因而根菜单可能仍保留失焦计时；
+            // 只有子菜单实际收到 hover 时才允许取消该计时。不能使用根菜单
+            // 的 hover 结果，因为 egui 会保留根视口上一次的鼠标位置。
+            if parent_output.hovered_item.is_some() && depth > 0 {
                 self.focus_lost_at = None;
             }
             depth += 1;

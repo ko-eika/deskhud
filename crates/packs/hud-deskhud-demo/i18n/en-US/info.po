@@ -1,0 +1,11 @@
+msgid ""
+msgstr ""
+
+msgid "display_name"
+msgstr "Demo HUD"
+
+msgid "description"
+msgstr "Sample plugin: demo strips at the bottom of the pet window"
+
+
+

@@ -1,0 +1,12 @@
+msgid ""
+msgstr ""
+
+msgid ""
+msgstr ""
+
+msgid "clock.label"
+msgstr "演示时钟条"
+
+msgid "tip.label"
+msgstr "演示提示条"
+

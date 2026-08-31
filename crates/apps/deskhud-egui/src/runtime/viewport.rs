@@ -286,10 +286,11 @@ impl Viewport {
 
     pub(crate) fn set_visible_without_focus(&mut self, visible: bool) {
         self.visible = visible;
-        self.gl_window.window().set_visible(visible);
+        let _ = self.proxy.send_event(UserEvent::WindowCommand {
+            window_id: self.window_id(),
+            command: super::render::WindowCommand::SetVisibleWithoutFocus { visible },
+        });
         if visible {
-            let _ = self.gl_window.window().set_cursor_hittest(true);
-            self.gl_window.window().request_redraw();
             let _ = self.proxy.send_event(UserEvent::Repaint);
         }
     }

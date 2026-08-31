@@ -487,20 +487,18 @@ fn toml_f64(v: &toml::Value) -> Option<f64> {
     v.as_float().or_else(|| v.as_integer().map(|i| i as f64))
 }
 
-fn locale_tag(locale: Locale) -> &'static str {
+fn locale_tag(locale: Locale) -> String {
     match locale {
-        Locale::System => "system",
-        Locale::ZhCn => "zh-cn",
-        Locale::En => "en",
+        Locale::System => "system".into(),
+        other => other.tag(),
     }
 }
 
 fn parse_locale(s: &str) -> Locale {
-    match s {
-        "system" | "auto" => Locale::System,
-        "en" | "en-US" | "en_US" => Locale::En,
-        _ => Locale::System,
+    if s.eq_ignore_ascii_case("auto") {
+        return Locale::System;
     }
+    Locale::from_tag(s).unwrap_or(Locale::System)
 }
 
 fn theme_tag(theme: UiTheme) -> &'static str {
@@ -730,7 +728,7 @@ mod tests {
 
         let text = format_prefs(&prefs);
         assert!(text.contains("[theme]\n"));
-        assert!(text.contains("locale = \"en\""));
+        assert!(text.contains("locale = \"en-US\""));
         assert!(!text.starts_with("locale ="));
         assert!(text.contains("[prefs]\n"));
         assert!(
@@ -846,7 +844,7 @@ picker_mode = "list"
         let out = format_prefs(&prefs);
         assert!(out.contains("[theme]\n"));
         assert!(out.contains("mode = \"light\""));
-        assert!(out.contains("locale = \"en\""));
+        assert!(out.contains("locale = \"en-US\""));
         assert!(out.contains("[font]\n"));
         assert!(out.contains("id = \"NotoSansSC-Regular\""));
         assert!(out.contains("family = \"notosanssc\""));
@@ -903,7 +901,7 @@ locale = "en"
         let out = format_prefs(&prefs);
         let settings_at = out.find("[prefs]").unwrap();
         let theme_at = out.find("[theme]").unwrap();
-        let locale_at = out.find("locale = \"en\"").unwrap();
+        let locale_at = out.find("locale = \"en-US\"").unwrap();
         assert!(settings_at < theme_at);
         assert!(locale_at > theme_at);
     }

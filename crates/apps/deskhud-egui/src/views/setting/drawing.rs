@@ -79,7 +79,7 @@ pub(super) fn draw(
                 .id_salt("settings_content_scroll")
                 .auto_shrink([false, false])
                 .show(ui, |ui| match model.tab {
-                    SettingsTab::General => draw_general(ui, model),
+                    SettingsTab::General => draw_general(ui, model, catalogs),
                     SettingsTab::Performance => draw_performance(ui, model),
                     SettingsTab::Pet => draw_pet(ui, registry, catalogs, model),
                     SettingsTab::Hud => draw_hud(ui, registry, model),
@@ -207,7 +207,7 @@ fn draw_nav_icon(ui: &egui::Ui, center: Pos2, tab: SettingsTab, color: Color32) 
     );
 }
 
-fn draw_general(ui: &mut egui::Ui, model: &mut SettingsModel) {
+fn draw_general(ui: &mut egui::Ui, model: &mut SettingsModel, catalogs: &CatalogStore) {
     ui.heading(
         RichText::new(text(model, MessageKey::SettingsNavGeneral))
             .font(fonts::scaled_font(ui, 1.71)),
@@ -235,7 +235,7 @@ fn draw_general(ui: &mut egui::Ui, model: &mut SettingsModel) {
                 ui,
                 text(model, MessageKey::SettingsLocale),
                 None::<RichText>,
-                |ui| locale_combo(ui, model),
+                |ui| locale_combo(ui, model, catalogs),
             );
         },
         None,
@@ -1097,9 +1097,16 @@ fn pet_catalog_text(
     field: &str,
     fallback: &str,
 ) -> String {
-    catalogs
-        .t(locale, &format!("{id}.{field}"), fallback)
-        .to_owned()
+    let key = format!("{id}.{field}");
+    // Package metadata and config entries carry the stable PO msgid here.
+    // Use the complete key as the fallback so a missing package catalog is
+    // handled by the shared safe fallback instead of exposing the msgid.
+    let fallback = if fallback == field || fallback.contains('.') {
+        key.as_str()
+    } else {
+        fallback
+    };
+    catalogs.t(locale, &key, fallback).to_owned()
 }
 
 fn pet_tooltip(
@@ -1476,7 +1483,7 @@ fn theme_combo(ui: &mut egui::Ui, model: &mut SettingsModel) {
     }
 }
 
-fn locale_combo(ui: &mut egui::Ui, model: &mut SettingsModel) {
+fn locale_combo(ui: &mut egui::Ui, model: &mut SettingsModel, catalogs: &CatalogStore) {
     let current = model.draft.locale;
     let options = vec![
         (
@@ -1492,17 +1499,23 @@ fn locale_combo(ui: &mut egui::Ui, model: &mut SettingsModel) {
             text_for_locale(current, MessageKey::OptLocaleEn).into(),
         ),
     ];
-    let selected = match current {
+    let selected = match &current {
         Locale::ZhCn => "zh-CN",
         Locale::En => "en-US",
         Locale::System => "system",
+        Locale::Custom(tag) => tag,
     };
+    let mut options = options;
+    for tag in catalogs.locales() {
+        if matches!(tag.as_str(), "en" | "en-US" | "zh" | "zh-CN") {
+            continue;
+        }
+        if !options.iter().any(|(id, _)| id == &tag) {
+            options.push((tag.clone(), tag));
+        }
+    }
     if let Some(value) = components::dropdown(ui, "settings_locale", selected, &options, false) {
-        model.draft.locale = match value.as_str() {
-            "zh-CN" => Locale::ZhCn,
-            "en-US" => Locale::En,
-            _ => Locale::System,
-        };
+        model.draft.locale = Locale::from_tag(&value).unwrap_or(Locale::System);
     }
 }
 
@@ -1527,6 +1540,6 @@ fn text(model: &SettingsModel, key: MessageKey) -> &'static str {
 fn text_for_locale(locale: Locale, key: MessageKey) -> &'static str {
     match locale.resolved() {
         Locale::ZhCn => deskhud_ui::i18n::t(Locale::ZhCn, key),
-        Locale::En | Locale::System => deskhud_ui::i18n::t(Locale::En, key),
+        Locale::En | Locale::System | Locale::Custom(_) => deskhud_ui::i18n::t(Locale::En, key),
     }
 }

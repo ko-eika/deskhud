@@ -1,0 +1,48 @@
+msgid ""
+msgstr ""
+
+msgid ""
+msgstr ""
+
+msgid "custom_bubble.label"
+msgstr "个性气泡"
+
+msgid "custom_bubble.description"
+msgstr "使用宠物包定义的气泡颜色和圆角"
+
+msgid "follow_eyes.label"
+msgstr "眼睛效果"
+
+msgid "follow_eyes.description"
+msgstr "鼠标移动时跟随，空闲后回正，点击时短暂朝鼠标方向瞪眼"
+
+msgid "key_tips.label"
+msgstr "按键提示"
+
+msgid "key_tips.description"
+msgstr "键盘按下时显示短气泡（如 Ctrl+C）"
+
+msgid "mouse_tips.label"
+msgstr "鼠标提示"
+
+msgid "mouse_tips.description"
+msgstr "全局鼠标按键 / 滚轮时显示短气泡"
+
+msgid "hover_highlight.label"
+msgstr "悬停效果"
+
+msgid "hover_highlight.description"
+msgstr "指针停在宠上时提供视觉反馈"
+
+msgid "dock_tint.label"
+msgstr "贴边效果"
+
+msgid "dock_tint.description"
+msgstr "吸附屏幕边缘时提供视觉反馈"
+
+msgid "drag_tint.label"
+msgstr "拖拽效果"
+
+msgid "drag_tint.description"
+msgstr "拖拽宠物时提供视觉反馈"
+

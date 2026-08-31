@@ -1,0 +1,9 @@
+msgid ""
+msgstr ""
+
+msgid "display_name"
+msgstr "芝麻豆"
+
+msgid "description"
+msgstr "芝麻豆温柔细腻又充满好奇，喜欢留意身边的小变化；她不喧闹，却总能用灵巧的回应让日常变得轻快。"
+

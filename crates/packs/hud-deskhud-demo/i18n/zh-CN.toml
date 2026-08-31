@@ -1,4 +1,0 @@
-display_name = "演示 HUD"
-description = "示例插件：开关后在宠窗底部显示演示条（非真实数据源）"
-"clock.label" = "演示时钟条"
-"tip.label" = "演示提示条"

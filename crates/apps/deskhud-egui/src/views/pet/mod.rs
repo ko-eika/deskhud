@@ -179,7 +179,7 @@ pub(crate) fn run(
             })
         }));
         let scene = scene_result.unwrap_or_else(|_| {
-            eprintln!("pet scene generation panicked; skipping frame");
+            tracing::error!("pet scene generation panicked; skipping frame");
             deskhud_engine::PetScene::default()
         });
         *last_scene = scene.clone();
@@ -187,7 +187,7 @@ pub(crate) fn run(
         let valid_scene = match scene.validate() {
             Ok(()) => true,
             Err(error) => {
-                eprintln!("pet scene rejected: {error:?}");
+                tracing::error!(?error, "pet scene rejected");
                 false
             }
         };

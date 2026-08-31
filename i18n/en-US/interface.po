@@ -1,0 +1,52 @@
+msgid ""
+msgstr ""
+
+msgid "AppName"
+msgstr "DeskHud"
+
+msgid "ActionCancel"
+msgstr "Cancel"
+
+msgid "ActionApply"
+msgstr "Apply"
+
+msgid "ActionReset"
+msgstr "Reset"
+
+msgid "MenuQuit"
+msgstr "Quit"
+
+msgid "MenuSettings"
+msgstr "Settings"
+
+msgid "SettingsNavPet"
+msgstr "Pet"
+
+msgid "SettingsNavHud"
+msgstr "Plugins"
+
+msgid "SettingsNavGeneral"
+msgstr "General"
+
+msgid "SettingsNavPerformance"
+msgstr "Performance"
+
+msgid "MenuHudLayout"
+msgstr "Plugin layout"
+
+msgid "MenuPluginLayer"
+msgstr "Plugin layer"
+
+msgid "MenuLayerTop"
+msgstr "Always on top"
+
+msgid "MenuLayerNormal"
+msgstr "Normal"
+
+msgid "MenuLayerBottom"
+msgstr "Always on bottom"
+
+
+
+
+

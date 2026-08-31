@@ -1,0 +1,8 @@
+msgid ""
+msgstr ""
+
+msgid "SettingsNavAbout"
+msgstr "关于"
+
+
+

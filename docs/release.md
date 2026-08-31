@@ -12,6 +12,12 @@ DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布
 2. [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) 中的 version 徽章
 3. （可选）`CHANGELOG` / Release 说明正文
 
+### 0.9.0 变更摘要
+
+- 将 WASM Guest ABI 升至 `api_version = 4`：补充 PrintScreen、ScrollLock、Pause、ContextMenu 按键及组合键按下事件。
+- 完成 PO/MO 国际化资源迁移：源码使用 PO，发布目录使用 MO；支持语言族回退和运行时扫描，不再读取旧 TOML 国际化包。
+- 增加统一的键盘组合状态跟踪、跨平台输入映射和本地化输入提示，并同步内置包与引擎兼容族至 `0.9`。
+
 ### 0.8.2 变更摘要
 
 - 接通社区宠物包的图片、图集和序列资源，从包索引加载并在 egui 场景渲染器中绘制。
@@ -128,5 +134,10 @@ cargo pack-builtin hud-deskhud-demo
 # 指定输出目录
 cargo pack-builtins --out dist/my-packs
 ```
+
+桌面程序构建会将 `i18n/<locale>/*.po` 编译为
+`target/<profile>/i18n/<locale>/*.mo`。优先调用系统 `msgfmt`；开发环境未安装
+gettext 时使用内置等价编译器。发布目录只需携带生成的 `i18n/`，不需要携带 PO
+源文件。
 
 Debug / release 运行时会直接扫描对应的 `target/<profile>/packages/`。更多上下文见 [`docs/extension-guide.md`](./extension-guide.md) §1.6。

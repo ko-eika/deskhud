@@ -1,0 +1,181 @@
+msgid ""
+msgstr ""
+
+msgid "InputKey.Escape"
+msgstr "Esc"
+
+msgid "InputKey.Tab"
+msgstr "Tab"
+
+msgid "InputKey.Enter"
+msgstr "Enter"
+
+msgid "InputKey.Space"
+msgstr "Space"
+
+msgid "InputKey.Backspace"
+msgstr "Backspace"
+
+msgid "InputKey.Delete"
+msgstr "Delete"
+
+msgid "InputKey.Insert"
+msgstr "Insert"
+
+msgid "InputKey.Clear"
+msgstr "Clear"
+
+msgid "InputKey.ArrowUp"
+msgstr "↑"
+
+msgid "InputKey.ArrowDown"
+msgstr "↓"
+
+msgid "InputKey.ArrowLeft"
+msgstr "←"
+
+msgid "InputKey.ArrowRight"
+msgstr "→"
+
+msgid "InputKey.Home"
+msgstr "Home"
+
+msgid "InputKey.End"
+msgstr "End"
+
+msgid "InputKey.PageUp"
+msgstr "Page Up"
+
+msgid "InputKey.PageDown"
+msgstr "Page Down"
+
+msgid "InputKey.Shift"
+msgstr "Shift"
+
+msgid "InputKey.Ctrl"
+msgstr "Ctrl"
+
+msgid "InputKey.Alt"
+msgstr "Alt"
+
+msgid "InputKey.Super"
+msgstr "Win"
+
+msgid "InputKey.CapsLock"
+msgstr "Caps Lock"
+
+msgid "InputKey.NumLock"
+msgstr "Num Lock"
+
+msgid "InputKey.NumpadEnter"
+msgstr "Num Enter"
+
+msgid "InputKey.NumpadAdd"
+msgstr "Num +"
+
+msgid "InputKey.NumpadSubtract"
+msgstr "Num -"
+
+msgid "InputKey.NumpadMultiply"
+msgstr "Num ×"
+
+msgid "InputKey.NumpadDivide"
+msgstr "Num ÷"
+
+msgid "InputKey.NumpadDecimal"
+msgstr "Num ."
+
+msgid "InputKey.NumpadSeparator"
+msgstr "Num ,"
+
+msgid "InputKey.F1"
+msgstr "F1"
+
+msgid "InputKey.F2"
+msgstr "F2"
+
+msgid "InputKey.F3"
+msgstr "F3"
+
+msgid "InputKey.F4"
+msgstr "F4"
+
+msgid "InputKey.F5"
+msgstr "F5"
+
+msgid "InputKey.F6"
+msgstr "F6"
+
+msgid "InputKey.F7"
+msgstr "F7"
+
+msgid "InputKey.F8"
+msgstr "F8"
+
+msgid "InputKey.F9"
+msgstr "F9"
+
+msgid "InputKey.F10"
+msgstr "F10"
+
+msgid "InputKey.F11"
+msgstr "F11"
+
+msgid "InputKey.F12"
+msgstr "F12"
+
+msgid "InputKey.F13"
+msgstr "F13"
+
+msgid "InputKey.F14"
+msgstr "F14"
+
+msgid "InputKey.F15"
+msgstr "F15"
+
+msgid "InputKey.F16"
+msgstr "F16"
+
+msgid "InputKey.F17"
+msgstr "F17"
+
+msgid "InputKey.F18"
+msgstr "F18"
+
+msgid "InputKey.F19"
+msgstr "F19"
+
+msgid "InputKey.F20"
+msgstr "F20"
+
+msgid "InputKey.F21"
+msgstr "F21"
+
+msgid "InputKey.F22"
+msgstr "F22"
+
+msgid "InputKey.F23"
+msgstr "F23"
+
+msgid "InputKey.F24"
+msgstr "F24"
+
+msgid "InputKey.PrintScreen"
+msgstr "Print Screen"
+
+msgid "InputKey.ScrollLock"
+msgstr "Scroll Lock"
+
+msgid "InputKey.Pause"
+msgstr "Pause"
+
+msgid "InputKey.ContextMenu"
+msgstr "Context Menu"
+
+msgid "InputKey.Command"
+msgstr "Command"
+
+msgid "InputKey.Option"
+msgstr "Option"
+
+

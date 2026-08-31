@@ -1,8 +1,8 @@
 id = "hud.deskhud.demo"
 kind = "plugin"
-version = "0.8.2"
-engine = "0.8"
-api_version = 3
+version = "0.9.0"
+engine = "0.9"
+api_version = 4
 display_name = "Demo HUD"
 description = "Sample plugin: demo strips at the bottom of the pet window"
 author = "DeskHud"

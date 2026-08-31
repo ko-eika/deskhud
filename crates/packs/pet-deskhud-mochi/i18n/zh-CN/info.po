@@ -1,0 +1,9 @@
+msgid ""
+msgstr ""
+
+msgid "display_name"
+msgstr "糯米团"
+
+msgid "description"
+msgstr "糯米团性格沉稳可靠，遇事总想站出来照看大家；熟悉之后也会露出顽皮的一面，是让人安心的陪伴者。"
+
