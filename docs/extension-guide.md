@@ -332,11 +332,12 @@ size = 13.0
 "hud.deskhud.demo.tip.display" = "primary"
 "hud.deskhud.demo.tip.x" = 0.54
 "hud.deskhud.demo.tip.y" = 0.82
-"hud.deskhud.demo.tip.scale" = 1.0
+"hud.deskhud.demo.tip.width" = 1.0
+"hud.deskhud.demo.tip.height" = 1.0
 ```
 
 节顺序固定：`[settings]` → `[theme]`（含 mode / locale）→ `[font]` → `[pet]` → `[hud]`。  
-`[pet]` / `[hud]`：先写全部 `*.global.*`，再按引擎注册的宠/插件顺序写出；同包内 `id` / `enable` 优先，其余按包内配置定义序，布局属性（`display` / `x` / `y` / `scale`）靠后。
+`[pet]` / `[hud]`：先写全部 `*.global.*`，再按引擎注册的宠/插件顺序写出；同包内 `id` / `enable` 优先，其余按包内配置定义序，布局属性（`display` / `x` / `y` / `width` / `height`）靠后。旧配置中的 `scale` 仍可读取，并会作为宽高的初始值。
 | 分区 / 键 | 含义 |
 |-----------|------|
 | `[theme]` / `[font]` / `[prefs]` | 主题、字体、设置窗几何 |

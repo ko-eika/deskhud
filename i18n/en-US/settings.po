@@ -205,6 +205,51 @@ msgstr "Reset size"
 msgid "HudLayoutResetSizeHint"
 msgstr "Restore the default 1× size"
 
+msgid "HudAdjustTitle"
+msgstr "Adjust HUD"
+
+msgid "HudAdjustPosition"
+msgstr "Position"
+
+msgid "HudAdjustSize"
+msgstr "Size"
+
+msgid "HudAdjustBackgroundOpacity"
+msgstr "Background opacity"
+
+msgid "HudAdjustBackgroundBlur"
+msgstr "Background blur"
+
+msgid "HudAdjustContentOpacity"
+msgstr "Content opacity"
+
+msgid "HudAdjustX"
+msgstr "Horizontal position"
+
+msgid "HudAdjustY"
+msgstr "Vertical position"
+
+msgid "HudAdjustWidth"
+msgstr "Width"
+
+msgid "HudAdjustHeight"
+msgstr "Height"
+
+msgid "HudAdjustLockRatio"
+msgstr "Lock aspect ratio"
+
+msgid "HudAdjustPercent"
+msgstr "Percent"
+
+msgid "HudAdjustPixels"
+msgstr "Pixels"
+
+msgid "HudAdjustEffects"
+msgstr "Effects"
+
+msgid "HudAdjustSnapGrid"
+msgstr "Snap to grid"
+
 msgid "SettingsTopmost"
 msgstr "Keep on top"
 
@@ -243,4 +288,3 @@ msgstr "Scroll down"
 
 msgid "InputKeyPress"
 msgstr "Key pressed"
-

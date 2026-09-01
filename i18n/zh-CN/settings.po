@@ -205,6 +205,51 @@ msgstr "重置大小"
 msgid "HudLayoutResetSizeHint"
 msgstr "恢复为默认 1× 尺寸"
 
+msgid "HudAdjustTitle"
+msgstr "调整 HUD"
+
+msgid "HudAdjustPosition"
+msgstr "位置"
+
+msgid "HudAdjustSize"
+msgstr "大小"
+
+msgid "HudAdjustBackgroundOpacity"
+msgstr "背景透明度"
+
+msgid "HudAdjustBackgroundBlur"
+msgstr "背景模糊"
+
+msgid "HudAdjustContentOpacity"
+msgstr "内容透明度"
+
+msgid "HudAdjustX"
+msgstr "水平位置"
+
+msgid "HudAdjustY"
+msgstr "垂直位置"
+
+msgid "HudAdjustWidth"
+msgstr "宽度"
+
+msgid "HudAdjustHeight"
+msgstr "高度"
+
+msgid "HudAdjustLockRatio"
+msgstr "锁定比例"
+
+msgid "HudAdjustPercent"
+msgstr "百分比"
+
+msgid "HudAdjustPixels"
+msgstr "像素"
+
+msgid "HudAdjustEffects"
+msgstr "效果"
+
+msgid "HudAdjustSnapGrid"
+msgstr "对齐网格"
+
 msgid "SettingsTopmost"
 msgstr "置顶"
 

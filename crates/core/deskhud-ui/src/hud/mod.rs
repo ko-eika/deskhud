@@ -182,7 +182,9 @@ impl HudPrefs {
             || self.get_position(&format!("{base}.position")).is_some()
             || self.get_f32(&format!("{base}.x")).is_some()
             || self.get_f32(&format!("{base}.y")).is_some()
-            || self.get_f32(&format!("{base}.scale")).is_some();
+            || self.get_f32(&format!("{base}.scale")).is_some()
+            || self.get_f32(&format!("{base}.width")).is_some()
+            || self.get_f32(&format!("{base}.height")).is_some();
 
         if has_flat {
             let mut slot = HudSlotLayout::default_for_index(index);
@@ -201,6 +203,14 @@ impl HudPrefs {
             }
             if let Some(s) = self.get_f32(&format!("{base}.scale")) {
                 slot.scale = s;
+                slot.width = s;
+                slot.height = s;
+            }
+            if let Some(w) = self.get_f32(&format!("{base}.width")) {
+                slot.width = w;
+            }
+            if let Some(h) = self.get_f32(&format!("{base}.height")) {
+                slot.height = h;
             }
             return slot.clamp01();
         }
@@ -228,11 +238,45 @@ impl HudPrefs {
             format!("{base}.scale"),
             HudConfigValue::Float(layout.scale as f64),
         );
+        self.config.insert(
+            format!("{base}.width"),
+            HudConfigValue::Float(layout.width as f64),
+        );
+        self.config.insert(
+            format!("{base}.height"),
+            HudConfigValue::Float(layout.height as f64),
+        );
+    }
+
+    /// Returns a visual tuning value for a HUD item. Visual values deliberately
+    /// live beside the layout keys so a layout is one portable preset.
+    pub fn visual_value(
+        &self,
+        plugin_id: &str,
+        contribution_id: &str,
+        name: &str,
+        default: f32,
+    ) -> f32 {
+        let key = format!("{}.{}.{name}", plugin_id, contribution_id);
+        self.get_f32(&key).unwrap_or(default).clamp(0.0, 1.0)
+    }
+
+    /// Stores a visual tuning value immediately usable by the HUD renderer.
+    pub fn set_visual_value(
+        &mut self,
+        plugin_id: &str,
+        contribution_id: &str,
+        name: &str,
+        value: f32,
+    ) {
+        let key = format!("{}.{}.{name}", plugin_id, contribution_id);
+        self.config
+            .insert(key, HudConfigValue::Float(value.clamp(0.0, 1.0) as f64));
     }
 
     /// 将 `other` 中的布局扁平键同步到 `self`（不影响 enable 等开关）。
     pub fn copy_layout_keys_from(&mut self, other: &Self) {
-        const SUFFIXES: &[&str] = &[".display", ".position", ".scale"];
+        const SUFFIXES: &[&str] = &[".display", ".position", ".scale", ".width", ".height"];
         for (k, v) in &other.config {
             if SUFFIXES.iter().any(|s| k.ends_with(s)) {
                 self.config.insert(k.clone(), v.clone());
@@ -313,6 +357,8 @@ mod tests {
             x: 0.12,
             y: 0.34,
             scale: 1.5,
+            width: 1.5,
+            height: 1.5,
         };
         let mut hud = HudPrefs::default();
         hud.set_slot_layout("hud.deskhud.demo", "tip", slot);
@@ -335,6 +381,27 @@ mod tests {
         assert!((got.y - 0.34).abs() < 1e-4);
         assert!((got.scale - 1.5).abs() < 1e-4);
         assert_eq!(got.display, "primary");
+    }
+
+    #[test]
+    fn visual_values_roundtrip_and_clamp() {
+        let mut hud = HudPrefs::default();
+        hud.set_visual_value("hud.acme.demo", "clock", "background_opacity", 0.35);
+        hud.set_visual_value("hud.acme.demo", "clock", "content_opacity", 2.0);
+        assert!(
+            (hud.visual_value("hud.acme.demo", "clock", "background_opacity", 1.0) - 0.35).abs()
+                < 1e-5
+        );
+        assert_eq!(
+            hud.visual_value("hud.acme.demo", "clock", "content_opacity", 1.0),
+            1.0
+        );
+        let text = toml::to_string_pretty(&hud).expect("ser");
+        let back: HudPrefs = toml::from_str(&text).expect("de");
+        assert!(
+            (back.visual_value("hud.acme.demo", "clock", "background_opacity", 1.0) - 0.35).abs()
+                < 1e-5
+        );
     }
 
     #[cfg(any())]

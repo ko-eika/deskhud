@@ -105,15 +105,13 @@ impl HudWindow {
     }
 
     pub(crate) fn handle_event(&mut self, event: &WindowEvent) {
-        if let WindowEvent::KeyboardInput { event, .. } = event {
-            if event.state == winit::event::ElementState::Pressed
-                && event.logical_key
-                    == winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape)
-            {
-                self.leave_layout_mode();
-                self.layout.compact_pending = true;
-                self.viewport.set_cursor_hittest(false);
-            }
+        if let WindowEvent::KeyboardInput { event, .. } = event
+            && event.state == winit::event::ElementState::Pressed
+            && event.logical_key == winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape)
+        {
+            self.leave_layout_mode();
+            self.layout.compact_pending = true;
+            self.viewport.set_cursor_hittest(false);
         }
         self.viewport.handle_event(event);
     }
@@ -152,6 +150,16 @@ impl HudWindow {
             activity.size.width as f32 / scale,
             activity.size.height as f32 / scale,
         ));
+        self.layout.selected = active_hud_frames(
+            &self.registry,
+            &self.prefs,
+            self.started.elapsed().as_secs_f32(),
+        )
+        .first()
+        .map(|item| format!("{}/{}", item.plugin_id, item.contribution_id));
+        self.layout.adjust_open = true;
+        self.layout.adjust_session = self.layout.adjust_session.wrapping_add(1);
+        self.layout.window_revision = self.layout.window_revision.wrapping_add(1);
         self.layout.layout_mode = true;
         // 布局模式需要接收鼠标，才能拖动 HUD 面板。
         self.viewport.set_cursor_hittest(true);
@@ -170,14 +178,19 @@ impl HudWindow {
         }
     }
 
-    pub(crate) fn should_close(&mut self) -> bool {
+    pub(crate) fn should_close(&mut self) -> (bool, Option<UiPreferences>) {
         self.viewport.apply_ui_preferences(&self.prefs);
         let items = self.render_items();
-        self.viewport
-            .render(|context, raw_input| {
-                view::hud::run(context, raw_input, &mut self.layout, &items)
-            })
-            .should_close
+        let result = self.viewport.render(|context, raw_input| {
+            view::hud::run(
+                context,
+                raw_input,
+                &mut self.layout,
+                &items,
+                &mut self.prefs,
+            )
+        });
+        (result.should_close, result.applied_preferences)
     }
 
     pub(crate) fn apply_preferences(&mut self, prefs: UiPreferences) {
@@ -212,7 +225,26 @@ impl HudWindow {
                         (target_x - window_position.x as f32) / scale_factor,
                         (target_y - window_position.y as f32) / scale_factor,
                     ),
-                    scale: item.layout.scale,
+                    width: item.layout.width,
+                    height: item.layout.height,
+                    background_opacity: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "background_opacity",
+                        1.0,
+                    ),
+                    background_blur: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "background_blur",
+                        0.0,
+                    ),
+                    content_opacity: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "content_opacity",
+                        1.0,
+                    ),
                 })
             })
             .collect()

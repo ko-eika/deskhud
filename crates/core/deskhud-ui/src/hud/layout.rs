@@ -17,8 +17,16 @@ pub struct HudSlotLayout {
     #[serde(default)]
     pub y: f32,
     /// 相对基准尺寸的缩放（1 = 默认）。
+    ///
+    /// 兼容旧配置；新配置使用独立的 `width` / `height`。
     #[serde(default = "default_scale")]
     pub scale: f32,
+    /// 水平相对基准尺寸的比例（1 = 默认宽度）。
+    #[serde(default = "default_scale")]
+    pub width: f32,
+    /// 垂直相对基准尺寸的比例（1 = 默认高度）。
+    #[serde(default = "default_scale")]
+    pub height: f32,
 }
 
 fn default_display() -> String {
@@ -36,6 +44,8 @@ impl Default for HudSlotLayout {
             x: 0.02,
             y: 0.04,
             scale: 1.0,
+            width: 1.0,
+            height: 1.0,
         }
     }
 }
@@ -44,6 +54,8 @@ impl HudSlotLayout {
     /// 夹紧位置与缩放（位置允许贴边 0..1；具体是否越界由宿主按条目尺寸再夹）。
     pub fn clamp01(mut self) -> Self {
         self.scale = self.scale.clamp(0.5, 3.0);
+        self.width = self.width.clamp(0.5, 3.0);
+        self.height = self.height.clamp(0.5, 3.0);
         self.x = self.x.clamp(0.0, 1.0);
         self.y = self.y.clamp(0.0, 1.0);
         self
@@ -57,6 +69,8 @@ impl HudSlotLayout {
             x: 0.02,
             y: 0.04 + i * 0.05,
             scale: 1.0,
+            width: 1.0,
+            height: 1.0,
         }
         .clamp01()
     }

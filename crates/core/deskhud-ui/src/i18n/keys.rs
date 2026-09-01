@@ -159,6 +159,36 @@ pub enum MessageKey {
     HudLayoutResetSize,
     /// 布局编辑：重置大小悬浮说明。
     HudLayoutResetSizeHint,
+    /// HUD 右键调整窗口标题。
+    HudAdjustTitle,
+    /// HUD 位置字段。
+    HudAdjustPosition,
+    /// HUD 大小字段。
+    HudAdjustSize,
+    /// HUD 背景透明度字段。
+    HudAdjustBackgroundOpacity,
+    /// HUD 背景模糊字段。
+    HudAdjustBackgroundBlur,
+    /// HUD 内容透明度字段。
+    HudAdjustContentOpacity,
+    /// HUD X position field.
+    HudAdjustX,
+    /// HUD Y position field.
+    HudAdjustY,
+    /// HUD width field.
+    HudAdjustWidth,
+    /// HUD height field.
+    HudAdjustHeight,
+    /// HUD aspect-ratio lock.
+    HudAdjustLockRatio,
+    /// HUD visual effects section heading.
+    HudAdjustEffects,
+    /// HUD layout editor: snap positions to a grid.
+    HudAdjustSnapGrid,
+    /// Percentage unit option.
+    HudAdjustPercent,
+    /// Pixel unit option.
+    HudAdjustPixels,
     /// 右键：插件布局。
     MenuHudLayout,
     /// 右键：插件窗口层级。
@@ -266,6 +296,21 @@ impl MessageKey {
         Self::HudLayoutHint,
         Self::HudLayoutResetSize,
         Self::HudLayoutResetSizeHint,
+        Self::HudAdjustTitle,
+        Self::HudAdjustPosition,
+        Self::HudAdjustSize,
+        Self::HudAdjustBackgroundOpacity,
+        Self::HudAdjustBackgroundBlur,
+        Self::HudAdjustContentOpacity,
+        Self::HudAdjustX,
+        Self::HudAdjustY,
+        Self::HudAdjustWidth,
+        Self::HudAdjustHeight,
+        Self::HudAdjustLockRatio,
+        Self::HudAdjustEffects,
+        Self::HudAdjustSnapGrid,
+        Self::HudAdjustPercent,
+        Self::HudAdjustPixels,
         Self::MenuHudLayout,
         Self::MenuPluginLayer,
         Self::MenuLayerTop,

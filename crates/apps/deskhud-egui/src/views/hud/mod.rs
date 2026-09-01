@@ -14,6 +14,7 @@ use egui::{Context, RawInput};
 use crate::views::ViewOutput;
 
 /// HUD 内部子窗口的布局状态。
+#[derive(Default)]
 pub(crate) struct LayoutState {
     /// 按 `plugin_id/contribution_id` 保留的 HUD 条目逻辑坐标。
     pub(crate) positions: HashMap<String, egui::Pos2>,
@@ -23,17 +24,27 @@ pub(crate) struct LayoutState {
     pub(crate) activity_size: Option<egui::Vec2>,
     /// 是否等待下一帧切回紧凑窗口尺寸。
     pub(crate) compact_pending: bool,
+    /// 当前高亮的 HUD 条目；右键调整窗口也绑定到此条目。
+    pub(crate) selected: Option<String>,
+    pub(crate) adjust_open: bool,
+    /// Whether layout positions should snap to the visible alignment grid.
+    pub(crate) snap_to_grid: bool,
+    /// Recreates HUD egui windows when entering a new editing session or
+    /// when their size is changed from the adjustment panel.
+    pub(crate) window_revision: u64,
+    pub(crate) adjust_session: u64,
+    /// Whether the adjustment panel should preserve the selected HUD aspect ratio.
+    pub(crate) lock_ratio: bool,
+    pub(crate) locked_ratio: Option<f32>,
+    pub(crate) position_unit: AdjustmentUnit,
+    pub(crate) size_unit: AdjustmentUnit,
 }
 
-impl Default for LayoutState {
-    fn default() -> Self {
-        Self {
-            positions: HashMap::new(),
-            layout_mode: false,
-            activity_size: None,
-            compact_pending: false,
-        }
-    }
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum AdjustmentUnit {
+    #[default]
+    Percent,
+    Pixels,
 }
 
 /// 已通过全局、插件和条目开关筛选的一条真实 HUD 帧。
@@ -41,7 +52,11 @@ pub(crate) struct HudRenderItem {
     pub(crate) key: String,
     pub(crate) frame: HudFrame,
     pub(crate) initial_position: egui::Pos2,
-    pub(crate) scale: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) background_opacity: f32,
+    pub(crate) background_blur: f32,
+    pub(crate) content_opacity: f32,
 }
 
 struct ActiveHudFrame {
@@ -84,18 +99,21 @@ pub(crate) fn run(
     raw_input: RawInput,
     layout: &mut LayoutState,
     items: &[HudRenderItem],
+    prefs: &mut UiPreferences,
 ) -> ViewOutput {
     let mut content_size = [320.0, 180.0];
     let mut move_by = None;
+    let mut changed = false;
     let full_output = context.run_ui(raw_input, |ctx| {
         ctx.request_repaint_after(Duration::from_millis(16));
         let time = ctx.input(|input| input.time) as f32;
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::TRANSPARENT))
             .show(ctx, |ui| {
-                let result = drawing::draw(ui, time, layout, items);
+                let result = drawing::draw(ui, time, layout, items, prefs);
                 content_size = result.size;
                 move_by = result.move_by;
+                changed = result.changed;
             });
     });
 
@@ -103,6 +121,7 @@ pub(crate) fn run(
         full_output,
         resize_to: Some(content_size),
         move_by,
+        applied_preferences: changed.then(|| prefs.clone()),
         ..Default::default()
     }
 }

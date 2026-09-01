@@ -192,6 +192,13 @@ impl SettingsModel {
         self.baseline.hud.layer = layer;
     }
 
+    /// Synchronizes the HUD master switch changed outside Settings into both
+    /// the draft and its reset/apply baseline.
+    pub fn sync_hud_master_enabled(&mut self, enabled: bool) {
+        self.draft.hud.set_master_enabled(enabled);
+        self.baseline.hud.set_master_enabled(enabled);
+    }
+
     /// Resets editable settings while preserving view-only preferences and window geometry.
     pub fn reset_draft(&mut self) {
         let picker_mode = self.draft.pet.picker_mode;

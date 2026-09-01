@@ -119,6 +119,7 @@ impl WindowManager {
                 self.prefs.clone(),
             ));
         }
+        self.sync_hud_visibility();
         if self.menu.is_none() {
             self.menu = Some(PetMenu::create(event_loop, &self.proxy));
         }
@@ -228,7 +229,28 @@ impl WindowManager {
         if let Some(hud) = self.hud.as_mut() {
             hud.apply_preferences(self.prefs.clone());
         }
+        self.sync_hud_visibility();
         self.save_preferences();
+    }
+
+    /// Keeps the native HUD window visibility derived from the same persisted
+    /// switches that gate individual contributions.
+    fn sync_hud_visibility(&mut self) {
+        let should_show = self.prefs.hud.is_master_enabled()
+            && self.registry.all_hud_contributions().into_iter().any(
+                |(plugin_id, contribution)| {
+                    self.prefs.hud.is_active(
+                        plugin_id,
+                        contribution.id,
+                        contribution.default_enabled,
+                    )
+                },
+            );
+        if should_show {
+            self.show_hud();
+        } else {
+            self.hide_hud();
+        }
     }
 
     fn save_geometry(&mut self) {
@@ -318,7 +340,7 @@ impl WindowManager {
                 super::viewport::WindowLayer::Normal,
                 HudWindow::window_layer,
             ),
-            self.hud.as_ref().is_some_and(HudWindow::is_visible),
+            self.prefs.hud.is_master_enabled(),
         );
     }
 
@@ -603,14 +625,22 @@ impl WindowManager {
                 false
             }
             ViewportKind::Hud => {
-                if self.hud.as_ref().is_some_and(HudWindow::is_visible)
-                    && self
+                if self.hud.as_ref().is_some_and(HudWindow::is_visible) {
+                    let (should_close, changed) = self
                         .hud
                         .as_mut()
                         .expect("HUD viewport disappeared")
-                        .should_close()
-                {
-                    self.hide_hud();
+                        .should_close();
+                    if let Some(prefs) = changed {
+                        // Layout edits are committed on every frame. Keep the HUD's
+                        // live editor state intact; applying the whole snapshot here
+                        // would clear the positions currently being dragged.
+                        self.prefs.hud = prefs.hud;
+                        self.save_preferences();
+                    }
+                    if should_close {
+                        self.hide_hud();
+                    }
                 }
                 false
             }
@@ -647,7 +677,7 @@ impl WindowManager {
                             super::viewport::WindowLayer::Normal,
                             HudWindow::window_layer,
                         ),
-                        self.hud.as_ref().is_some_and(HudWindow::is_visible),
+                        self.prefs.hud.is_master_enabled(),
                         &self.prefs,
                     );
                 if should_close {
@@ -737,11 +767,13 @@ impl WindowManager {
             }
             PetMenuAction::OpenSettings => self.show_settings(),
             PetMenuAction::OpenHud => {
-                if self.hud.as_ref().is_some_and(HudWindow::is_visible) {
-                    self.hide_hud();
-                } else {
-                    self.show_hud();
+                let enabled = !self.prefs.hud.is_master_enabled();
+                self.prefs.hud.set_master_enabled(enabled);
+                if let Some(settings) = self.settings.as_mut() {
+                    settings.sync_hud_master_enabled(enabled);
                 }
+                self.sync_hud_visibility();
+                self.save_preferences();
             }
             PetMenuAction::HudLayout => {
                 if let Some(hud) = self.hud.as_mut() {

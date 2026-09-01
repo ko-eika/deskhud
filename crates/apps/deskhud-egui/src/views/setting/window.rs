@@ -113,6 +113,10 @@ impl SettingsWindow {
         self.model.sync_hud_layer(layer);
     }
 
+    pub(crate) fn sync_hud_master_enabled(&mut self, enabled: bool) {
+        self.model.sync_hud_master_enabled(enabled);
+    }
+
     /// 绘制一帧并返回 UI 是否请求关闭。
     pub(crate) fn render(&mut self) -> (bool, Option<UiPreferences>) {
         // Capture native changes before the Apply command snapshots the draft.

@@ -40,7 +40,7 @@ pub(crate) fn definition(
     locale: Locale,
     pet_layer: WindowLayer,
     hud_layer: WindowLayer,
-    hud_open: bool,
+    hud_enabled: bool,
 ) -> MenuDefinition {
     MenuDefinition::new(vec![
         MenuItem::new(
@@ -73,7 +73,7 @@ pub(crate) fn definition(
         MenuItem::checkable(
             OPEN_HUD,
             CatalogStore::t_shell(locale, MessageKey::SettingsNavHud),
-            hud_open,
+            hud_enabled,
         )
         .with_icon("puzzle")
         .with_separator_before(),
@@ -81,7 +81,7 @@ pub(crate) fn definition(
             HUD_LAYER,
             CatalogStore::t_shell(locale, MessageKey::MenuPluginLayer),
         )
-        .with_enabled(hud_open)
+        .with_enabled(hud_enabled)
         .with_submenu(MenuDefinition::new(vec![
             MenuItem::checkable(
                 HUD_LAYER_TOP,
@@ -105,7 +105,7 @@ pub(crate) fn definition(
             CatalogStore::t_shell(locale, MessageKey::MenuHudLayout),
         )
         .with_icon("window")
-        .with_enabled(hud_open),
+        .with_enabled(hud_enabled),
         MenuItem::new(
             EXIT_APPLICATION,
             CatalogStore::t_shell(locale, MessageKey::MenuQuit),
