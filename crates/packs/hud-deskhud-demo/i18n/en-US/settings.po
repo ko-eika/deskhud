@@ -7,8 +7,13 @@ msgstr ""
 msgid "clock.label"
 msgstr "Demo clock strip"
 
+msgid "clock.description"
+msgstr "Show the current time below the pet."
+
 msgid "tip.label"
 msgstr "Demo tip strip"
 
+msgid "tip.description"
+msgstr "Show a short tip below the pet."
 
 

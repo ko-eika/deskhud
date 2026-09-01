@@ -10,6 +10,9 @@ msgstr "Settings"
 msgid "SettingsPerformanceIntro"
 msgstr "Adjust frame rate, animation, and effects preferences."
 
+msgid "SettingsGeneralIntro"
+msgstr "Adjust DeskHud's appearance, language, and interface fonts."
+
 msgid "SettingsPerformanceFps"
 msgstr "Frame rate limit"
 
@@ -58,8 +61,17 @@ msgstr "Version"
 msgid "SettingsAboutLicense"
 msgstr "License"
 
+msgid "SettingsAboutAuthors"
+msgstr "Authors"
+
 msgid "SettingsAboutStack"
 msgstr "A desktop pet engine built with Rust and egui."
+
+msgid "SettingsAboutStackLabel"
+msgstr "Technology"
+
+msgid "SettingsAboutHomepage"
+msgstr "Homepage"
 
 msgid "SettingsPetIntro"
 msgstr "Takes effect after you Select and Apply. Third-party pets may monitor keyboard/mouse input and pose privacy or security risks—only install packs from sources you trust."
@@ -75,6 +87,9 @@ msgstr "Pet list"
 
 msgid "SettingsPetConfig"
 msgstr "Pet configuration"
+
+msgid "SettingsPetEmpty"
+msgstr "The current pet has no configurable options."
 
 msgid "SettingsPetGlobal"
 msgstr "Global configuration"
@@ -99,6 +114,15 @@ msgstr "Allow the active pet to receive desktop-wide mouse events."
 
 msgid "HudSettingsIntro"
 msgstr "Takes effect after you Enable and Apply. Third-party plugins may read system info or show content and pose privacy or security risks—only enable plugins from sources you trust."
+
+msgid "HudGlobalConfig"
+msgstr "Global configuration"
+
+msgid "HudPluginList"
+msgstr "Plugins"
+
+msgid "HudPluginConfig"
+msgstr "Plugin configuration"
 
 msgid "HudSettingsEmpty"
 msgstr "No plugin contributions available."
@@ -219,7 +243,4 @@ msgstr "Scroll down"
 
 msgid "InputKeyPress"
 msgstr "Key pressed"
-
-
-
 

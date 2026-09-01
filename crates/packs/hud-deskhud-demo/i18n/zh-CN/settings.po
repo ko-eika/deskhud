@@ -7,6 +7,11 @@ msgstr ""
 msgid "clock.label"
 msgstr "演示时钟条"
 
+msgid "clock.description"
+msgstr "在桌宠底部显示当前时间。"
+
 msgid "tip.label"
 msgstr "演示提示条"
 
+msgid "tip.description"
+msgstr "在桌宠底部显示一条提示信息。"

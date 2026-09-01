@@ -1,6 +1,8 @@
 //! Settings card container.
 
-use egui::{Align, CornerRadius, FontId, Frame, Layout, Margin, RichText, Stroke, Ui, Vec2};
+use egui::{
+    Align, CornerRadius, FontId, Frame, Layout, Margin, RichText, Stroke, TextureHandle, Ui, Vec2,
+};
 
 /// Draws a rounded card with a theme-aware, low-contrast border.
 pub(crate) fn section_card(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
@@ -54,6 +56,27 @@ pub(crate) fn config_card(
             add_footer(ui);
             ui.add_space(4.0);
         }
+    });
+}
+
+/// Draws a configuration card with a caller-controlled header while keeping
+/// the standard configuration-card spacing for its rows.
+pub(crate) fn config_card_with_header(
+    ui: &mut Ui,
+    draw_header: impl FnOnce(&mut Ui),
+    add_content: impl FnOnce(&mut Ui),
+) {
+    section_card(ui, |ui| {
+        draw_header(ui);
+        ui.add_space(8.0);
+        ui.separator();
+        ui.add_space(8.0);
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.y = 10.0;
+            Frame::NONE
+                .inner_margin(Margin::symmetric(12, 0))
+                .show(ui, add_content);
+        });
     });
 }
 
@@ -116,6 +139,17 @@ pub(crate) fn config_row(
     description: Option<impl Into<RichText>>,
     add_control: impl FnOnce(&mut Ui),
 ) {
+    config_row_with_icon(ui, None, title, description, add_control);
+}
+
+/// Draws a setting row with an optional leading icon before its label block.
+pub(crate) fn config_row_with_icon(
+    ui: &mut Ui,
+    icon: Option<&TextureHandle>,
+    title: impl Into<RichText>,
+    description: Option<impl Into<RichText>>,
+    add_control: impl FnOnce(&mut Ui),
+) {
     let title = title.into();
     let description = description.map(Into::into);
     let body_height = ui.text_style_height(&egui::TextStyle::Body);
@@ -130,7 +164,16 @@ pub(crate) fn config_row(
         Vec2::new(width, row_height),
         Layout::left_to_right(Align::Center),
         |ui| {
-            let label_width = (ui.available_width() - 216.0).max(0.0);
+            if let Some(icon) = icon {
+                ui.add(
+                    egui::Image::new(icon)
+                        .fit_to_exact_size(Vec2::splat(28.0))
+                        .corner_radius(6.0),
+                );
+                ui.add_space(10.0);
+            }
+            let icon_width = icon.map_or(0.0, |_| 38.0);
+            let label_width = (ui.available_width() - 216.0 - icon_width).max(0.0);
             let label_rect = ui.allocate_space(Vec2::new(label_width, row_height)).1;
             centered_label(ui, label_rect, title, description);
             ui.with_layout(Layout::right_to_left(Align::Center), add_control);

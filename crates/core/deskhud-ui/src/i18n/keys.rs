@@ -23,6 +23,8 @@ pub enum MessageKey {
     SettingsNavHud,
     /// 侧栏：常规。
     SettingsNavGeneral,
+    /// 常规页说明。
+    SettingsGeneralIntro,
     /// 侧栏：性能。
     SettingsNavPerformance,
     /// 性能页说明。
@@ -61,8 +63,14 @@ pub enum MessageKey {
     SettingsAboutVersion,
     /// 关于：许可证。
     SettingsAboutLicense,
+    /// 关于：作者。
+    SettingsAboutAuthors,
     /// 关于：技术栈一行说明。
     SettingsAboutStack,
+    /// 关于：技术栈。
+    SettingsAboutStackLabel,
+    /// 关于：主页。
+    SettingsAboutHomepage,
     /// 宠物页说明（含第三方风险提示）。
     SettingsPetIntro,
     /// 窗尺寸标签。
@@ -73,6 +81,8 @@ pub enum MessageKey {
     SettingsPetList,
     /// 当前宠物配置卡片标题。
     SettingsPetConfig,
+    /// 宠物没有可配置项。
+    SettingsPetEmpty,
     /// 宠物全局配置标题。
     SettingsPetGlobal,
     /// 消息气泡开关。
@@ -89,6 +99,12 @@ pub enum MessageKey {
     SettingsPetMouseInputHint,
     /// 插件页说明（含第三方风险提示）。
     HudSettingsIntro,
+    /// 插件页：全局配置卡片标题。
+    HudGlobalConfig,
+    /// 插件页：插件列表卡片标题。
+    HudPluginList,
+    /// 插件页：当前插件配置卡片标题。
+    HudPluginConfig,
     /// 尚无插件贡献。
     HudSettingsEmpty,
     /// 元数据：作者前缀。
@@ -182,6 +198,7 @@ impl MessageKey {
         Self::SettingsNavPet,
         Self::SettingsNavHud,
         Self::SettingsNavGeneral,
+        Self::SettingsGeneralIntro,
         Self::SettingsNavPerformance,
         Self::SettingsPerformanceIntro,
         Self::SettingsPerformanceFps,
@@ -201,12 +218,16 @@ impl MessageKey {
         Self::SettingsAboutIntro,
         Self::SettingsAboutVersion,
         Self::SettingsAboutLicense,
+        Self::SettingsAboutAuthors,
         Self::SettingsAboutStack,
+        Self::SettingsAboutStackLabel,
+        Self::SettingsAboutHomepage,
         Self::SettingsPetIntro,
         Self::SettingsPetWindowSize,
         Self::SettingsPetOptions,
         Self::SettingsPetList,
         Self::SettingsPetConfig,
+        Self::SettingsPetEmpty,
         Self::SettingsPetGlobal,
         Self::SettingsPetBubbles,
         Self::SettingsPetBubblesHint,
@@ -215,6 +236,9 @@ impl MessageKey {
         Self::SettingsPetMouseInput,
         Self::SettingsPetMouseInputHint,
         Self::HudSettingsIntro,
+        Self::HudGlobalConfig,
+        Self::HudPluginList,
+        Self::HudPluginConfig,
         Self::HudSettingsEmpty,
         Self::MetaAuthor,
         Self::MetaVersion,

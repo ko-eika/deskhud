@@ -10,6 +10,9 @@ msgstr "设置"
 msgid "SettingsPerformanceIntro"
 msgstr "调整帧率、动画和特效偏好。"
 
+msgid "SettingsGeneralIntro"
+msgstr "调整 DeskHud 的外观、语言和界面字体。"
+
 msgid "SettingsPerformanceFps"
 msgstr "帧率上限"
 
@@ -58,8 +61,17 @@ msgstr "版本"
 msgid "SettingsAboutLicense"
 msgstr "许可证"
 
+msgid "SettingsAboutAuthors"
+msgstr "作者"
+
 msgid "SettingsAboutStack"
 msgstr "基于 Rust 与 egui 构建的桌宠引擎。"
+
+msgid "SettingsAboutStackLabel"
+msgstr "技术栈"
+
+msgid "SettingsAboutHomepage"
+msgstr "主页"
 
 msgid "SettingsPetIntro"
 msgstr "「选择」并「应用」后生效，第三方宠物可能监听键鼠等输入，存在隐私与安全风险，请仅安装可信来源的包。"
@@ -75,6 +87,9 @@ msgstr "宠物列表"
 
 msgid "SettingsPetConfig"
 msgstr "宠物配置"
+
+msgid "SettingsPetEmpty"
+msgstr "当前宠物没有可配置项。"
 
 msgid "SettingsPetGlobal"
 msgstr "全局配置"
@@ -99,6 +114,15 @@ msgstr "允许当前宠物接收桌面范围的鼠标事件。"
 
 msgid "HudSettingsIntro"
 msgstr "「开启」并「应用」后生效，第三方插件可能读取系统信息或展示内容，存在隐私与安全风险，请仅启用可信来源的插件。"
+
+msgid "HudGlobalConfig"
+msgstr "全局配置"
+
+msgid "HudPluginList"
+msgstr "插件列表"
+
+msgid "HudPluginConfig"
+msgstr "插件配置"
 
 msgid "HudSettingsEmpty"
 msgstr "当前没有可配置的插件贡献。"
@@ -219,5 +243,3 @@ msgstr "滚轮↓"
 
 msgid "InputKeyPress"
 msgstr "按键"
-
-

@@ -12,6 +12,12 @@ DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布
 2. [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) 中的 version 徽章
 3. （可选）`CHANGELOG` / Release 说明正文
 
+### 0.9.1 变更摘要
+
+- 将设置页绘制拆分为按页面职责组织的模块，统一复用配置卡片、配置行和图标组件，降低单文件维护成本。
+- 补齐常规、关于、宠物和 HUD 设置所需的中英文 PO 文案，新增配置区块标题、空状态和元信息标签。
+- 内置包版本同步升至 `0.9.1`；`engine = "0.9"` 与 `api_version = 4` 保持不变。
+
 ### 0.9.0 变更摘要
 
 - 将 WASM Guest ABI 升至 `api_version = 4`：补充 PrintScreen、ScrollLock、Pause、ContextMenu 按键及组合键按下事件。

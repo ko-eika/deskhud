@@ -1,6 +1,6 @@
-//! Switch row and expandable switch group.
+//! Switch row and toggle control.
 
-use egui::{CornerRadius, Frame, Margin, RichText, Sense, Stroke, TextStyle, Ui, Vec2};
+use egui::{CornerRadius, RichText, Sense, TextStyle, Ui, Vec2};
 
 /// A two-column setting row with an optional supporting description.
 pub(crate) fn switch_row(
@@ -31,45 +31,6 @@ pub(crate) fn switch_row(
         Vec2::new(42.0, 24.0),
     );
     response.union(toggle_switch(ui, switch_rect, value))
-}
-
-/// A styled master switch with an animated, collapsible child area.
-pub(crate) fn switch_group(
-    ui: &mut Ui,
-    id_source: impl std::hash::Hash + std::fmt::Debug,
-    title: impl Into<RichText>,
-    description: Option<impl Into<RichText>>,
-    enabled: &mut bool,
-    add_children: impl FnOnce(&mut Ui),
-) {
-    let title = title.into();
-    let description = description.map(Into::into);
-    let border = ui
-        .visuals()
-        .widgets
-        .noninteractive
-        .bg_stroke
-        .color
-        .gamma_multiply(0.62);
-    Frame::group(ui.style())
-        .fill(ui.visuals().faint_bg_color)
-        .stroke(Stroke::new(1.0, border))
-        .corner_radius(CornerRadius::same(10))
-        .inner_margin(Margin::symmetric(14, 10))
-        .show(ui, |ui| {
-            let state = egui::collapsing_header::CollapsingState::load_with_default_open(
-                ui.ctx(),
-                ui.make_persistent_id(id_source),
-                true,
-            );
-            let header = state.show_header(ui, |ui| switch_row(ui, title, description, enabled));
-            let _ = header.body(|ui| {
-                ui.add_enabled_ui(*enabled, |ui| {
-                    ui.add_space(4.0);
-                    ui.indent(ui.id().with("switch-group-content"), add_children);
-                });
-            });
-        });
 }
 
 pub(crate) fn toggle_switch(ui: &mut Ui, rect: egui::Rect, value: &mut bool) -> egui::Response {
