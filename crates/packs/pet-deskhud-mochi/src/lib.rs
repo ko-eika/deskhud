@@ -138,7 +138,7 @@ impl Default for BuiltinMochiPet {
             last_dragging: AtomicBool::new(false),
             bubble_ms: AtomicU32::new(0),
             bubble_text: Mutex::new(String::new()),
-            custom_bubble: AtomicBool::new(false),
+            custom_bubble: AtomicBool::new(true),
             follow_eyes: AtomicBool::new(true),
             key_tips: AtomicBool::new(true),
             mouse_tips: AtomicBool::new(true),
@@ -159,7 +159,7 @@ const SPECS_OPTIONS_ORDERED: &[PetConfigOption] = &[
         key: "custom_bubble",
         label: "custom_bubble.label",
         description: "custom_bubble.description",
-        default: false,
+        default: true,
     },
     PetConfigOption {
         key: "follow_eyes",
@@ -310,7 +310,7 @@ impl PetKind for BuiltinMochiPet {
 
     fn apply_config(&self, config: PetConfigBag<'_>) {
         self.custom_bubble
-            .store(config.get("custom_bubble", false), Ordering::Relaxed);
+            .store(config.get("custom_bubble", true), Ordering::Relaxed);
         self.follow_eyes
             .store(config.get("follow_eyes", true), Ordering::Relaxed);
         self.key_tips

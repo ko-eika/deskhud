@@ -27,6 +27,8 @@ pub(crate) struct LayoutState {
     /// 当前高亮的 HUD 条目；右键调整窗口也绑定到此条目。
     pub(crate) selected: Option<String>,
     pub(crate) adjust_open: bool,
+    pub(crate) shadow_open: bool,
+    pub(crate) shadow_target: Option<ShadowTarget>,
     /// Whether layout positions should snap to the visible alignment grid.
     pub(crate) snap_to_grid: bool,
     /// Recreates HUD egui windows when entering a new editing session or
@@ -38,6 +40,13 @@ pub(crate) struct LayoutState {
     pub(crate) locked_ratio: Option<f32>,
     pub(crate) position_unit: AdjustmentUnit,
     pub(crate) size_unit: AdjustmentUnit,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ShadowTarget {
+    Global,
+    Window,
+    Content,
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -54,9 +63,36 @@ pub(crate) struct HudRenderItem {
     pub(crate) initial_position: egui::Pos2,
     pub(crate) width: f32,
     pub(crate) height: f32,
+    pub(crate) background_enabled: bool,
     pub(crate) background_opacity: f32,
     pub(crate) background_blur: f32,
     pub(crate) content_opacity: f32,
+    pub(crate) shadow_enabled: bool,
+    pub(crate) window_shadow_global: bool,
+    pub(crate) content_shadow_global: bool,
+    pub(crate) window_shadow_enabled: bool,
+    pub(crate) content_shadow_enabled: bool,
+    pub(crate) window_shadow: f32,
+    pub(crate) window_shadow_blur: f32,
+    pub(crate) window_shadow_distance: f32,
+    pub(crate) window_shadow_angle: f32,
+    pub(crate) window_shadow_color: [u8; 3],
+    pub(crate) window_custom_shadow: f32,
+    pub(crate) window_custom_shadow_blur: f32,
+    pub(crate) window_custom_shadow_distance: f32,
+    pub(crate) window_custom_shadow_angle: f32,
+    pub(crate) window_custom_shadow_color: [u8; 3],
+    pub(crate) content_custom_shadow: f32,
+    pub(crate) content_custom_shadow_blur: f32,
+    pub(crate) content_custom_shadow_distance: f32,
+    pub(crate) content_custom_shadow_angle: f32,
+    pub(crate) content_custom_shadow_color: [u8; 3],
+    pub(crate) content_color: [u8; 3],
+    pub(crate) border_enabled: bool,
+    pub(crate) border_opacity: f32,
+    pub(crate) border_width: f32,
+    pub(crate) corner_radius: f32,
+    pub(crate) border_color: [u8; 3],
 }
 
 struct ActiveHudFrame {

@@ -1,6 +1,7 @@
 //! Switch row and toggle control.
 
-use egui::{CornerRadius, RichText, Sense, TextStyle, Ui, Vec2};
+use egui::{CornerRadius, Id, RichText, Sense, TextStyle, Ui, Vec2};
+use std::{fmt::Debug, hash::Hash};
 
 /// A two-column setting row with an optional supporting description.
 pub(crate) fn switch_row(
@@ -34,10 +35,23 @@ pub(crate) fn switch_row(
 }
 
 pub(crate) fn toggle_switch(ui: &mut Ui, rect: egui::Rect, value: &mut bool) -> egui::Response {
+    // Keep the legacy helper usable by callers that do not need a semantic id.
+    // The adjustment panel uses `toggle_switch_with_id` below because a rect's
+    // y-coordinate changes while a ScrollArea is moving.
+    // `next_auto_id` is stable across frames and does not change when a
+    // ScrollArea moves the widget on screen.
+    toggle_switch_with_id(ui, rect, value, ("legacy", ui.next_auto_id()))
+}
+
+pub(crate) fn toggle_switch_with_id(
+    ui: &mut Ui,
+    rect: egui::Rect,
+    value: &mut bool,
+    id_source: impl Hash + Debug,
+) -> egui::Response {
     let mut response = ui.interact(
         rect,
-        ui.id()
-            .with(("switch", rect.top().to_bits(), rect.left().to_bits())),
+        Id::new(ui.id()).with(("switch", id_source)),
         Sense::click(),
     );
     if response.clicked() {

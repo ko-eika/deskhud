@@ -215,19 +215,31 @@ msgid "HudAdjustSize"
 msgstr "大小"
 
 msgid "HudAdjustBackgroundOpacity"
-msgstr "背景透明度"
+msgstr "透明度"
 
 msgid "HudAdjustBackgroundBlur"
-msgstr "背景模糊"
+msgstr "模糊"
 
 msgid "HudAdjustContentOpacity"
-msgstr "内容透明度"
+msgstr "透明度"
+
+msgid "HudAdjustBorderOpacity"
+msgstr "透明度"
+
+msgid "HudAdjustBorderWidth"
+msgstr "宽度"
+
+msgid "HudAdjustCornerRadius"
+msgstr "圆角"
+
+msgid "HudAdjustBorderColor"
+msgstr "颜色"
 
 msgid "HudAdjustX"
-msgstr "水平位置"
+msgstr "水平"
 
 msgid "HudAdjustY"
-msgstr "垂直位置"
+msgstr "垂直"
 
 msgid "HudAdjustWidth"
 msgstr "宽度"
@@ -246,6 +258,63 @@ msgstr "像素"
 
 msgid "HudAdjustEffects"
 msgstr "效果"
+
+msgid "HudAdjustGlobalEffects"
+msgstr "全局"
+
+msgid "HudAdjustWindowEffects"
+msgstr "窗口"
+
+msgid "HudAdjustWindowShadow"
+msgstr "阴影"
+
+msgid "HudAdjustContentEffects"
+msgstr "内容"
+
+msgid "HudAdjustContentColor"
+msgstr "颜色"
+
+msgid "HudAdjustContentShadow"
+msgstr "阴影"
+
+msgid "HudAdjustShadowColor"
+msgstr "颜色"
+
+msgid "HudAdjustShadowOpacity"
+msgstr "透明度"
+
+msgid "HudAdjustShadowBlur"
+msgstr "柔化"
+
+msgid "HudAdjustShadowDistance"
+msgstr "距离"
+
+msgid "HudAdjustShadowAngle"
+msgstr "角度"
+
+msgid "HudAdjustShadowSettings"
+msgstr "阴影设置"
+
+msgid "HudAdjustGlobalShadow"
+msgstr "全局阴影"
+
+msgid "HudAdjustCustomShadow"
+msgstr "自定义阴影"
+
+msgid "HudAdjustShadowMode"
+msgstr "来源"
+
+msgid "HudAdjustShadowGlobal"
+msgstr "全局"
+
+msgid "HudAdjustShadowCustom"
+msgstr "自定义"
+
+msgid "HudAdjustBorderEffects"
+msgstr "边框"
+
+msgid "HudAdjustBackgroundEffects"
+msgstr "背景"
 
 msgid "HudAdjustSnapGrid"
 msgstr "对齐网格"

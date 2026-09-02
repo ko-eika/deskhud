@@ -42,7 +42,7 @@ impl Guest for BigEyesGuest {
             description: "description".into(),
             author: "DeskHud".into(),
             homepage: Some("https://github.com/ko-eika/deskhud".into()),
-            version: "0.9.2".into(),
+            version: "0.9.3".into(),
             engine: "0.8".into(),
             window_width: 192.0,
             window_height: 192.0,

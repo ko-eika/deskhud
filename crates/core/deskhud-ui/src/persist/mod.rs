@@ -438,7 +438,7 @@ fn merge_hud_table(hud: &mut HudPrefs, t: &toml::map::Map<String, toml::Value>) 
         if k == "config" {
             continue;
         }
-        if let Some(val) = toml_to_hud_value(v) {
+        if let Some(val) = toml_to_hud_value(k, v) {
             hud.config.insert(k.clone(), val);
         }
     }
@@ -461,7 +461,7 @@ fn parse_layer(value: &str) -> Option<LayerPreference> {
     }
 }
 
-fn toml_to_hud_value(v: &toml::Value) -> Option<HudConfigValue> {
+fn toml_to_hud_value(key: &str, v: &toml::Value) -> Option<HudConfigValue> {
     if let Some(b) = v.as_bool() {
         return Some(HudConfigValue::Bool(b));
     }
@@ -478,7 +478,12 @@ fn toml_to_hud_value(v: &toml::Value) -> Option<HudConfigValue> {
         let [x, y] = array.as_slice() else {
             return None;
         };
-        return Some(HudConfigValue::Position([toml_f64(x)?, toml_f64(y)?]));
+        let pair = [toml_f64(x)?, toml_f64(y)?];
+        return Some(if key.ends_with(".size") {
+            HudConfigValue::Size(pair)
+        } else {
+            HudConfigValue::Position(pair)
+        });
     }
     None
 }
@@ -675,10 +680,50 @@ fn attr_priority(attr: &str) -> u8 {
         "display" => 10,
         "x" => 20,
         "y" => 21,
-        "width" | "w" => 22,
-        "height" | "h" => 23,
-        "scale" => 24,
+        "size" => 22,
+        "width" | "w" => 23,
+        "height" | "h" => 24,
         "layer" | "picker_mode" => 30,
+        "shadow_enabled" => 40,
+        "shadow_opacity" => 41,
+        "shadow_blur" => 42,
+        "shadow_distance" => 43,
+        "shadow_angle" => 44,
+        "shadow_red" => 45,
+        "shadow_green" => 46,
+        "shadow_blue" => 47,
+        "corner_radius" => 50,
+        "window_shadow_mode" => 60,
+        "window_shadow_enabled" => 61,
+        "window_shadow" => 62,
+        "window_shadow_blur" => 63,
+        "window_shadow_distance" => 64,
+        "window_shadow_angle" => 65,
+        "window_shadow_red" => 66,
+        "window_shadow_green" => 67,
+        "window_shadow_blue" => 68,
+        "content_red" => 70,
+        "content_green" => 71,
+        "content_blue" => 72,
+        "content_opacity" => 73,
+        "content_shadow_mode" => 80,
+        "content_shadow_enabled" => 81,
+        "content_shadow" => 82,
+        "content_shadow_blur" => 83,
+        "content_shadow_distance" => 84,
+        "content_shadow_angle" => 85,
+        "content_shadow_red" => 86,
+        "content_shadow_green" => 87,
+        "content_shadow_blue" => 88,
+        "border_enabled" => 90,
+        "border_width" => 91,
+        "border_red" => 92,
+        "border_green" => 93,
+        "border_blue" => 94,
+        "border_opacity" => 95,
+        "background_enabled" => 100,
+        "background_opacity" => 101,
+        "background_blur" => 102,
         _ => 40,
     }
 }
@@ -687,15 +732,12 @@ fn format_hud_value(v: &HudConfigValue) -> String {
     match v {
         HudConfigValue::Bool(b) => b.to_string(),
         HudConfigValue::Int(i) => i.to_string(),
-        HudConfigValue::Float(f) => {
-            if f.fract() == 0.0 {
-                format!("{f:.1}")
-            } else {
-                f.to_string()
-            }
-        }
+        // Values are normalized to 0..1 internally; four decimals preserve
+        // a two-decimal percentage entered in the adjustment panel.
+        HudConfigValue::Float(f) => format!("{f:.4}"),
         HudConfigValue::String(s) => format!("\"{}\"", escape(s)),
-        HudConfigValue::Position([x, y]) => format!("[{x}, {y}]"),
+        HudConfigValue::Position([x, y]) => format!("[{x:.4}, {y:.4}]"),
+        HudConfigValue::Size([w, h]) => format!("[{w:.4}, {h:.4}]"),
     }
 }
 
@@ -721,7 +763,8 @@ mod tests {
             HudSlotLayout {
                 x: 0.5,
                 y: 0.8,
-                scale: 1.25,
+                width: 1.25,
+                height: 1.25,
                 ..Default::default()
             }
         });
@@ -766,7 +809,8 @@ mod tests {
         assert!(!back.hud.is_enabled("hud.deskhud.demo", "clock", true));
         let tip = back.hud.slot_layout("hud.deskhud.demo", "tip", 0);
         assert!((tip.x - 0.5).abs() < 1e-3);
-        assert!((tip.scale - 1.25).abs() < 1e-3);
+        assert!((tip.width - 1.25).abs() < 1e-3);
+        assert!((tip.height - 1.25).abs() < 1e-3);
     }
 
     #[cfg(any())]

@@ -214,10 +214,99 @@ impl HudWindow {
                 if item.layout.display != "primary" {
                     return None;
                 }
+                let default_border_color = item
+                    .frame
+                    .visuals
+                    .iter()
+                    .find_map(|visual| match visual {
+                        deskhud_engine::HudVisual::Text { color, .. } => {
+                            Some([color[0], color[1], color[2]])
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or([255; 3]);
+                let default_content_color = default_border_color;
+                let default_corner_radius = item
+                    .frame
+                    .visuals
+                    .iter()
+                    .find_map(|visual| match visual {
+                        deskhud_engine::HudVisual::Panel { radius, .. } => {
+                            Some((*radius / 160.0).clamp(0.0, 1.0))
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or(6.0 / 160.0);
+                let legacy_corner_radius = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "border_radius",
+                    default_corner_radius,
+                );
                 let target_x =
                     activity.position.x as f32 + item.layout.x * activity.size.width as f32;
                 let target_y =
                     activity.position.y as f32 + item.layout.y * activity.size.height as f32;
+                let background_opacity = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "background_opacity",
+                    1.0,
+                );
+                let border_opacity = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "border_opacity",
+                    1.0,
+                );
+                let border_width = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "border_width",
+                    1.0 / 6.0,
+                );
+                let legacy_window_shadow = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "window_shadow",
+                    0.0,
+                );
+                let legacy_content_shadow = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "content_shadow",
+                    0.0,
+                );
+                let shadow_opacity = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "shadow_opacity",
+                    0.75_f32.max(legacy_window_shadow.max(legacy_content_shadow)),
+                );
+                let window_shadow_global = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "window_shadow_mode",
+                    0.0,
+                ) < 0.5;
+                let content_shadow_global = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "content_shadow_mode",
+                    0.0,
+                ) < 0.5;
+                let window_shadow_enabled = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "window_shadow_enabled",
+                    1.0,
+                ) >= 0.5;
+                let content_shadow_enabled = self.prefs.hud.visual_value(
+                    item.plugin_id,
+                    item.contribution_id,
+                    "content_shadow_enabled",
+                    1.0,
+                ) >= 0.5;
                 Some(HudRenderItem {
                     key: format!("{}/{}", item.plugin_id, item.contribution_id),
                     frame: item.frame,
@@ -227,12 +316,13 @@ impl HudWindow {
                     ),
                     width: item.layout.width,
                     height: item.layout.height,
-                    background_opacity: self.prefs.hud.visual_value(
+                    background_enabled: self.prefs.hud.visual_value(
                         item.plugin_id,
                         item.contribution_id,
-                        "background_opacity",
+                        "background_enabled",
                         1.0,
-                    ),
+                    ) >= 0.5,
+                    background_opacity,
                     background_blur: self.prefs.hud.visual_value(
                         item.plugin_id,
                         item.contribution_id,
@@ -245,6 +335,178 @@ impl HudWindow {
                         "content_opacity",
                         1.0,
                     ),
+                    shadow_enabled: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "shadow_enabled",
+                        if shadow_opacity > f32::EPSILON {
+                            1.0
+                        } else {
+                            0.0
+                        },
+                    ) >= 0.5,
+                    window_shadow_global,
+                    content_shadow_global,
+                    window_shadow_enabled,
+                    content_shadow_enabled,
+                    window_shadow: shadow_opacity,
+                    window_shadow_blur: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "shadow_blur",
+                        self.prefs.hud.visual_value(
+                            item.plugin_id,
+                            item.contribution_id,
+                            "window_shadow_blur",
+                            1.0,
+                        ),
+                    ),
+                    window_shadow_distance: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "shadow_distance",
+                        self.prefs.hud.visual_value(
+                            item.plugin_id,
+                            item.contribution_id,
+                            "window_shadow_distance",
+                            5.0 / 12.0,
+                        ),
+                    ),
+                    window_shadow_angle: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "shadow_angle",
+                        self.prefs.hud.visual_value(
+                            item.plugin_id,
+                            item.contribution_id,
+                            "window_shadow_angle",
+                            0.125,
+                        ),
+                    ),
+                    window_shadow_color: std::array::from_fn(|channel| {
+                        (self.prefs.hud.visual_value(
+                            item.plugin_id,
+                            item.contribution_id,
+                            ["shadow_red", "shadow_green", "shadow_blue"][channel],
+                            self.prefs.hud.visual_value(
+                                item.plugin_id,
+                                item.contribution_id,
+                                [
+                                    "window_shadow_red",
+                                    "window_shadow_green",
+                                    "window_shadow_blue",
+                                ][channel],
+                                0.0,
+                            ),
+                        ) * 255.0)
+                            .round() as u8
+                    }),
+                    window_custom_shadow: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "window_shadow",
+                        0.75,
+                    ),
+                    window_custom_shadow_blur: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "window_shadow_blur",
+                        1.0,
+                    ),
+                    window_custom_shadow_distance: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "window_shadow_distance",
+                        5.0 / 12.0,
+                    ),
+                    window_custom_shadow_angle: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "window_shadow_angle",
+                        0.125,
+                    ),
+                    window_custom_shadow_color: std::array::from_fn(|channel| {
+                        (self.prefs.hud.visual_value(
+                            item.plugin_id,
+                            item.contribution_id,
+                            [
+                                "window_shadow_red",
+                                "window_shadow_green",
+                                "window_shadow_blue",
+                            ][channel],
+                            0.0,
+                        ) * 255.0)
+                            .round() as u8
+                    }),
+                    content_custom_shadow: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "content_shadow",
+                        0.75,
+                    ),
+                    content_custom_shadow_blur: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "content_shadow_blur",
+                        1.0,
+                    ),
+                    content_custom_shadow_distance: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "content_shadow_distance",
+                        5.0 / 12.0,
+                    ),
+                    content_custom_shadow_angle: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "content_shadow_angle",
+                        0.125,
+                    ),
+                    content_custom_shadow_color: std::array::from_fn(|channel| {
+                        (self.prefs.hud.visual_value(
+                            item.plugin_id,
+                            item.contribution_id,
+                            [
+                                "content_shadow_red",
+                                "content_shadow_green",
+                                "content_shadow_blue",
+                            ][channel],
+                            0.0,
+                        ) * 255.0)
+                            .round() as u8
+                    }),
+                    content_color: std::array::from_fn(|channel| {
+                        (self.prefs.hud.visual_value(
+                            item.plugin_id,
+                            item.contribution_id,
+                            ["content_red", "content_green", "content_blue"][channel],
+                            default_content_color[channel] as f32 / 255.0,
+                        ) * 255.0)
+                            .round() as u8
+                    }),
+                    border_enabled: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "border_enabled",
+                        1.0,
+                    ) >= 0.5,
+                    border_opacity,
+                    border_width,
+                    corner_radius: self.prefs.hud.visual_value(
+                        item.plugin_id,
+                        item.contribution_id,
+                        "corner_radius",
+                        legacy_corner_radius,
+                    ),
+                    border_color: std::array::from_fn(|channel| {
+                        (self.prefs.hud.visual_value(
+                            item.plugin_id,
+                            item.contribution_id,
+                            ["border_red", "border_green", "border_blue"][channel],
+                            default_border_color[channel] as f32 / 255.0,
+                        ) * 255.0)
+                            .round() as u8
+                    }),
                 })
             })
             .collect()

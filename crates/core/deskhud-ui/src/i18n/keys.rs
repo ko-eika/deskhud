@@ -171,6 +171,14 @@ pub enum MessageKey {
     HudAdjustBackgroundBlur,
     /// HUD 内容透明度字段。
     HudAdjustContentOpacity,
+    /// HUD 边框透明度字段。
+    HudAdjustBorderOpacity,
+    /// HUD 边框宽度字段。
+    HudAdjustBorderWidth,
+    /// HUD 整体窗口圆角字段。
+    HudAdjustCornerRadius,
+    /// HUD 边框颜色字段。
+    HudAdjustBorderColor,
     /// HUD X position field.
     HudAdjustX,
     /// HUD Y position field.
@@ -183,6 +191,44 @@ pub enum MessageKey {
     HudAdjustLockRatio,
     /// HUD visual effects section heading.
     HudAdjustEffects,
+    /// HUD global effects subsection heading.
+    HudAdjustGlobalEffects,
+    /// HUD window-effect subsection heading.
+    HudAdjustWindowEffects,
+    /// HUD window shadow intensity.
+    HudAdjustWindowShadow,
+    /// HUD content-effect subsection heading.
+    HudAdjustContentEffects,
+    /// HUD content color.
+    HudAdjustContentColor,
+    /// HUD content shadow intensity.
+    HudAdjustContentShadow,
+    /// HUD shadow color.
+    HudAdjustShadowColor,
+    /// HUD shadow opacity.
+    HudAdjustShadowOpacity,
+    /// HUD shadow softness.
+    HudAdjustShadowBlur,
+    /// HUD shadow offset distance.
+    HudAdjustShadowDistance,
+    /// HUD shadow direction angle.
+    HudAdjustShadowAngle,
+    /// HUD dedicated shadow settings window.
+    HudAdjustShadowSettings,
+    /// Global shadow editor title.
+    HudAdjustGlobalShadow,
+    /// Custom shadow editor title.
+    HudAdjustCustomShadow,
+    /// Shadow source mode field.
+    HudAdjustShadowMode,
+    /// Global shadow mode option.
+    HudAdjustShadowGlobal,
+    /// Custom shadow mode option.
+    HudAdjustShadowCustom,
+    /// HUD border-effect subsection heading.
+    HudAdjustBorderEffects,
+    /// HUD background-effect subsection heading.
+    HudAdjustBackgroundEffects,
     /// HUD layout editor: snap positions to a grid.
     HudAdjustSnapGrid,
     /// Percentage unit option.
@@ -302,12 +348,35 @@ impl MessageKey {
         Self::HudAdjustBackgroundOpacity,
         Self::HudAdjustBackgroundBlur,
         Self::HudAdjustContentOpacity,
+        Self::HudAdjustBorderOpacity,
+        Self::HudAdjustBorderWidth,
+        Self::HudAdjustCornerRadius,
+        Self::HudAdjustBorderColor,
         Self::HudAdjustX,
         Self::HudAdjustY,
         Self::HudAdjustWidth,
         Self::HudAdjustHeight,
         Self::HudAdjustLockRatio,
         Self::HudAdjustEffects,
+        Self::HudAdjustGlobalEffects,
+        Self::HudAdjustWindowEffects,
+        Self::HudAdjustWindowShadow,
+        Self::HudAdjustContentEffects,
+        Self::HudAdjustContentColor,
+        Self::HudAdjustContentShadow,
+        Self::HudAdjustShadowColor,
+        Self::HudAdjustShadowOpacity,
+        Self::HudAdjustShadowBlur,
+        Self::HudAdjustShadowDistance,
+        Self::HudAdjustShadowAngle,
+        Self::HudAdjustShadowSettings,
+        Self::HudAdjustGlobalShadow,
+        Self::HudAdjustCustomShadow,
+        Self::HudAdjustShadowMode,
+        Self::HudAdjustShadowGlobal,
+        Self::HudAdjustShadowCustom,
+        Self::HudAdjustBorderEffects,
+        Self::HudAdjustBackgroundEffects,
         Self::HudAdjustSnapGrid,
         Self::HudAdjustPercent,
         Self::HudAdjustPixels,

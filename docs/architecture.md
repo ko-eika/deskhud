@@ -72,7 +72,7 @@ Host 契约（当前）：
   - `[theme]` / `[font]` / `[prefs]`：主题 / 字体 / 设置窗几何
   - `[pet]`：当前宠、尺寸位置层级 + `pet.<org>.<id>.*` 选项；`pet.global.layer` 为通用三档层级
   - `[hud]`：HUD 开关、布局与 `hud.global.layer` 通用三档层级
-  - `[hud]`：`hud.<org>.<id>[.<item>].enable` 与布局 `display/x/y/scale`
+  - `[hud]`：`hud.<org>.<id>[.<item>].enable` 与布局 `display/x/y/size`，其中 `size = [width, height]`
   - 插件关 → 其下全部不显示
   - 可继续加同前缀自定义键，便于扩展
 - 布局编辑：关闭设置后打开 Windows 原生 D3D11 + DirectComposition 全屏编辑视口；按任务栏工作区绘制半透明安全边界，选中 HUD 使用半透明实线边框，右下角显示三角缩放角标。当前先支持主屏，布局修改写入 `HudSlotLayout`；运行态 HUD 使用每屏一个原生合成窗。

@@ -112,6 +112,8 @@
 
 | 2026-09-01 | 产品与内置包 PATCH 升至 `0.9.2`，HUD 布局由单一等比 `scale` 扩展为独立 `width/height`，并增加视觉参数调整 | 提供百分比/像素单位、网格吸附、比例锁定和透明度/模糊调节；旧 `scale` 配置自动迁移读取，engine 兼容族与 Guest `api_version` 保持不变 |
 
+| 2026-09-02 | 产品与内置包 PATCH 升至 `0.9.3`，HUD 布局统一使用 `.size = [width, height]` 并移除旧 `scale` 读取兼容 | 完善四边缩放、颜色与阴影编辑、边框/圆角/内容效果控制和持久化格式；内置 Mochi/Sesame 默认启用自定义气泡，engine 兼容族与 Guest `api_version` 保持不变 |
+
 ## 已知上游限制（勿当「本仓库可修」）
 
 历史上曾受 Glow deferred 子窗透明限制；现行方案已迁移为平台覆盖层，当前边界以 [`CONSTRAINTS.md`](./CONSTRAINTS.md) 为准。

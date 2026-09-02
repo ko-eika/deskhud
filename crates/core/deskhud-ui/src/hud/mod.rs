@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::shell::LayerPreference;
 
-pub use layout::HudSlotLayout;
+pub use layout::{HUD_SIZE_FACTOR_MAX, HUD_SIZE_FACTOR_MIN, HudSlotLayout};
 
 /// `[hud]` 里单个键的值：bool / 数字 / 字符串。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -18,10 +18,12 @@ pub enum HudConfigValue {
     Bool(bool),
     /// 整数（反序列化兜底，读布局时当 float）。
     Int(i64),
-    /// 浮点（`.x` / `.y` / `.scale`）。
+    /// 浮点参数。
     Float(f64),
     /// 位置元组（`.position = [x, y]`）。
     Position([f64; 2]),
+    /// 尺寸元组（`.size = [width, height]`）。
+    Size([f64; 2]),
     /// 字符串（`.display` 等）。
     String(String),
 }
@@ -38,7 +40,7 @@ impl HudConfigValue {
         match self {
             Self::Float(v) => Some(*v as f32),
             Self::Int(v) => Some(*v as f32),
-            Self::Bool(_) | Self::String(_) | Self::Position(_) => None,
+            Self::Bool(_) | Self::String(_) | Self::Position(_) | Self::Size(_) => None,
         }
     }
 
@@ -60,7 +62,7 @@ impl HudConfigValue {
 /// "hud.deskhud.demo.tip.display" = "primary"
 /// "hud.deskhud.demo.tip.x" = 0.54
 /// "hud.deskhud.demo.tip.y" = 0.82
-/// "hud.deskhud.demo.tip.scale" = 1.0
+/// "hud.deskhud.demo.tip.size" = [1.0, 1.0]
 /// ```
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct HudPrefs {
@@ -96,6 +98,15 @@ impl HudPrefs {
     fn get_position(&self, key: &str) -> Option<[f32; 2]> {
         match self.config.get(key) {
             Some(HudConfigValue::Position(v)) => Some([v[0] as f32, v[1] as f32]),
+            _ => None,
+        }
+    }
+
+    fn get_size(&self, key: &str) -> Option<[f32; 2]> {
+        match self.config.get(key) {
+            Some(HudConfigValue::Size(v) | HudConfigValue::Position(v)) => {
+                Some([v[0] as f32, v[1] as f32])
+            }
             _ => None,
         }
     }
@@ -182,9 +193,9 @@ impl HudPrefs {
             || self.get_position(&format!("{base}.position")).is_some()
             || self.get_f32(&format!("{base}.x")).is_some()
             || self.get_f32(&format!("{base}.y")).is_some()
-            || self.get_f32(&format!("{base}.scale")).is_some()
             || self.get_f32(&format!("{base}.width")).is_some()
-            || self.get_f32(&format!("{base}.height")).is_some();
+            || self.get_f32(&format!("{base}.height")).is_some()
+            || self.config.contains_key(&format!("{base}.size"));
 
         if has_flat {
             let mut slot = HudSlotLayout::default_for_index(index);
@@ -201,10 +212,9 @@ impl HudPrefs {
                 slot.x = x;
                 slot.y = y;
             }
-            if let Some(s) = self.get_f32(&format!("{base}.scale")) {
-                slot.scale = s;
-                slot.width = s;
-                slot.height = s;
+            if let Some([w, h]) = self.get_size(&format!("{base}.size")) {
+                slot.width = w;
+                slot.height = h;
             }
             if let Some(w) = self.get_f32(&format!("{base}.width")) {
                 slot.width = w;
@@ -235,17 +245,12 @@ impl HudPrefs {
             HudConfigValue::Position([layout.x as f64, layout.y as f64]),
         );
         self.config.insert(
-            format!("{base}.scale"),
-            HudConfigValue::Float(layout.scale as f64),
+            format!("{base}.size"),
+            HudConfigValue::Size([layout.width as f64, layout.height as f64]),
         );
-        self.config.insert(
-            format!("{base}.width"),
-            HudConfigValue::Float(layout.width as f64),
-        );
-        self.config.insert(
-            format!("{base}.height"),
-            HudConfigValue::Float(layout.height as f64),
-        );
+        // Remove keys written by older versions once the new shape is saved.
+        self.config.remove(&format!("{base}.width"));
+        self.config.remove(&format!("{base}.height"));
     }
 
     /// Returns a visual tuning value for a HUD item. Visual values deliberately
@@ -276,7 +281,7 @@ impl HudPrefs {
 
     /// 将 `other` 中的布局扁平键同步到 `self`（不影响 enable 等开关）。
     pub fn copy_layout_keys_from(&mut self, other: &Self) {
-        const SUFFIXES: &[&str] = &[".display", ".position", ".scale", ".width", ".height"];
+        const SUFFIXES: &[&str] = &[".display", ".position", ".size", ".width", ".height"];
         for (k, v) in &other.config {
             if SUFFIXES.iter().any(|s| k.ends_with(s)) {
                 self.config.insert(k.clone(), v.clone());
@@ -356,7 +361,6 @@ mod tests {
             display: "primary".into(),
             x: 0.12,
             y: 0.34,
-            scale: 1.5,
             width: 1.5,
             height: 1.5,
         };
@@ -368,8 +372,8 @@ mod tests {
             "position tuple missing in:\n{text}"
         );
         assert!(
-            text.contains("hud.deskhud.demo.tip.scale"),
-            "flat scale missing in:\n{text}"
+            text.contains("hud.deskhud.demo.tip.size"),
+            "size tuple missing in:\n{text}"
         );
         assert!(
             !text.contains("[layout"),
@@ -379,7 +383,8 @@ mod tests {
         let got = back.slot_layout("hud.deskhud.demo", "tip", 0);
         assert!((got.x - 0.12).abs() < 1e-4);
         assert!((got.y - 0.34).abs() < 1e-4);
-        assert!((got.scale - 1.5).abs() < 1e-4);
+        assert!((got.width - 1.5).abs() < 1e-4);
+        assert!((got.height - 1.5).abs() < 1e-4);
         assert_eq!(got.display, "primary");
     }
 
@@ -412,11 +417,9 @@ mod tests {
 display = "primary"
 x = 0.2
 y = 0.3
-scale = 1.25
 "#;
         let hud: HudPrefs = toml::from_str(text).expect("de");
         let got = hud.slot_layout("hud.deskhud.demo", "clock", 0);
         assert!((got.x - 0.2).abs() < 1e-4);
-        assert!((got.scale - 1.25).abs() < 1e-4);
     }
 }

@@ -1,7 +1,7 @@
 id = "pet.deskhud.sesame"
 kind = "pet"
 load = "builtin"
-version = "0.9.2"
+version = "0.9.3"
 engine = "0.9"
 api_version = 4
 display_name = "Sesame"

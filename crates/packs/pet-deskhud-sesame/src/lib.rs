@@ -43,7 +43,7 @@ const OPTIONS: &[PetConfigOption] = &[
         key: "custom_bubble",
         label: "custom_bubble.label",
         description: "custom_bubble.description",
-        default: false,
+        default: true,
     },
     PetConfigOption {
         key: "follow_eyes",
@@ -105,7 +105,7 @@ impl PetKind for BuiltinSesamePet {
 
     fn apply_config(&self, config: PetConfigBag<'_>) {
         self.custom_bubble
-            .store(config.get("custom_bubble", false), Ordering::Relaxed);
+            .store(config.get("custom_bubble", true), Ordering::Relaxed);
         self.follow_eyes
             .store(config.get("follow_eyes", true), Ordering::Relaxed);
         self.hover_highlight

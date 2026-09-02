@@ -215,13 +215,25 @@ msgid "HudAdjustSize"
 msgstr "Size"
 
 msgid "HudAdjustBackgroundOpacity"
-msgstr "Background opacity"
+msgstr "Opacity"
 
 msgid "HudAdjustBackgroundBlur"
-msgstr "Background blur"
+msgstr "Blur"
 
 msgid "HudAdjustContentOpacity"
-msgstr "Content opacity"
+msgstr "Opacity"
+
+msgid "HudAdjustBorderOpacity"
+msgstr "Opacity"
+
+msgid "HudAdjustBorderWidth"
+msgstr "Width"
+
+msgid "HudAdjustCornerRadius"
+msgstr "Corner radius"
+
+msgid "HudAdjustBorderColor"
+msgstr "Color"
 
 msgid "HudAdjustX"
 msgstr "Horizontal position"
@@ -246,6 +258,63 @@ msgstr "Pixels"
 
 msgid "HudAdjustEffects"
 msgstr "Effects"
+
+msgid "HudAdjustGlobalEffects"
+msgstr "Global"
+
+msgid "HudAdjustWindowEffects"
+msgstr "Window"
+
+msgid "HudAdjustWindowShadow"
+msgstr "Shadow"
+
+msgid "HudAdjustContentEffects"
+msgstr "Content"
+
+msgid "HudAdjustContentColor"
+msgstr "Color"
+
+msgid "HudAdjustContentShadow"
+msgstr "Shadow"
+
+msgid "HudAdjustShadowColor"
+msgstr "Color"
+
+msgid "HudAdjustShadowOpacity"
+msgstr "Opacity"
+
+msgid "HudAdjustShadowBlur"
+msgstr "Softness"
+
+msgid "HudAdjustShadowDistance"
+msgstr "Distance"
+
+msgid "HudAdjustShadowAngle"
+msgstr "Angle"
+
+msgid "HudAdjustShadowSettings"
+msgstr "Shadow settings"
+
+msgid "HudAdjustGlobalShadow"
+msgstr "Global shadow"
+
+msgid "HudAdjustCustomShadow"
+msgstr "Custom shadow"
+
+msgid "HudAdjustShadowMode"
+msgstr "Source"
+
+msgid "HudAdjustShadowGlobal"
+msgstr "Global"
+
+msgid "HudAdjustShadowCustom"
+msgstr "Custom"
+
+msgid "HudAdjustBorderEffects"
+msgstr "Border"
+
+msgid "HudAdjustBackgroundEffects"
+msgstr "Background"
 
 msgid "HudAdjustSnapGrid"
 msgstr "Snap to grid"

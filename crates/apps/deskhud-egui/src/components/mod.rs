@@ -12,4 +12,4 @@ pub(crate) use card::{
 };
 pub(crate) use color::{lerp_color, with_alpha};
 pub(crate) use dropdown::{DropdownOption, dropdown};
-pub(crate) use switch::{switch_row, toggle_switch};
+pub(crate) use switch::{switch_row, toggle_switch, toggle_switch_with_id};
