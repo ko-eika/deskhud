@@ -166,7 +166,7 @@ cargo pack-builtins --out path/to/out
 
 插件可贡献 **0..N** 条 HUD；用户可关整个插件意向条目，也可关单条（prefs）。
 
-当前 host 已实现：按插件折叠 + **插件总开关** + 条目开关；运行态从 `EngineRegistry` 扫描贡献，按“总开关 ∧ 插件开关 ∧ 条目开关”调用 `hud_frame()` 并绘制中性 `HudVisual`。
+当前 host 已实现：按插件折叠 + **插件总开关** + 默认实例开关；运行态从稳定 HUD 实例解析贡献，按“总开关 ∧ 插件开关 ∧ 实例开关 ∧（若有）组开关”调用 `hud_frame_for_instance()` 并绘制中性 `HudVisual`。
 
 ### 2.2 实现入口：`Plugin`
 
@@ -213,7 +213,9 @@ impl Plugin for MyPlugin {
 实例；插件或 contribution 暂时缺失时，实例配置及组成员关系仍会保留。实例标题只供
 显示，不能作为插件数据或持久化引用的主键。
 
-`HudFrameCtx` 已预留当前实例、来源与宿主单调时间；运行态按实例请求帧、实例配置以及
+`HudFrameCtx` 已预留当前实例、来源与宿主单调时间；运行态按实例请求帧。宿主测量帧后，
+使用中性的 `HudGroupLayout::compose` 得到横向、纵向或网格排列的成员矩形和裁剪矩形，
+再将整个组作为单一屏幕槽渲染；插件不会接触 egui、窗口句柄或 OS 类型。实例配置以及
 社区 Guest HUD ABI 仍在后续阶段接入。现有原生插件继续使用：
 
 - `Plugin::hud_frame(...)` → 中性 `HudFrame`（文本 / 进度等）

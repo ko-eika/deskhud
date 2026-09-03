@@ -185,12 +185,30 @@ impl HudPrefs {
         contribution_id: &str,
         default_enabled: bool,
     ) -> bool {
+        let source = deskhud_engine::HudSourceId::new(plugin_id, contribution_id);
+        let default_id = Self::default_instance_id(&source);
+        if let Some(instance) = self
+            .instances
+            .iter()
+            .find(|instance| instance.id == default_id && instance.source == source)
+        {
+            return instance.enabled;
+        }
         let key = Self::contribution_enable_key(plugin_id, contribution_id);
         self.get_bool(&key).unwrap_or(default_enabled)
     }
 
     /// 设置条目启用状态。
     pub fn set_enabled(&mut self, plugin_id: &str, contribution_id: &str, on: bool) {
+        let source = deskhud_engine::HudSourceId::new(plugin_id, contribution_id);
+        let default_id = Self::default_instance_id(&source);
+        if let Some(instance) = self
+            .instances
+            .iter_mut()
+            .find(|instance| instance.id == default_id && instance.source == source)
+        {
+            instance.enabled = on;
+        }
         let key = Self::contribution_enable_key(plugin_id, contribution_id);
         self.config.insert(key, HudConfigValue::Bool(on));
         self.config
@@ -438,6 +456,16 @@ mod tests {
             (back.visual_value("hud.acme.demo", "clock", "background_opacity", 1.0) - 0.35).abs()
                 < 1e-5
         );
+    }
+
+    #[test]
+    fn legacy_contribution_switch_controls_its_default_instance() {
+        let mut hud = HudPrefs::default();
+        let source = deskhud_engine::HudSourceId::new("hud.deskhud.demo", "clock");
+        hud.ensure_default_instances([(source.clone(), true)]);
+        hud.set_enabled(&source.plugin_id, &source.contribution_id, false);
+        assert!(!hud.is_enabled(&source.plugin_id, &source.contribution_id, true));
+        assert!(!hud.instances[0].enabled);
     }
 
     #[cfg(any())]

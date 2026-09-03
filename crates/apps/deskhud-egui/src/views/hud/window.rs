@@ -2,7 +2,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use deskhud_engine::EngineRegistry;
-use deskhud_ui::{LayerPreference, UiPreferences};
+use deskhud_ui::{HudConfigValue, LayerPreference, UiPreferences};
 use std::{sync::Arc, time::Instant};
 use winit::{
     dpi::PhysicalSize,
@@ -19,7 +19,7 @@ use crate::runtime::{
 use crate::area::{self, ActivityArea};
 use crate::views as view;
 
-use super::{HudRenderItem, LayoutState, active_hud_frames};
+use super::{HudRenderItem, LayoutState, resolved_hud_slots};
 
 pub(crate) struct HudWindow {
     /// HUD 对应的通用视口运行时。
@@ -150,13 +150,13 @@ impl HudWindow {
             activity.size.width as f32 / scale,
             activity.size.height as f32 / scale,
         ));
-        self.layout.selected = active_hud_frames(
+        self.layout.selected = resolved_hud_slots(
             &self.registry,
             &self.prefs,
             self.started.elapsed().as_secs_f32(),
         )
         .first()
-        .map(|item| format!("{}/{}", item.plugin_id, item.contribution_id));
+        .map(|item| item.key.clone());
         self.layout.adjust_open = true;
         self.layout.adjust_session = self.layout.adjust_session.wrapping_add(1);
         self.layout.window_revision = self.layout.window_revision.wrapping_add(1);
@@ -208,7 +208,7 @@ impl HudWindow {
             position: window_position,
             size: self.viewport.window().inner_size(),
         });
-        active_hud_frames(&self.registry, &self.prefs, elapsed)
+        resolved_hud_slots(&self.registry, &self.prefs, elapsed)
             .into_iter()
             .filter_map(|item| {
                 if item.layout.display != "primary" {
@@ -247,12 +247,21 @@ impl HudWindow {
                     activity.position.x as f32 + item.layout.x * activity.size.width as f32;
                 let target_y =
                     activity.position.y as f32 + item.layout.y * activity.size.height as f32;
-                let background_opacity = self.prefs.hud.visual_value(
-                    item.plugin_id,
-                    item.contribution_id,
-                    "background_opacity",
-                    1.0,
-                );
+                let instance_value = |name: &str, default: f32| {
+                    item.config
+                        .get(name)
+                        .and_then(config_f32)
+                        .unwrap_or_else(|| {
+                            self.prefs.hud.visual_value(
+                                item.plugin_id,
+                                item.contribution_id,
+                                name,
+                                default,
+                            )
+                        })
+                        .clamp(0.0, 1.0)
+                };
+                let background_opacity = instance_value("background_opacity", 1.0);
                 let border_opacity = self.prefs.hud.visual_value(
                     item.plugin_id,
                     item.contribution_id,
@@ -308,8 +317,11 @@ impl HudWindow {
                     1.0,
                 ) >= 0.5;
                 Some(HudRenderItem {
-                    key: format!("{}/{}", item.plugin_id, item.contribution_id),
-                    frame: item.frame,
+                    key: item.key,
+                    target: item.target,
+                    source: item.source,
+                    layers: item.layers,
+                    base_size: item.base_size,
                     initial_position: egui::pos2(
                         (target_x - window_position.x as f32) / scale_factor,
                         (target_y - window_position.y as f32) / scale_factor,
@@ -518,6 +530,14 @@ impl HudWindow {
 
     pub(crate) fn destroy(&mut self) {
         self.viewport.destroy();
+    }
+}
+
+fn config_f32(value: &HudConfigValue) -> Option<f32> {
+    match value {
+        HudConfigValue::Float(value) => Some(*value as f32),
+        HudConfigValue::Int(value) => Some(*value as f32),
+        _ => None,
     }
 }
 

@@ -259,16 +259,7 @@ impl WindowManager {
     /// Keeps the native HUD window visibility derived from the same persisted
     /// switches that gate individual contributions.
     fn sync_hud_visibility(&mut self) {
-        let should_show = self.prefs.hud.is_master_enabled()
-            && self.registry.all_hud_contributions().into_iter().any(
-                |(plugin_id, contribution)| {
-                    self.prefs.hud.is_active(
-                        plugin_id,
-                        contribution.id,
-                        contribution.default_enabled,
-                    )
-                },
-            );
+        let should_show = crate::views::hud::has_active_hud(&self.registry, &self.prefs);
         if should_show {
             self.show_hud();
         } else {

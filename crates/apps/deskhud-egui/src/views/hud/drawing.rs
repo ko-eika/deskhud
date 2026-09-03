@@ -1,11 +1,10 @@
 //! HUD 子窗口、布局边界和虚线动画绘制职责。
 
-use super::{AdjustmentUnit, HudRenderItem, LayoutState, ShadowTarget};
+use super::{AdjustmentUnit, HudLayoutTarget, HudRenderItem, LayoutState, ShadowTarget};
 use deskhud_engine::HudVisual;
 use deskhud_ui::{HUD_SIZE_FACTOR_MAX, HUD_SIZE_FACTOR_MIN, MessageKey, UiPreferences};
 
 const HUD_PADDING: f32 = 8.0;
-const EMPTY_FRAME_SIZE: egui::Vec2 = egui::Vec2::new(136.0, 72.0);
 const GRID_STEP: f32 = 0.05;
 const ADJUST_PANEL_WIDTH: f32 = 440.0;
 const ADJUST_ROW_HEIGHT: f32 = 32.0;
@@ -85,7 +84,7 @@ pub(super) fn draw(
             .positions
             .entry(item.key.clone())
             .or_insert(item.initial_position);
-        let base_size = frame_size(&item.frame.visuals);
+        let base_size = egui::vec2(item.base_size.width, item.base_size.height);
         let preferred_size = egui::vec2(
             base_size.x * item.width.clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX),
             base_size.y * item.height.clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX),
@@ -149,7 +148,7 @@ pub(super) fn draw(
                 corner_radius: item.corner_radius,
             });
             if let Some(resize) = frame.resize_drag
-                && let Some(mut slot) = layout_slot(prefs, &item.key)
+                && let Some(mut slot) = layout_slot(prefs, item)
             {
                 let old_size = frame.size;
                 let min_size = base_size * HUD_SIZE_FACTOR_MIN;
@@ -167,11 +166,11 @@ pub(super) fn draw(
                 } else if resize.edges.bottom {
                     next_size.y = (old_size.y + resize.delta.y).clamp(min_size.y, max_size.y);
                 }
-                slot.2.width = (next_size.x / base_size.x.max(1.0))
+                slot.width = (next_size.x / base_size.x.max(1.0))
                     .clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX);
-                slot.2.height = (next_size.y / base_size.y.max(1.0))
+                slot.height = (next_size.y / base_size.y.max(1.0))
                     .clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX);
-                prefs.hud.set_slot_layout(&slot.0, &slot.1, slot.2);
+                set_layout_slot(prefs, item, slot);
                 changed = true;
             }
         }
@@ -268,7 +267,7 @@ fn draw_adjust_window(
     let Some(item) = items.iter().find(|item| item.key == key) else {
         return false;
     };
-    let Some((plugin, contribution, mut slot)) = layout_slot(prefs, &key) else {
+    let Some(mut slot) = layout_slot(prefs, item) else {
         return false;
     };
     let initial_width = slot.width;
@@ -321,7 +320,16 @@ fn draw_adjust_window(
                 width_changed = width_was_changed;
                 height_changed = height_was_changed;
                 ui.add_space(8.0);
-                changed |= draw_effects_group(ui, layout, prefs, &plugin, &contribution, item);
+                if let Some(source) = &item.source {
+                    changed |= draw_effects_group(
+                        ui,
+                        layout,
+                        prefs,
+                        &source.plugin_id,
+                        &source.contribution_id,
+                        item,
+                    );
+                }
             });
     });
     if layout.shadow_open {
@@ -330,8 +338,14 @@ fn draw_adjust_window(
             layout,
             prefs,
             item,
-            &plugin,
-            &contribution,
+            item.source
+                .as_ref()
+                .map(|source| source.plugin_id.as_str())
+                .unwrap_or("hud.deskhud.group"),
+            item.source
+                .as_ref()
+                .map(|source| source.contribution_id.as_str())
+                .unwrap_or("group"),
             layout.shadow_target.unwrap_or(ShadowTarget::Global),
         );
     }
@@ -360,7 +374,7 @@ fn draw_adjust_window(
             layout.window_revision = layout.window_revision.wrapping_add(1);
         }
         let (slot_x, slot_y) = (slot.x, slot.y);
-        prefs.hud.set_slot_layout(&plugin, &contribution, slot);
+        set_layout_slot(prefs, item, slot);
         if let Some(pos) = layout.positions.get_mut(&key)
             && let Some(activity) = layout.activity_size
         {
@@ -446,7 +460,7 @@ fn draw_size_group(
     let mut changed = false;
     let mut width_changed = false;
     let mut height_changed = false;
-    let base = frame_size(&item.frame.visuals);
+    let base = egui::vec2(item.base_size.width, item.base_size.height);
     egui::Frame::group(ui.style())
         .corner_radius(8.0)
         .inner_margin(egui::Margin::symmetric(10, 8))
@@ -1508,7 +1522,7 @@ fn adjustment_unit(
 }
 
 fn draw_frame(ui: &mut egui::Ui, item: &HudRenderItem, layout_mode: bool) -> FrameResponse {
-    let base_size = frame_size(&item.frame.visuals);
+    let base_size = egui::vec2(item.base_size.width, item.base_size.height);
     let available = ui.available_size_before_wrap();
     let size = if layout_mode
         && available.x.is_finite()
@@ -1596,60 +1610,64 @@ fn draw_frame(ui: &mut egui::Ui, item: &HudRenderItem, layout_mode: bool) -> Fra
             window_color,
         );
     }
-    for visual in &item.frame.visuals {
-        match visual {
-            HudVisual::Panel {
-                width,
-                height,
-                radius: _,
-                color,
-            } => {
-                let panel = if layout_mode {
-                    // A resizable egui Window defines the editable HUD size;
-                    // the panel must follow its client rect exactly.
-                    rect
-                } else {
-                    egui::Rect::from_min_size(
-                        rect.min,
-                        egui::vec2(width.max(1.0) * item.width, height.max(1.0) * item.height),
-                    )
-                };
-                if item.background_enabled {
-                    paint_acrylic_background(
-                        &hud_painter,
-                        panel,
-                        window_radius,
-                        *color,
-                        item.background_opacity,
-                        item.background_blur,
+    let scale_x = rect.width() / item.base_size.width.max(1.0);
+    let scale_y = rect.height() / item.base_size.height.max(1.0);
+    for layer in &item.layers {
+        let child_rect = egui::Rect::from_min_size(
+            rect.min + egui::vec2(layer.rect.x * scale_x, layer.rect.y * scale_y),
+            egui::vec2(layer.rect.width * scale_x, layer.rect.height * scale_y),
+        );
+        let child_clip = egui::Rect::from_min_size(
+            rect.min + egui::vec2(layer.clip.x * scale_x, layer.clip.y * scale_y),
+            egui::vec2(layer.clip.width * scale_x, layer.clip.height * scale_y),
+        )
+        .intersect(rect);
+        let child_painter = hud_painter.with_clip_rect(child_clip);
+        for visual in &layer.frame.visuals {
+            match visual {
+                HudVisual::Panel {
+                    width: _,
+                    height: _,
+                    radius: _,
+                    color,
+                } => {
+                    if item.background_enabled {
+                        paint_acrylic_background(
+                            &child_painter,
+                            child_rect,
+                            window_radius,
+                            *color,
+                            item.background_opacity,
+                            item.background_blur,
+                        );
+                    }
+                }
+                HudVisual::Text {
+                    text,
+                    font_size,
+                    color,
+                } => {
+                    paint_hud_text(
+                        &child_painter,
+                        child_rect.center(),
+                        text,
+                        egui::FontId::proportional(
+                            (font_size * scale * ui_font_scale).clamp(8.0, 96.0),
+                        ),
+                        item.content_color,
+                        color[3],
+                        item.content_opacity,
+                        if content_shadow_enabled {
+                            content_shadow
+                        } else {
+                            0.0
+                        },
+                        content_blur,
+                        content_distance,
+                        content_angle,
+                        content_color,
                     );
                 }
-            }
-            HudVisual::Text {
-                text,
-                font_size,
-                color,
-            } => {
-                paint_hud_text(
-                    &hud_painter,
-                    rect.center(),
-                    text,
-                    egui::FontId::proportional(
-                        (font_size * scale * ui_font_scale).clamp(8.0, 96.0),
-                    ),
-                    item.content_color,
-                    color[3],
-                    item.content_opacity,
-                    if content_shadow_enabled {
-                        content_shadow
-                    } else {
-                        0.0
-                    },
-                    content_blur,
-                    content_distance,
-                    content_angle,
-                    content_color,
-                );
             }
         }
     }
@@ -2007,31 +2025,6 @@ fn paint_hud_border(
     );
 }
 
-fn frame_size(visuals: &[HudVisual]) -> egui::Vec2 {
-    let mut size = egui::Vec2::ZERO;
-    for visual in visuals {
-        match visual {
-            HudVisual::Panel { width, height, .. } => {
-                size.x = size.x.max(*width);
-                size.y = size.y.max(*height);
-            }
-            HudVisual::Text {
-                text, font_size, ..
-            } => {
-                size.x = size
-                    .x
-                    .max(text.chars().count() as f32 * font_size * 0.62 + 20.0);
-                size.y = size.y.max(font_size + 16.0);
-            }
-        }
-    }
-    if size == egui::Vec2::ZERO {
-        EMPTY_FRAME_SIZE
-    } else {
-        size
-    }
-}
-
 fn rgba_with_alpha([red, green, blue, alpha]: [u8; 4], opacity: f32) -> egui::Color32 {
     egui::Color32::from_rgba_unmultiplied(
         red,
@@ -2129,16 +2122,46 @@ fn draw_toggle_icon(
     crate::components::icons::paint(ui, icon, icon_rect.shrink(4.0), color, false);
 }
 
-fn layout_slot(
-    prefs: &UiPreferences,
-    key: &str,
-) -> Option<(String, String, deskhud_ui::HudSlotLayout)> {
-    let (plugin, contribution) = key.split_once('/')?;
-    Some((
-        plugin.to_owned(),
-        contribution.to_owned(),
-        prefs.hud.slot_layout(plugin, contribution, 0),
-    ))
+fn layout_slot(prefs: &UiPreferences, item: &HudRenderItem) -> Option<deskhud_ui::HudSlotLayout> {
+    match &item.target {
+        HudLayoutTarget::Instance(id) => prefs
+            .hud
+            .instances
+            .iter()
+            .find(|instance| &instance.id == id)
+            .map(|instance| instance.layout.clone()),
+        HudLayoutTarget::Group(id) => prefs
+            .hud
+            .groups
+            .iter()
+            .find(|group| &group.id == id)
+            .map(|group| group.layout.clone()),
+    }
+}
+
+fn set_layout_slot(
+    prefs: &mut UiPreferences,
+    item: &HudRenderItem,
+    slot: deskhud_ui::HudSlotLayout,
+) {
+    let slot = slot.clamp01();
+    match &item.target {
+        HudLayoutTarget::Instance(id) => {
+            if let Some(instance) = prefs
+                .hud
+                .instances
+                .iter_mut()
+                .find(|instance| &instance.id == id)
+            {
+                instance.layout = slot;
+            }
+        }
+        HudLayoutTarget::Group(id) => {
+            if let Some(group) = prefs.hud.groups.iter_mut().find(|group| &group.id == id) {
+                group.layout = slot;
+            }
+        }
+    }
 }
 
 fn sync_layouts(
@@ -2153,7 +2176,7 @@ fn sync_layouts(
     let mut changed = false;
     for item in items {
         if let Some(pos) = layout.positions.get(&item.key)
-            && let Some((plugin, contribution, mut slot)) = layout_slot(prefs, &item.key)
+            && let Some(mut slot) = layout_slot(prefs, item)
         {
             let x = (pos.x / activity.x).clamp(0.0, 1.0);
             let y = (pos.y / activity.y).clamp(0.0, 1.0);
@@ -2170,7 +2193,7 @@ fn sync_layouts(
             if (slot.x - x).abs() > 0.0001 || (slot.y - y).abs() > 0.0001 {
                 slot.x = x;
                 slot.y = y;
-                prefs.hud.set_slot_layout(&plugin, &contribution, slot);
+                set_layout_slot(prefs, item, slot);
                 changed = true;
             }
         }

@@ -14,7 +14,7 @@ pub mod registry;
 /// 引擎产品 SemVer（与 workspace / 本 crate 版本一致）。
 pub const ENGINE_PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// 引擎兼容族：`0.x` 为 `MAJOR.MINOR`（与当前 workspace `0.9.4` / 族 `0.9` 对齐）。
+/// 引擎兼容族：`0.x` 为 `MAJOR.MINOR`（与当前 workspace `0.9.5` / 族 `0.9` 对齐）。
 pub const ENGINE_COMPAT_FAMILY: &str = "0.9";
 
 pub use overlay::{
@@ -30,7 +30,8 @@ pub use pet::{
     SceneColor, SceneItem, SceneNode, SceneValidationError, Shape, Transform2D,
 };
 pub use plugin::{
-    HudContribution, HudFrame, HudFrameCtx, HudGroupAlignment, HudGroupArrangement, HudGroupLayout,
-    HudInstanceId, HudSourceId, HudVisual, Plugin, PluginInfo,
+    HudContribution, HudFrame, HudFrameCtx, HudGroupAlignment, HudGroupArrangement,
+    HudGroupComposition, HudGroupLayout, HudGroupMemberPlacement, HudInstanceId, HudLogicalRect,
+    HudLogicalSize, HudSourceId, HudVisual, Plugin, PluginInfo,
 };
 pub use registry::EngineRegistry;

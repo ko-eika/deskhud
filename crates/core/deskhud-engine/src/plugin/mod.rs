@@ -8,7 +8,8 @@ mod plugin_info;
 
 pub use hud_contribution::{HudContribution, HudFrame, HudVisual};
 pub use hud_instance::{
-    HudFrameCtx, HudGroupAlignment, HudGroupArrangement, HudGroupLayout, HudInstanceId, HudSourceId,
+    HudFrameCtx, HudGroupAlignment, HudGroupArrangement, HudGroupComposition, HudGroupLayout,
+    HudGroupMemberPlacement, HudInstanceId, HudLogicalRect, HudLogicalSize, HudSourceId,
 };
 pub use plugin_api::Plugin;
 pub use plugin_info::PluginInfo;
