@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::UiPreferences;
-use crate::hud::{HudConfigValue, HudPrefs};
+use crate::hud::{HudConfigValue, HudGroup, HudInstance, HudPrefs};
 use crate::i18n::Locale;
 use crate::pet::PetPrefs;
 use crate::shell::{LayerPreference, PetPickerMode, ShellPrefs, UiTheme};
@@ -244,9 +244,20 @@ pub fn format_prefs_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> S
         HudPrefs::GLOBAL_LAYER_KEY,
         layer_tag(prefs.hud.layer)
     ));
+    out.push_str(&format!(
+        "\"{}\" = {}\n",
+        HudPrefs::MODEL_FORMAT_KEY,
+        HudPrefs::MODEL_FORMAT_VERSION
+    ));
     for (k, v) in ordered_hud_entries(&prefs.hud.config, order) {
+        if k == HudPrefs::MODEL_FORMAT_KEY {
+            continue;
+        }
         out.push_str(&format!("\"{}\" = {}\n", escape(k), format_hud_value(v)));
     }
+    append_hud_instances(&mut out, &prefs.hud.instances);
+    append_hud_groups(&mut out, &prefs.hud.groups);
+    append_suppressed_hud_sources(&mut out, &prefs.hud.suppressed_default_sources);
 
     out
 }
@@ -314,6 +325,8 @@ fn prefs_from_value(root: toml::Value) -> UiPreferences {
     if let Some(hud) = table.get("hud").and_then(|v| v.as_table()) {
         merge_hud_table(&mut prefs.hud, hud);
     }
+
+    prefs.hud.recover();
 
     prefs
 }
@@ -435,12 +448,145 @@ fn merge_hud_table(hud: &mut HudPrefs, t: &toml::map::Map<String, toml::Value>) 
             }
             continue;
         }
-        if k == "config" {
-            continue;
+        match k.as_str() {
+            "instances" => {
+                hud.instances = deserialize_valid_entries::<HudInstance>(v);
+                continue;
+            }
+            "groups" => {
+                hud.groups = deserialize_valid_entries::<HudGroup>(v);
+                continue;
+            }
+            "suppressed_default_sources" => {
+                hud.suppressed_default_sources =
+                    deserialize_valid_entries::<deskhud_engine::HudSourceId>(v);
+                continue;
+            }
+            "config" => continue,
+            _ => {}
         }
         if let Some(val) = toml_to_hud_value(k, v) {
             hud.config.insert(k.clone(), val);
         }
+    }
+}
+
+fn deserialize_valid_entries<T>(value: &toml::Value) -> Vec<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.clone().try_into().ok())
+        .collect()
+}
+
+fn append_hud_instances(out: &mut String, instances: &[HudInstance]) {
+    for instance in instances {
+        if !instance.id.is_valid() || !instance.source.is_valid() {
+            continue;
+        }
+        out.push_str("\n[[hud.instances]]\n");
+        out.push_str(&format!("id = \"{}\"\n", escape(instance.id.as_str())));
+        out.push_str(&format!("enabled = {}\n", instance.enabled));
+
+        out.push_str("\n[hud.instances.source]\n");
+        out.push_str(&format!(
+            "plugin_id = \"{}\"\n",
+            escape(&instance.source.plugin_id)
+        ));
+        out.push_str(&format!(
+            "contribution_id = \"{}\"\n",
+            escape(&instance.source.contribution_id)
+        ));
+        append_hud_slot_layout(out, "hud.instances.layout", &instance.layout);
+
+        if !instance.config.is_empty() {
+            out.push_str("\n[hud.instances.config]\n");
+            let mut keys = instance.config.keys().collect::<Vec<_>>();
+            keys.sort();
+            for key in keys {
+                if let Some(value) = instance.config.get(key) {
+                    out.push_str(&format!(
+                        "\"{}\" = {}\n",
+                        escape(key),
+                        format_hud_value(value)
+                    ));
+                }
+            }
+        }
+    }
+}
+
+fn append_hud_groups(out: &mut String, groups: &[HudGroup]) {
+    for group in groups {
+        if group.id.is_empty() || group.id.chars().any(char::is_control) {
+            continue;
+        }
+        out.push_str("\n[[hud.groups]]\n");
+        out.push_str(&format!("id = \"{}\"\n", escape(&group.id)));
+        out.push_str(&format!("name = \"{}\"\n", escape(&group.name)));
+        out.push_str(&format!("enabled = {}\n", group.enabled));
+        out.push_str("children = [\n");
+        for child in &group.children {
+            if child.is_valid() {
+                out.push_str(&format!("  \"{}\",\n", escape(child.as_str())));
+            }
+        }
+        out.push_str("]\n");
+        append_hud_slot_layout(out, "hud.groups.layout", &group.layout);
+
+        out.push_str("\n[hud.groups.inner]\n");
+        out.push_str(&format!(
+            "arrangement = \"{}\"\n",
+            match group.inner.arrangement {
+                deskhud_engine::HudGroupArrangement::Horizontal => "horizontal",
+                deskhud_engine::HudGroupArrangement::Vertical => "vertical",
+                deskhud_engine::HudGroupArrangement::Grid => "grid",
+            }
+        ));
+        out.push_str(&format!("grid_columns = {}\n", group.inner.grid_columns));
+        out.push_str(&format!("spacing = {:.4}\n", group.inner.spacing));
+        out.push_str(&format!(
+            "padding = [{:.4}, {:.4}, {:.4}, {:.4}]\n",
+            group.inner.padding[0],
+            group.inner.padding[1],
+            group.inner.padding[2],
+            group.inner.padding[3]
+        ));
+        out.push_str(&format!(
+            "alignment = \"{}\"\n",
+            match group.inner.alignment {
+                deskhud_engine::HudGroupAlignment::Start => "start",
+                deskhud_engine::HudGroupAlignment::Center => "center",
+                deskhud_engine::HudGroupAlignment::End => "end",
+            }
+        ));
+    }
+}
+
+fn append_hud_slot_layout(out: &mut String, table: &str, layout: &crate::HudSlotLayout) {
+    out.push_str(&format!("\n[{table}]\n"));
+    out.push_str(&format!("display = \"{}\"\n", escape(&layout.display)));
+    out.push_str(&format!("x = {:.4}\n", layout.x));
+    out.push_str(&format!("y = {:.4}\n", layout.y));
+    out.push_str(&format!("width = {:.4}\n", layout.width));
+    out.push_str(&format!("height = {:.4}\n", layout.height));
+}
+
+fn append_suppressed_hud_sources(out: &mut String, sources: &[deskhud_engine::HudSourceId]) {
+    for source in sources {
+        if !source.is_valid() {
+            continue;
+        }
+        out.push_str("\n[[hud.suppressed_default_sources]]\n");
+        out.push_str(&format!("plugin_id = \"{}\"\n", escape(&source.plugin_id)));
+        out.push_str(&format!(
+            "contribution_id = \"{}\"\n",
+            escape(&source.contribution_id)
+        ));
     }
 }
 
@@ -987,6 +1133,83 @@ locale = "en"
         let tip_en = out.find("\"hud.deskhud.demo.tip.enable\"").unwrap();
         assert!(plugin_en < clock_en);
         assert!(clock_en < tip_en);
+    }
+
+    #[test]
+    fn hud_instances_and_groups_roundtrip_with_ordered_children() {
+        let mut prefs = UiPreferences::default();
+        let source = deskhud_engine::HudSourceId::new("hud.deskhud.demo", "clock");
+        prefs
+            .hud
+            .set_visual_value("hud.deskhud.demo", "clock", "background_opacity", 0.4);
+        prefs
+            .hud
+            .ensure_default_instances([(source.clone(), false)]);
+        let instance_id = prefs.hud.instances[0].id.clone();
+        let group_id = prefs.hud.create_group("Status");
+        let group = prefs
+            .hud
+            .groups
+            .iter_mut()
+            .find(|group| group.id == group_id)
+            .expect("created group");
+        group.children.push(instance_id.clone());
+        group.inner.arrangement = deskhud_engine::HudGroupArrangement::Grid;
+        group.inner.grid_columns = 3;
+        group.inner.spacing = 12.0;
+        group.inner.padding = [1.0, 2.0, 3.0, 4.0];
+        group.inner.alignment = deskhud_engine::HudGroupAlignment::End;
+
+        let text = format_prefs(&prefs);
+        assert!(text.contains("[[hud.instances]]\n"));
+        assert!(text.contains("\"hud.global.model_format\" = 1"));
+        assert!(text.contains("[hud.instances.source]\n"));
+        assert!(text.contains("[hud.instances.layout]\n"));
+        assert!(text.contains("[hud.instances.config]\n"));
+        assert!(text.contains("[[hud.groups]]\n"));
+        assert!(text.contains("children = [\n  \"default:"));
+        assert!(text.contains("[hud.groups.layout]\n"));
+        assert!(text.contains("[hud.groups.inner]\n"));
+        assert!(!text.contains("instances = [{"));
+        assert!(!text.contains("groups = [{"));
+        let root: toml::Value = toml::from_str(&text).expect("valid persisted TOML");
+        let back = prefs_from_value(root);
+        assert_eq!(back.hud.instances.len(), 1);
+        assert_eq!(back.hud.instances[0].source, source);
+        assert_eq!(back.hud.groups.len(), 1);
+        assert_eq!(back.hud.groups[0].children, vec![instance_id]);
+        assert_eq!(back.hud.groups[0].inner.grid_columns, 3);
+        assert_eq!(back.hud.groups[0].inner.spacing, 12.0);
+        assert_eq!(back.hud.groups[0].inner.padding, [1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn malformed_hud_entry_does_not_block_valid_siblings() {
+        let root: toml::Value = toml::from_str(
+            r#"
+            [hud]
+            instances = [
+              { id = "broken", enabled = true },
+              { id = "instance:1", source = { plugin_id = "hud.missing.plugin", contribution_id = "clock" }, enabled = true, config = {}, layout = { display = "primary", x = 0.1, y = 0.2, width = 1.0, height = 1.0 } }
+            ]
+            groups = [
+              { id = "broken-group", enabled = true, children = "wrong-type" },
+              { id = "group:1", name = "Kept", enabled = true, children = ["instance:1"] }
+            ]
+            "hud.global.enable" = true
+            "hud.other.plugin.tip.enable" = false
+            "#,
+        )
+        .expect("valid TOML document");
+
+        let prefs = prefs_from_value(root);
+        assert_eq!(prefs.hud.instances.len(), 1);
+        assert_eq!(prefs.hud.instances[0].id.as_str(), "instance:1");
+        assert_eq!(prefs.hud.groups.len(), 1);
+        assert_eq!(prefs.hud.groups[0].id, "group:1");
+        assert_eq!(prefs.hud.groups[0].children.len(), 1);
+        assert!(prefs.hud.is_master_enabled());
+        assert!(!prefs.hud.is_enabled("hud.other.plugin", "tip", true));
     }
 
     #[cfg(any())]

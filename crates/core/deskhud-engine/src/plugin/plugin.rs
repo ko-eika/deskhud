@@ -1,6 +1,6 @@
 //! [`Plugin`] 扩展点。
 
-use super::{HudContribution, HudFrame, PluginInfo};
+use super::{HudContribution, HudFrame, HudFrameCtx, PluginInfo};
 
 /// 功能插件：领域能力 + 可选 HUD 贡献。
 pub trait Plugin: Send + Sync {
@@ -15,5 +15,13 @@ pub trait Plugin: Send + Sync {
     /// Produces the current frame for an enabled HUD item.
     fn hud_frame(&self, _contribution_id: &str, _elapsed_secs: f32) -> HudFrame {
         HudFrame::empty()
+    }
+
+    /// Produces a frame for one host-owned instance.
+    ///
+    /// The default adapter preserves existing native plugins until instance-aware
+    /// configuration is connected to the rendering pipeline.
+    fn hud_frame_for_instance(&self, ctx: &HudFrameCtx<'_>) -> HudFrame {
+        self.hud_frame(&ctx.source.contribution_id, ctx.elapsed_secs)
     }
 }

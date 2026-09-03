@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::pet::{PetKind, PetKindInfo};
-use crate::plugin::{HudContribution, HudFrame, Plugin, PluginInfo};
+use crate::plugin::{HudContribution, HudFrame, HudFrameCtx, Plugin, PluginInfo};
 
 /// 引擎运行时注册表（宠物 + HUD 插件）。
 pub struct EngineRegistry {
@@ -115,12 +115,21 @@ impl EngineRegistry {
             .map(|plugin| plugin.hud_frame(contribution_id, elapsed_secs))
             .unwrap_or_else(HudFrame::empty)
     }
+
+    /// Produces a frame for one stable host-owned HUD instance.
+    pub fn hud_frame_for_instance(&self, ctx: &HudFrameCtx<'_>) -> HudFrame {
+        self.plugins
+            .iter()
+            .find(|plugin| plugin.info().id == ctx.source.plugin_id)
+            .map(|plugin| plugin.hud_frame_for_instance(ctx))
+            .unwrap_or_else(HudFrame::empty)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::EngineRegistry;
-    use crate::{HudFrame, HudVisual, Plugin, PluginInfo};
+    use crate::{HudFrame, HudFrameCtx, HudInstanceId, HudSourceId, HudVisual, Plugin, PluginInfo};
     use std::sync::Arc;
 
     struct TestPlugin;
@@ -164,6 +173,17 @@ mod tests {
         assert!(
             registry
                 .hud_frame("hud.test.frame", "missing", 1.0)
+                .is_empty()
+        );
+        let instance_id = HudInstanceId::new("instance:1");
+        let source = HudSourceId::new("hud.test.frame", "clock");
+        assert!(
+            !registry
+                .hud_frame_for_instance(&HudFrameCtx {
+                    instance_id: &instance_id,
+                    source: &source,
+                    elapsed_secs: 1.0,
+                })
                 .is_empty()
         );
     }

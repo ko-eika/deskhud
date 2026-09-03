@@ -4,10 +4,10 @@
 //! 本模块只负责视口之间的协调和生命周期管理。
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use deskhud_engine::{EngineRegistry, PetEvent, PetKeyTracker};
+use deskhud_engine::{EngineRegistry, HudSourceId, PetEvent, PetKeyTracker};
 use deskhud_runtime::{bootstrap_registry, build_catalog_store};
 use deskhud_ui::{
-    CatalogStore, LayerPreference, PrefsWriteOrder, UiPreferences, load, save_ordered,
+    CatalogStore, LayerPreference, PrefsWriteOrder, UiPreferences, load, save, save_ordered,
 };
 use std::sync::Arc;
 use winit::{
@@ -47,16 +47,33 @@ impl WindowManager {
     pub(crate) fn new(proxy: EventLoopProxy<UserEvent>) -> Self {
         let bootstrap = bootstrap_registry();
         tracing::info!(path = ?deskhud_ui::prefs_path(), "loading preferences");
-        let mut prefs = match load() {
+        let (mut prefs, loaded_from_disk) = match load() {
             Ok(prefs) => {
                 tracing::info!("preferences loaded");
-                prefs
+                (prefs, true)
             }
             Err(error) => {
                 tracing::warn!(%error, "load preferences failed; using defaults");
-                UiPreferences::default()
+                (UiPreferences::default(), false)
             }
         };
+        let rewrite_hud_model = !prefs.hud.is_model_format_current();
+        let migrated_instances = prefs.hud.ensure_default_instances(
+            bootstrap.registry.all_hud_contributions().into_iter().map(
+                |(plugin_id, contribution)| {
+                    (
+                        HudSourceId::new(plugin_id, contribution.id),
+                        contribution.default_enabled,
+                    )
+                },
+            ),
+        );
+        if migrated_instances > 0 {
+            tracing::info!(
+                migrated_instances,
+                "mapped HUD contributions to stable instances"
+            );
+        }
         if !bootstrap
             .registry
             .pets()
@@ -64,6 +81,12 @@ impl WindowManager {
             .any(|pet| pet.info().id == prefs.pet.kind)
         {
             prefs.pet.kind = bootstrap.registry.active_pet_id().to_owned();
+        }
+        if (migrated_instances > 0 || rewrite_hud_model) && loaded_from_disk {
+            prefs.hud.mark_model_format_current();
+            if let Err(error) = save(&prefs) {
+                tracing::warn!(%error, "failed to persist formatted HUD instances");
+            }
         }
         // Keep the persisted pet size. Pack metadata is used when a pet is
         // selected in Settings; applying it during startup would silently

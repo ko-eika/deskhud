@@ -2,7 +2,7 @@
 <h4 align="center">一个可扩展的桌宠引擎</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.9.3-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.9.4-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.95+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -15,7 +15,7 @@
 
 DeskHud 是可扩展的 **桌宠引擎**：用户可以切换 **宠物包**（外观 + 行为），并按需开关 **HUD 插件** 及其贡献条目。界面基于 **egui + winit / egui_glow**，支持多语言与本地社区包加载（商店能力后置）。
 
-当前版本：`0.9.3`。完善 HUD 视觉效果编辑，并将布局尺寸配置统一为 `.size` 二元组。
+当前版本：`0.9.4`。完成 HUD 实例与分组的底层契约和可恢复持久化，并将实例配置输出为可读的 TOML 数组表。
 
 ## 功能概览
 
@@ -139,8 +139,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud-egui
 
 # 4. 打 tag 并推送后，在 GitHub Release 上传二进制
-git tag -a v0.9.3 -m "DeskHud 0.9.3"
-git push origin v0.9.3
+git tag -a v0.9.4 -m "DeskHud 0.9.4"
+git push origin v0.9.4
 ```
 
 当前 CI（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）只做三端 `check` / 测试，**不会**自动发布安装包。

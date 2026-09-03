@@ -1,8 +1,8 @@
 # HUD 分组与首批正式插件实施计划
 
-状态：待实施  
+状态：实施中（1.1 已完成）
 计划顺序：HUD 组基础能力 → 系统插件 → 便签插件  
-当前基线：DeskHud 0.9.3 / engine 0.9 / Guest API 4
+当前基线：DeskHud 0.9.4 / engine 0.9 / Guest API 4
 
 ## 目标
 
@@ -66,12 +66,19 @@ struct HudGroup {
 
 ### 1.1 契约与持久化
 
-- [ ] 在 `deskhud-engine` 定义平台无关的 HUD 来源、实例身份、帧上下文与组内布局语义。
-- [ ] 在 `deskhud-ui` 增加 `HudInstance` / `HudGroup` 偏好模型；组名、成员顺序、布局方式、间距、内边距和对齐方式可落盘。
-- [ ] 为旧的 `plugin_id + contribution_id` 开关和布局提供一次性、确定性的默认实例映射。
-- [ ] 定义未知插件、缺失 contribution、重复成员、损坏实例和孤儿组的恢复规则；单项损坏不得阻止其余 HUD 加载。
-- [ ] 明确实例 ID 的生成、复制与删除规则；不得以用户可修改的标题作为主键。
-- [ ] 按 `docs/versioning.md` 评估 engine 兼容族变化；只有实际修改 Guest/WIT ABI 时才递增 `api_version`。
+- [x] 在 `deskhud-engine` 定义平台无关的 HUD 来源、实例身份、帧上下文与组内布局语义。
+- [x] 在 `deskhud-ui` 增加 `HudInstance` / `HudGroup` 偏好模型；组名、成员顺序、布局方式、间距、内边距和对齐方式可落盘。
+- [x] 为旧的 `plugin_id + contribution_id` 开关和布局提供一次性、确定性的默认实例映射。
+- [x] 定义未知插件、缺失 contribution、重复成员、损坏实例和孤儿组的恢复规则；单项损坏不得阻止其余 HUD 加载。
+- [x] 明确实例 ID 的生成、复制与删除规则；不得以用户可修改的标题作为主键。
+- [x] 按 `docs/versioning.md` 评估 engine 兼容族变化；只有实际修改 Guest/WIT ABI 时才递增 `api_version`。
+
+1.1 落实规则：
+
+- 旧定义的默认实例 ID 由完整 `plugin_id + contribution_id` 长度编码生成；迁移幂等，旧开关、屏幕布局和视觉值复制到实例，标题不参与身份。
+- 新建实例、复制实例和新建组分别从偏好文件内尚未占用的 `instance:<n>` / `group:<n>` 顺序分配；复制品默认不入组。删除实例只删除目标实例并清除全部组引用；删除默认实例会记录来源抑制项，避免启动时重建。删除组保留成员并使其回到未分组状态。
+- 插件或 contribution 暂时缺失时保留实例及组关系；恢复后按来源重新绑定。加载损坏数组时逐项反序列化，单项错误只丢弃该项。重复实例、重复组和跨组重复成员保留首次出现；悬空成员引用移除，空组继续保留。
+- 本阶段仅增加原生 Rust 契约及宿主持久化，没有修改 Guest/WIT ABI，因此 `api_version` 保持 4；产品已处于 `0.9` 兼容族，`ENGINE_COMPAT_FAMILY` 与清单统一为 `0.9`。
 
 ### 1.2 组合与渲染
 

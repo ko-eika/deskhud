@@ -206,9 +206,15 @@ impl Plugin for MyPlugin {
 - 壳层用 `UiPreferences.hud.is_active(plugin_id, contribution_id, default)` 决定是否展示。
 - **图标**：插件 `PluginInfo.icon` + 每条 `HudContribution.icon` 随包分发（**svg**/png/jpeg/gif/webp）；缺省用壳内默认图（插件=首字徽章，条目=简易板图标）。
 
-### 2.3 规划中的帧数据
+### 2.3 HUD 实例契约
 
-后续将增加类似：
+宿主已经用平台无关的 `HudSourceId` 区分定义来源，并用稳定的 `HudInstanceId`
+区分用户实例。旧版每个 `plugin_id + contribution_id` 静态条目会映射为确定性的默认
+实例；插件或 contribution 暂时缺失时，实例配置及组成员关系仍会保留。实例标题只供
+显示，不能作为插件数据或持久化引用的主键。
+
+`HudFrameCtx` 已预留当前实例、来源与宿主单调时间；运行态按实例请求帧、实例配置以及
+社区 Guest HUD ABI 仍在后续阶段接入。现有原生插件继续使用：
 
 - `Plugin::hud_frame(...)` → 中性 `HudFrame`（文本 / 进度等）
 

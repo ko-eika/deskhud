@@ -105,7 +105,7 @@ target/<profile>/packages/ …
 - [ ] 宠物行为事件完善（更多 `PetEvent`）与更中性绘制帧
 - [x] HUD 插件真实帧数据（扫描 registry contribution，按总开关 ∧ 插件 ∧ 条目绘制 `HudFrame`）
 - [x] WASM runtime + SDK + 示例包
-- [ ] HUD 组基础能力（HUD 实例身份、跨插件组合与组内布局）
+- [ ] HUD 组基础能力（1.1 契约与持久化已完成；跨插件组合与组内布局待接入）
 - [ ] 官方系统与应用性能 HUD 插件
 - [ ] 支持多实例和自定义内容的便签 HUD 插件
 

@@ -44,6 +44,7 @@ impl UiPreferences {
             let key = migrate_pet_option_key(&key);
             self.pet.options.entry(key).or_insert(value);
         }
+        self.hud.recover();
     }
 
     /// 翻译。

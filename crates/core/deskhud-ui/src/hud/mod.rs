@@ -1,6 +1,7 @@
 //! HUD 开关与布局偏好（落盘 `[hud]` 扁平键，便于扩展）。
 
 mod layout;
+mod model;
 
 use std::collections::HashMap;
 
@@ -9,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::shell::LayerPreference;
 
 pub use layout::{HUD_SIZE_FACTOR_MAX, HUD_SIZE_FACTOR_MIN, HudSlotLayout};
+pub use model::{HudGroup, HudInstance, HudInstanceConfig, HudRecoveryReport};
 
 /// `[hud]` 里单个键的值：bool / 数字 / 字符串。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -69,16 +71,45 @@ pub struct HudPrefs {
     /// HUD 桌面覆盖层级。
     #[serde(default, skip_serializing)]
     pub layer: LayerPreference,
+    /// Stable HUD instances. Entries remain when their plugin is temporarily unavailable.
+    #[serde(default)]
+    pub instances: Vec<HudInstance>,
+    /// User-defined groups in stable display order.
+    #[serde(default)]
+    pub groups: Vec<HudGroup>,
+    /// Sources whose deterministic default instance was explicitly deleted.
+    #[serde(default)]
+    pub suppressed_default_sources: Vec<deskhud_engine::HudSourceId>,
     /// 统一扁平配置表（直接落在 `[hud]` 下）。
     #[serde(default, flatten)]
     pub config: HashMap<String, HudConfigValue>,
 }
 
 impl HudPrefs {
+    /// Persisted representation revision for readable instance/group array tables.
+    pub const MODEL_FORMAT_VERSION: i64 = 1;
+    /// Internal key used to rewrite older equivalent TOML representations once.
+    pub const MODEL_FORMAT_KEY: &'static str = "hud.global.model_format";
     /// HUD 层级键：`hud.global.layer`。
     pub const GLOBAL_LAYER_KEY: &'static str = "hud.global.layer";
     /// 全局 HUD 总开关键：`hud.global.enable`。
     pub const MASTER_ENABLE_KEY: &'static str = "hud.global.enable";
+
+    /// Returns whether the persisted HUD model already uses the current representation.
+    pub fn is_model_format_current(&self) -> bool {
+        matches!(
+            self.config.get(Self::MODEL_FORMAT_KEY),
+            Some(HudConfigValue::Int(Self::MODEL_FORMAT_VERSION))
+        )
+    }
+
+    /// Marks the in-memory preferences for the current HUD model representation.
+    pub fn mark_model_format_current(&mut self) {
+        self.config.insert(
+            Self::MODEL_FORMAT_KEY.into(),
+            HudConfigValue::Int(Self::MODEL_FORMAT_VERSION),
+        );
+    }
 
     /// 插件总开关键：`{plugin_id}.enable`。
     pub fn plugin_enable_key(plugin_id: &str) -> String {
