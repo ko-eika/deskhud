@@ -147,6 +147,14 @@ pub fn format_prefs_ordered(prefs: &UiPreferences, order: &PrefsWriteOrder) -> S
     if let (Some(x), Some(y)) = (prefs.shell.settings_pos_x, prefs.shell.settings_pos_y) {
         out.push_str(&format!("\"settings.position\" = [{x}, {y}]\n"));
     }
+    out.push_str(&format!(
+        "\"hud.size\" = [{}, {}]\n",
+        prefs.hud.window_size[0], prefs.hud.window_size[1]
+    ));
+    out.push_str(&format!(
+        "\"hud.position\" = [{}, {}]\n",
+        prefs.hud.window_position[0], prefs.hud.window_position[1]
+    ));
 
     out.push_str("\n[graphics]\n");
     out.push_str(&format!(
@@ -331,6 +339,12 @@ fn prefs_from_value(root: toml::Value) -> UiPreferences {
         if let Some(pair) = settings.get("settings.position").and_then(toml_pair) {
             prefs.shell.settings_pos_x = Some(pair[0]);
             prefs.shell.settings_pos_y = Some(pair[1]);
+        }
+        if let Some(pair) = settings.get("hud.size").and_then(toml_pair) {
+            prefs.hud.window_size = [pair[0].max(1.0) as u32, pair[1].max(1.0) as u32];
+        }
+        if let Some(pair) = settings.get("hud.position").and_then(toml_pair) {
+            prefs.hud.window_position = [pair[0] as i32, pair[1] as i32];
         }
     }
     if let Some(font) = table.get("font").and_then(|v| v.as_table()) {
@@ -552,10 +566,6 @@ fn append_hud_groups(out: &mut String, groups: &[HudGroup]) {
             "color = [{}, {}, {}]\n",
             group.color[0], group.color[1], group.color[2]
         ));
-        out.push_str(&format!(
-            "size = [{:.4}, {:.4}]\n",
-            group.size[0], group.size[1]
-        ));
         out.push_str("children = [\n");
         for child in &group.children {
             if child.is_valid() {
@@ -563,33 +573,10 @@ fn append_hud_groups(out: &mut String, groups: &[HudGroup]) {
             }
         }
         out.push_str("]\n");
-        if !group.member_layouts.is_empty() {
-            out.push_str("member_layouts = [\n");
-            for member in &group.member_layouts {
-                if member.instance_id.is_valid() {
-                    out.push_str(&format!(
-                        "  {{ instance_id = \"{}\", x = {:.4}, y = {:.4} }},\n",
-                        escape(member.instance_id.as_str()),
-                        member.x,
-                        member.y
-                    ));
-                }
-            }
-            out.push_str("]\n");
-        }
         append_hud_slot_layout(out, "hud.groups.layout", &group.layout);
 
         out.push_str("\n[hud.groups.inner]\n");
-        out.push_str(&format!(
-            "arrangement = \"{}\"\n",
-            match group.inner.arrangement {
-                deskhud_engine::HudGroupArrangement::Free => "free",
-                deskhud_engine::HudGroupArrangement::Horizontal => "horizontal",
-                deskhud_engine::HudGroupArrangement::Vertical => "vertical",
-                deskhud_engine::HudGroupArrangement::Grid => "grid",
-            }
-        ));
-        out.push_str(&format!("grid_columns = {}\n", group.inner.grid_columns));
+        out.push_str(&format!("arrangement = \"{}\"\n", "free"));
         out.push_str(&format!("spacing = {:.4}\n", group.inner.spacing));
         out.push_str(&format!(
             "padding = [{:.4}, {:.4}, {:.4}, {:.4}]\n",
@@ -612,10 +599,11 @@ fn append_hud_groups(out: &mut String, groups: &[HudGroup]) {
 fn append_hud_slot_layout(out: &mut String, table: &str, layout: &crate::HudSlotLayout) {
     out.push_str(&format!("\n[{table}]\n"));
     out.push_str(&format!("display = \"{}\"\n", escape(&layout.display)));
-    out.push_str(&format!("x = {:.4}\n", layout.x));
-    out.push_str(&format!("y = {:.4}\n", layout.y));
-    out.push_str(&format!("width = {:.4}\n", layout.width));
-    out.push_str(&format!("height = {:.4}\n", layout.height));
+    out.push_str(&format!("position = [{:.4}, {:.4}]\n", layout.x, layout.y));
+    out.push_str(&format!(
+        "size = [{:.4}, {:.4}]\n",
+        layout.width, layout.height
+    ));
 }
 
 fn append_suppressed_hud_sources(out: &mut String, sources: &[deskhud_engine::HudSourceId]) {
@@ -949,6 +937,8 @@ mod tests {
         prefs.pet.height = 96.0;
         prefs.pet.pos_x = Some(120.0);
         prefs.pet.layer = LayerPreference::Normal;
+        prefs.hud.window_size = [1600, 900];
+        prefs.hud.window_position = [100, 100];
         prefs.pet.set_bool("pet.deskhud.specs.config1", true);
         prefs.hud.ensure_default_instances([(
             deskhud_engine::HudSourceId::new("hud.deskhud.demo", "tip"),
@@ -957,8 +947,8 @@ mod tests {
         prefs.hud.set_enabled("hud.deskhud.demo", "clock", false);
         prefs.hud.set_slot_layout("hud.deskhud.demo", "tip", {
             HudSlotLayout {
-                x: 0.5,
-                y: 0.8,
+                x: 500.0,
+                y: 800.0,
                 width: 1.25,
                 height: 1.25,
                 ..Default::default()
@@ -970,6 +960,8 @@ mod tests {
         assert!(text.contains("locale = \"en-US\""));
         assert!(!text.starts_with("locale ="));
         assert!(text.contains("[prefs]\n"));
+        assert!(text.contains("\"hud.size\" = [1600, 900]"));
+        assert!(text.contains("\"hud.position\" = [100, 100]"));
         assert!(
             text.find("[prefs]").unwrap() < text.find("[theme]").unwrap(),
             "prefs section should precede theme"
@@ -997,6 +989,8 @@ mod tests {
         assert_eq!(back.pet.kind, "pet.deskhud.blob");
         assert!((back.pet.width - 96.0).abs() < 1e-3);
         assert_eq!(back.pet.layer, LayerPreference::Normal);
+        assert_eq!(back.hud.window_size, [1600, 900]);
+        assert_eq!(back.hud.window_position, [100, 100]);
         assert!(back.pet.get_bool("pet.deskhud.specs.config1", false));
         assert!(!back.hud.is_enabled("hud.deskhud.demo", "clock", true));
         let tip = back
@@ -1005,7 +999,7 @@ mod tests {
             .iter()
             .find(|instance| instance.source.contribution_id == "tip")
             .expect("tip instance");
-        assert!((tip.layout.x - 0.5).abs() < 1e-3);
+        assert!((tip.layout.x - 500.0).abs() < 1e-3);
         assert!((tip.layout.width - 1.25).abs() < 1e-3);
         assert!((tip.layout.height - 1.25).abs() < 1e-3);
     }
@@ -1205,13 +1199,25 @@ locale = "en"
             .find(|group| group.id == group_id)
             .expect("created group");
         group.color = [12, 96, 220];
-        group.size = [4096.0, 3072.0];
+        group.layout.width = 4096.0;
+        group.layout.height = 3072.0;
         group.children.push(instance_id.clone());
-        group.member_layouts.push(crate::hud::HudGroupMemberLayout {
-            instance_id: instance_id.clone(),
-            x: 11.0,
-            y: 13.0,
-        });
+        prefs
+            .hud
+            .instances
+            .iter_mut()
+            .find(|instance| instance.id == instance_id)
+            .unwrap()
+            .layout
+            .x = 11.0;
+        prefs
+            .hud
+            .instances
+            .iter_mut()
+            .find(|instance| instance.id == instance_id)
+            .unwrap()
+            .layout
+            .y = 13.0;
         group.inner.arrangement = deskhud_engine::HudGroupArrangement::Grid;
         group.inner.grid_columns = 3;
         group.inner.spacing = 12.0;
@@ -1237,10 +1243,16 @@ locale = "en"
         assert_eq!(back.hud.groups.len(), 1);
         assert_eq!(back.hud.groups[0].children, vec![instance_id]);
         assert_eq!(back.hud.groups[0].color, [12, 96, 220]);
-        assert_eq!(back.hud.groups[0].size, [4096.0, 3072.0]);
-        assert_eq!(back.hud.groups[0].member_layouts.len(), 1);
-        assert_eq!(back.hud.groups[0].member_layouts[0].x, 11.0);
-        assert_eq!(back.hud.groups[0].inner.grid_columns, 3);
+        assert_eq!(
+            [
+                back.hud.groups[0].layout.width,
+                back.hud.groups[0].layout.height
+            ],
+            [4096.0, 3072.0]
+        );
+        assert_eq!(back.hud.instances[0].layout.x, 11.0);
+        assert_eq!(back.hud.instances[0].layout.y, 13.0);
+        assert_eq!(back.hud.groups[0].inner.grid_columns, 2);
         assert_eq!(back.hud.groups[0].inner.spacing, 12.0);
         assert_eq!(back.hud.groups[0].inner.padding, [1.0, 2.0, 3.0, 4.0]);
     }
@@ -1252,7 +1264,7 @@ locale = "en"
             [hud]
             instances = [
               { id = "broken", enabled = true },
-              { id = "instance:1", source = { plugin_id = "hud.missing.plugin", contribution_id = "clock" }, enabled = true, config = {}, layout = { display = "primary", x = 0.1, y = 0.2, width = 1.0, height = 1.0 } }
+              { id = "instance:1", source = { plugin_id = "hud.missing.plugin", contribution_id = "clock" }, enabled = true, config = {}, layout = { display = "primary", position = [10.0, 20.0], size = [1.0, 1.0] } }
             ]
             groups = [
               { id = "broken-group", enabled = true, children = "wrong-type" },

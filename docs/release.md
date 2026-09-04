@@ -12,6 +12,13 @@ DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布
 2. [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) 中的 version 徽章
 3. （可选）`CHANGELOG` / Release 说明正文
 
+### 0.9.7 变更摘要
+
+- 将普通模式 HUD 合成窗口的尺寸与位置纳入 `[prefs]`，布局编辑中的 `x/y` 改为相对窗口的物理像素坐标。
+- 统一 HUD 槽位序列化为 `display`、`position` 和 `size`，其中 `size` 保持宽高缩放因子；组容器使用实际像素尺寸并支持内容约束。
+- 默认组布局改为自由布局，修正组/成员调整面板的实时位置、尺寸限制和交互启用状态。
+- 内置包同步升至 `0.9.7`；继续保持每屏一个 HUD 合成窗、`engine = "0.9"` 与 `api_version = 4` 不变。
+
 ### 0.9.6 变更摘要
 
 - 将 HUD 绘制与布局编辑拆分为按画布、帧绘制、调整面板、效果和覆盖层组织的模块。

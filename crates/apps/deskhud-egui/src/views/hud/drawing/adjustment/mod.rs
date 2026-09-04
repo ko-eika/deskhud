@@ -8,12 +8,11 @@ use common::*;
 use effects::draw_effects_group;
 use shadow::draw_shadow_window;
 
-use super::layout::{
-    draw_ratio_lock_control, draw_snap_grid_control, layout_slot, set_layout_slot, snap_normalized,
-};
+use super::layout::layout_slot;
 use super::*;
 use crate::components;
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_adjust_window(
     ui: &mut egui::Ui,
     layout: &mut LayoutState,
@@ -22,6 +21,8 @@ pub(super) fn draw_adjust_window(
     key: String,
     window_id: &'static str,
     group_window: bool,
+    interactive: bool,
+    panel_top: f32,
 ) -> bool {
     let direct_item = items.iter().find(|item| item.key == key);
     let owned_item = direct_item
@@ -40,6 +41,8 @@ pub(super) fn draw_adjust_window(
             item.source = Some(layer.source.clone());
             item.layers = vec![layer.clone()];
             item.base_size = layer.base_size;
+            item.plugin_name = layer.plugin_name.clone();
+            item.contribution_name = layer.contribution_name.clone();
             Some(item)
         })
         .flatten();
@@ -50,8 +53,21 @@ pub(super) fn draw_adjust_window(
     let Some(mut slot) = layout_slot(prefs, item) else {
         return false;
     };
+    // Top-level HUDs and groups move in the transient layout canvas. Their
+    // persisted x/y intentionally remain unchanged until layout mode ends,
+    // so the adjustment panel must show the live canvas position instead of
+    // the stale value from prefs. Group members keep their own local values.
+    if layout.layout_mode
+        && !grouped_member
+        && let Some(position) = layout.positions.get(&key)
+    {
+        slot.x = position.x;
+        slot.y = position.y;
+    }
     let initial_width = slot.width;
     let initial_height = slot.height;
+    let initial_x = slot.x;
+    let initial_y = slot.y;
     let initial_ratio = layout
         .locked_ratio
         .unwrap_or(initial_height / initial_width.max(0.001));
@@ -87,14 +103,20 @@ pub(super) fn draw_adjust_window(
         // Window placement belongs to the editor type, not to an individual
         // group or HUD. Switching between group 1 and group 2 should keep
         // the same group-editor location.
-        .id(egui::Id::new((window_id, layout.adjust_session)))
-        .default_pos(layout.activity_size.map_or(egui::pos2(24.0, 32.0), |size| {
-            if group_window {
-                egui::pos2(24.0, 32.0)
-            } else {
-                egui::pos2((size.x - ADJUST_PANEL_WIDTH - 24.0).max(24.0), 32.0)
-            }
-        }))
+        .id(egui::Id::new((
+            window_id,
+            layout.adjust_session,
+            layout.adjustment_window_revision,
+        )))
+        .default_pos(
+            layout
+                .activity_size
+                .map_or(egui::pos2(24.0, panel_top), |size| {
+                    // Keep adjustment windows in the same right-aligned column.
+                    let right = (size.x - ADJUST_PANEL_WIDTH - 24.0).max(24.0);
+                    egui::pos2(right, panel_top)
+                }),
+        )
         .default_width(ADJUST_PANEL_WIDTH)
         .default_height(default_panel_height)
         .min_width(ADJUST_PANEL_WIDTH)
@@ -105,73 +127,99 @@ pub(super) fn draw_adjust_window(
         .collapsible(false)
         .open(&mut open)
         .show(ui.ctx(), |ui| {
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    if let HudLayoutTarget::Group(id) = &item.target {
-                        changed |= draw_group_settings(ui, prefs, id);
-                        ui.add_space(8.0);
-                    }
-                    if let HudLayoutTarget::Instance(instance_id) = &item.target {
-                        draw_hud_info(ui, prefs.locale, item, instance_id);
-                        ui.add_space(8.0);
-                    }
-                    if !grouped_member {
-                        changed |= draw_position_editor(
-                            ui,
-                            layout,
-                            prefs.locale,
-                            PositionTarget::Slot(&mut slot),
-                        );
-                        ui.add_space(8.0);
-                    } else if let HudLayoutTarget::Instance(instance_id) = &item.target {
-                        let locale = prefs.locale;
-                        if let Some((x, y)) = prefs.hud.groups.iter_mut().find_map(|group| {
-                            if !group.children.iter().any(|id| id == instance_id) {
-                                return None;
-                            }
-                            group.member_layouts.iter_mut().find_map(|member| {
-                                (&member.instance_id == instance_id)
-                                    .then_some((&mut member.x, &mut member.y))
-                            })
-                        }) {
+            ui.add_enabled_ui(interactive, |ui| {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        if let HudLayoutTarget::Group(id) = &item.target {
+                            changed |= draw_group_settings(ui, prefs, id);
+                            ui.add_space(8.0);
+                        }
+                        if let HudLayoutTarget::Instance(instance_id) = &item.target {
+                            draw_hud_info(ui, prefs.locale, item, instance_id);
+                            ui.add_space(8.0);
+                        }
+                        if !grouped_member {
+                            let size = match &item.target {
+                                HudLayoutTarget::Group(_) => item
+                                    .container_size
+                                    .unwrap_or_else(|| {
+                                        egui::vec2(item.base_size.width, item.base_size.height)
+                                    })
+                                    .max(group_min_size()),
+                                HudLayoutTarget::Instance(_) => egui::vec2(
+                                    item.base_size.width * slot.width,
+                                    item.base_size.height * slot.height,
+                                ),
+                            };
                             changed |= draw_position_editor(
                                 ui,
                                 layout,
-                                locale,
-                                PositionTarget::Member { x, y },
+                                prefs.locale,
+                                PositionTarget::Slot {
+                                    slot: &mut slot,
+                                    size,
+                                },
                             );
-                        }
-                        ui.add_space(8.0);
-                    }
-                    let (size_changed, width_was_changed, height_was_changed) =
-                        if let HudLayoutTarget::Group(id) = &item.target {
-                            (
-                                draw_group_size_group(
+                            ui.add_space(8.0);
+                        } else if let HudLayoutTarget::Instance(instance_id) = &item.target {
+                            let locale = prefs.locale;
+                            if let Some(geometry) = grouped_member_position_geometry(
+                                layout,
+                                prefs,
+                                item,
+                                instance_id,
+                                &slot,
+                            ) {
+                                let mut screen_position = geometry.position;
+                                let position_changed = draw_position_editor(
                                     ui,
                                     layout,
-                                    prefs,
-                                    id,
-                                    item.base_size,
-                                    item.width,
-                                    item.height,
-                                ),
-                                false,
-                                false,
-                            )
-                        } else {
-                            draw_size_group(ui, layout, prefs, &mut slot, item, initial_ratio)
-                        };
-                    changed |= size_changed;
-                    width_changed = width_was_changed;
-                    height_changed = height_was_changed;
-                    if let HudLayoutTarget::Instance(instance_id) = &item.target {
-                        ui.add_space(8.0);
-                        changed |= draw_effects_group(ui, layout, prefs, instance_id, item);
-                    }
-                });
+                                    locale,
+                                    PositionTarget::Member {
+                                        x: &mut screen_position.x,
+                                        y: &mut screen_position.y,
+                                        minimum: geometry.minimum,
+                                        maximum: geometry.maximum,
+                                    },
+                                );
+                                if position_changed
+                                    && let Some(instance) = prefs
+                                        .hud
+                                        .instances
+                                        .iter_mut()
+                                        .find(|instance| &instance.id == instance_id)
+                                {
+                                    let local = (screen_position - geometry.minimum).round_ui();
+                                    instance.layout.x = local.x.max(0.0);
+                                    instance.layout.y = local.y.max(0.0);
+                                }
+                                changed |= position_changed;
+                            }
+                            ui.add_space(8.0);
+                        }
+                        let (size_changed, width_was_changed, height_was_changed) =
+                            if let HudLayoutTarget::Group(id) = &item.target {
+                                (
+                                    draw_group_size_group(ui, layout, prefs, id, item, &slot),
+                                    false,
+                                    false,
+                                )
+                            } else {
+                                draw_size_group(ui, layout, prefs, &mut slot, item, initial_ratio)
+                            };
+                        changed |= size_changed;
+                        width_changed = width_was_changed;
+                        height_changed = height_was_changed;
+                        if let HudLayoutTarget::Instance(instance_id) = &item.target {
+                            ui.add_space(8.0);
+                            changed |= draw_effects_group(ui, layout, prefs, instance_id, item);
+                        }
+                    });
+            });
         });
     if layout.shadow_open
+        && interactive
         && let HudLayoutTarget::Instance(instance_id) = &item.target
     {
         changed |= draw_shadow_window(
@@ -195,13 +243,14 @@ pub(super) fn draw_adjust_window(
     }
     if layout.lock_ratio {
         let ratio = layout.locked_ratio.unwrap_or(initial_ratio).max(0.001);
+        let limits = hud_adjustment_size_factor_limits(layout, prefs, &slot, item);
         if width_changed && !height_changed {
-            slot.height = (slot.width * ratio).clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX);
-            slot.width = (slot.height / ratio).clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX);
+            slot.height = (slot.width * ratio).clamp(HUD_SIZE_FACTOR_MIN, limits.y);
+            slot.width = (slot.height / ratio).clamp(HUD_SIZE_FACTOR_MIN, limits.x);
             changed = true;
         } else if height_changed && !width_changed {
-            slot.width = (slot.height / ratio).clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX);
-            slot.height = (slot.width * ratio).clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX);
+            slot.width = (slot.height / ratio).clamp(HUD_SIZE_FACTOR_MIN, limits.x);
+            slot.height = (slot.width * ratio).clamp(HUD_SIZE_FACTOR_MIN, limits.y);
             changed = true;
         }
     }
@@ -214,22 +263,8 @@ pub(super) fn draw_adjust_window(
         let (slot_x, slot_y) = (slot.x, slot.y);
         if grouped_member {
             // Group-member coordinates are logical pixels, unlike the
-            // normalized 0..1 screen coordinates used by a top-level slot.
+            // physical-pixel window coordinates used by a top-level slot.
             // Do not pass them through set_layout_slot(), which clamps them.
-            if let HudLayoutTarget::Instance(instance_id) = &item.target
-                && let Some(group) = prefs
-                    .hud
-                    .groups
-                    .iter_mut()
-                    .find(|group| group.children.contains(instance_id))
-                && let Some(member) = group
-                    .member_layouts
-                    .iter_mut()
-                    .find(|member| &member.instance_id == instance_id)
-            {
-                member.x = slot_x.max(0.0);
-                member.y = slot_y.max(0.0);
-            }
             if let HudLayoutTarget::Instance(instance_id) = &item.target
                 && let Some(instance) = prefs
                     .hud
@@ -241,14 +276,22 @@ pub(super) fn draw_adjust_window(
                 instance.layout.height = slot.height;
             }
         } else {
-            set_layout_slot(prefs, item, slot);
-        }
-        if !grouped_member
-            && let Some(pos) = layout.positions.get_mut(&key)
-            && let Some(activity) = layout.activity_size
-        {
-            pos.x = slot_x * activity.x;
-            pos.y = slot_y * activity.y;
+            // Top-level positions are transient editor coordinates during
+            // layout mode. Keep prefs in window-local coordinates and move
+            // the editor's global position by the adjustment delta instead.
+            if let HudLayoutTarget::Instance(instance_id) = &item.target
+                && let Some(instance) = prefs
+                    .hud
+                    .instances
+                    .iter_mut()
+                    .find(|instance| &instance.id == instance_id)
+            {
+                instance.layout.width = slot.width;
+                instance.layout.height = slot.height;
+            }
+            if let Some(position) = layout.positions.get_mut(&key) {
+                *position += egui::vec2(slot_x - initial_x, slot_y - initial_y);
+            }
         }
     }
     changed
@@ -373,7 +416,8 @@ fn draw_group_settings(ui: &mut egui::Ui, prefs: &mut UiPreferences, group_id: &
                 },
             );
             let mut padding = group.inner.padding[0];
-            let padding_limit = (group.size[0].min(group.size[1]).max(0.0) * 0.25).floor();
+            let padding_limit =
+                (group.layout.width.min(group.layout.height).max(0.0) * 0.25).floor();
             components::config_row_with_divider(
                 ui,
                 deskhud_ui::i18n::t(locale, MessageKey::HudGroupPadding),
@@ -402,23 +446,16 @@ fn draw_group_settings(ui: &mut egui::Ui, prefs: &mut UiPreferences, group_id: &
                 None::<egui::RichText>,
                 false,
                 |ui| {
-                    let selected = "free";
-                    let options = vec![(
-                        selected.to_owned(),
-                        group_arrangement_label(locale, HudGroupArrangement::Free).to_owned(),
-                    )];
-                    if components::dropdown_with_style(
+                    let selected = group_arrangement_label(locale);
+                    let options = vec![("free".to_owned(), selected.to_owned())];
+                    let _ = components::dropdown_with_style(
                         ui,
                         ("hud-group-arrangement", group_id),
-                        selected,
+                        "free",
                         &options,
                         false,
                         components::DropdownStyle::ADJUSTMENT,
-                    )
-                    .is_some()
-                    {
-                        group.inner.arrangement = HudGroupArrangement::Free;
-                    }
+                    );
                 },
             );
         },
@@ -430,24 +467,84 @@ fn draw_group_settings(ui: &mut egui::Ui, prefs: &mut UiPreferences, group_id: &
     changed
 }
 
-fn group_arrangement_label(
-    locale: deskhud_ui::Locale,
-    arrangement: deskhud_engine::HudGroupArrangement,
-) -> &'static str {
-    let key = match arrangement {
-        deskhud_engine::HudGroupArrangement::Free => MessageKey::HudGroupArrangementFree,
-        deskhud_engine::HudGroupArrangement::Horizontal => {
-            MessageKey::HudGroupArrangementHorizontal
-        }
-        deskhud_engine::HudGroupArrangement::Vertical => MessageKey::HudGroupArrangementVertical,
-        deskhud_engine::HudGroupArrangement::Grid => MessageKey::HudGroupArrangementGrid,
-    };
-    deskhud_ui::i18n::t(locale, key)
+fn group_arrangement_label(locale: deskhud_ui::Locale) -> &'static str {
+    deskhud_ui::i18n::t(locale, MessageKey::HudGroupArrangementFree)
 }
 
 enum PositionTarget<'a> {
-    Slot(&'a mut deskhud_ui::HudSlotLayout),
-    Member { x: &'a mut f32, y: &'a mut f32 },
+    Slot {
+        slot: &'a mut deskhud_ui::HudSlotLayout,
+        size: egui::Vec2,
+    },
+    Member {
+        x: &'a mut f32,
+        y: &'a mut f32,
+        minimum: egui::Pos2,
+        maximum: egui::Pos2,
+    },
+}
+
+#[derive(Clone, Copy)]
+struct GroupedMemberPositionGeometry {
+    position: egui::Pos2,
+    minimum: egui::Pos2,
+    maximum: egui::Pos2,
+}
+
+fn grouped_member_position_geometry(
+    layout: &LayoutState,
+    prefs: &UiPreferences,
+    item: &HudRenderItem,
+    instance_id: &deskhud_engine::HudInstanceId,
+    slot: &deskhud_ui::HudSlotLayout,
+) -> Option<GroupedMemberPositionGeometry> {
+    let group = prefs
+        .hud
+        .groups
+        .iter()
+        .find(|group| group.children.contains(instance_id))?;
+    let group_position = layout
+        .positions
+        .get(&format!("group/{}", group.id))
+        .copied()
+        .unwrap_or(item.initial_position);
+    let group_size = layout
+        .transient_group_sizes
+        .get(&group.id)
+        .copied()
+        .or(item.container_size)
+        .unwrap_or_else(|| egui::vec2(group.layout.width, group.layout.height));
+    let [top, right, bottom, left] = effective_group_padding(group, group_size);
+    let member_size = egui::vec2(
+        item.base_size.width * slot.width,
+        item.base_size.height * slot.height,
+    );
+    Some(grouped_member_position_geometry_from_parts(
+        group_position,
+        group_size,
+        [top, right, bottom, left],
+        member_size,
+        egui::pos2(slot.x, slot.y),
+    ))
+}
+
+fn grouped_member_position_geometry_from_parts(
+    group_position: egui::Pos2,
+    group_size: egui::Vec2,
+    [top, right, bottom, left]: [f32; 4],
+    member_size: egui::Vec2,
+    local_position: egui::Pos2,
+) -> GroupedMemberPositionGeometry {
+    let minimum = group_position + egui::vec2(left, top);
+    let maximum = egui::pos2(
+        (group_position.x + group_size.x - right - member_size.x).max(minimum.x),
+        (group_position.y + group_size.y - bottom - member_size.y).max(minimum.y),
+    );
+    GroupedMemberPositionGeometry {
+        position: minimum + local_position.to_vec2(),
+        minimum,
+        maximum,
+    }
 }
 
 fn draw_position_editor(
@@ -456,35 +553,31 @@ fn draw_position_editor(
     locale: deskhud_ui::Locale,
     target: PositionTarget<'_>,
 ) -> bool {
-    let snap_to_grid = std::cell::Cell::new(layout.snap_to_grid);
-    let snap_control_changed = std::cell::Cell::new(false);
     let mut changed = false;
     components::config_card_with_header(
         ui,
         |ui| {
-            ui.allocate_ui_with_layout(
-                egui::vec2(ui.available_width(), ADJUST_ROW_HEIGHT),
-                egui::Layout::left_to_right(egui::Align::Center),
-                |ui| {
-                    ui.label(
-                        egui::RichText::new(deskhud_ui::i18n::t(
-                            locale,
-                            MessageKey::HudAdjustPosition,
-                        ))
-                        .strong(),
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        snap_control_changed.set(draw_snap_grid_control(ui, &snap_to_grid, locale));
-                    });
-                },
+            ui.label(
+                egui::RichText::new(deskhud_ui::i18n::t(locale, MessageKey::HudAdjustPosition))
+                    .strong(),
             );
         },
         |ui| {
             let activity = layout.activity_size.unwrap_or(egui::vec2(1.0, 1.0));
-            let member_target = matches!(&target, PositionTarget::Member { .. });
-            let (x, y) = match target {
-                PositionTarget::Slot(slot) => (&mut slot.x, &mut slot.y),
-                PositionTarget::Member { x, y } => (x, y),
+            let (x, y, minimum, maximum, snap) = match target {
+                PositionTarget::Slot { slot, size } => (
+                    &mut slot.x,
+                    &mut slot.y,
+                    egui::pos2(HUD_PADDING, HUD_PADDING),
+                    top_level_position_max(activity, size),
+                    true,
+                ),
+                PositionTarget::Member {
+                    x,
+                    y,
+                    minimum,
+                    maximum,
+                } => (x, y, minimum, maximum, false),
             };
             for (index, (label, value, pixels)) in [
                 (MessageKey::HudAdjustX, x, activity.x),
@@ -493,11 +586,7 @@ fn draw_position_editor(
             .into_iter()
             .enumerate()
             {
-                let mut shown = if member_target {
-                    *value
-                } else {
-                    *value * pixels
-                };
+                let mut shown = *value;
                 let mut value_changed = false;
                 components::config_row_with_divider(
                     ui,
@@ -517,23 +606,17 @@ fn draw_position_editor(
                     },
                 );
                 if value_changed {
-                    if member_target {
-                        *value = shown.max(0.0);
-                    } else {
-                        *value = (shown / pixels.max(1.0)).clamp(0.0, 1.0);
-                        if snap_to_grid.get() {
-                            *value = snap_normalized(*value);
-                        }
+                    let min = if index == 0 { minimum.x } else { minimum.y };
+                    let max = if index == 0 { maximum.x } else { maximum.y };
+                    *value = shown.clamp(min, max);
+                    if snap && layout.snap_to_grid {
+                        *value = snap_coordinate(*value, pixels).clamp(min, max);
                     }
                     changed = true;
                 }
             }
         },
     );
-    if snap_control_changed.get() {
-        layout.snap_to_grid = snap_to_grid.get();
-        changed = true;
-    }
     changed
 }
 
@@ -542,10 +625,18 @@ fn draw_group_size_group(
     layout: &mut LayoutState,
     prefs: &mut UiPreferences,
     group_id: &str,
-    base_size: deskhud_engine::HudLogicalSize,
-    legacy_width: f32,
-    legacy_height: f32,
+    item: &HudRenderItem,
+    slot: &deskhud_ui::HudSlotLayout,
 ) -> bool {
+    let content_min_size = group_adjustment_min_size(prefs, group_id, item);
+    let screen_max_size = layout
+        .activity_size
+        .map_or(egui::Vec2::splat(f32::MAX), |activity| {
+            egui::vec2(
+                activity.x - HUD_PADDING - slot.x,
+                activity.y - HUD_PADDING - slot.y,
+            )
+        });
     let Some(group) = prefs
         .hud
         .groups
@@ -554,36 +645,43 @@ fn draw_group_size_group(
     else {
         return false;
     };
-    if group.size[0] <= 0.0 || group.size[1] <= 0.0 {
-        group.size[0] = (base_size.width * legacy_width.max(0.5)).max(1.0);
-        group.size[1] = (base_size.height * legacy_height.max(0.5)).max(1.0);
-    }
     let mut changed = false;
-    let lock_ratio = std::cell::Cell::new(layout.lock_ratio);
-    let ratio_control_changed = std::cell::Cell::new(false);
-    let ratio = group.size[1] / group.size[0].max(1.0);
+    if group.layout.width <= 0.0 || group.layout.height <= 0.0 {
+        group.layout.width = (item.base_size.width * slot.width.max(0.5))
+            .max(item.base_size.width)
+            .max(content_min_size.x);
+        group.layout.height = (item.base_size.height * slot.height.max(0.5))
+            .max(item.base_size.height)
+            .max(content_min_size.y);
+        changed = true;
+    } else {
+        let width = group.layout.width.max(content_min_size.x);
+        let height = group.layout.height.max(content_min_size.y);
+        changed |= width != group.layout.width || height != group.layout.height;
+        group.layout.width = width;
+        group.layout.height = height;
+    }
+    let ratio = group.layout.height / group.layout.width.max(1.0);
+    let (minimum, maximum) = group_adjustment_size_limits(
+        content_min_size,
+        screen_max_size,
+        layout.lock_ratio.then_some(ratio),
+    );
+    let old_size = egui::vec2(group.layout.width, group.layout.height);
+    if layout.lock_ratio {
+        group.layout.width = group.layout.width.clamp(minimum.x, maximum.x);
+        group.layout.height = group.layout.width * ratio;
+    } else {
+        group.layout.width = group.layout.width.clamp(minimum.x, maximum.x);
+        group.layout.height = group.layout.height.clamp(minimum.y, maximum.y);
+    }
+    changed |= old_size != egui::vec2(group.layout.width, group.layout.height);
     components::config_card_with_header(
         ui,
         |ui| {
-            ui.allocate_ui_with_layout(
-                egui::vec2(ui.available_width(), ADJUST_ROW_HEIGHT),
-                egui::Layout::left_to_right(egui::Align::Center),
-                |ui| {
-                    ui.label(
-                        egui::RichText::new(deskhud_ui::i18n::t(
-                            prefs.locale,
-                            MessageKey::HudAdjustSize,
-                        ))
-                        .strong(),
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ratio_control_changed.set(draw_ratio_lock_control(
-                            ui,
-                            &lock_ratio,
-                            prefs.locale,
-                        ));
-                    });
-                },
+            ui.label(
+                egui::RichText::new(deskhud_ui::i18n::t(prefs.locale, MessageKey::HudAdjustSize))
+                    .strong(),
             );
         },
         |ui| {
@@ -591,7 +689,11 @@ fn draw_group_size_group(
                 .into_iter()
                 .enumerate()
             {
-                let mut value = group.size[index];
+                let mut value = if index == 0 {
+                    group.layout.width
+                } else {
+                    group.layout.height
+                };
                 let mut value_changed = false;
                 components::config_row_with_divider(
                     ui,
@@ -606,7 +708,10 @@ fn draw_group_size_group(
                                     egui::DragValue::new(&mut value)
                                         .fixed_decimals(1)
                                         .speed(1.0)
-                                        .range(1.0..=f32::MAX)
+                                        .range(
+                                            if index == 0 { minimum.x } else { minimum.y }
+                                                ..=if index == 0 { maximum.x } else { maximum.y },
+                                        )
                                         .suffix(" px"),
                                 )
                                 .changed()
@@ -615,16 +720,27 @@ fn draw_group_size_group(
                     },
                 );
                 if value_changed {
-                    group.size[index] = value.max(1.0);
-                    if lock_ratio.get() {
+                    value = value.clamp(
+                        if index == 0 { minimum.x } else { minimum.y },
+                        if index == 0 { maximum.x } else { maximum.y },
+                    );
+                    if layout.lock_ratio {
                         if index == 0 {
-                            group.size[1] = (group.size[0] * ratio).max(1.0);
+                            group.layout.width = value;
+                            group.layout.height = value * ratio;
                         } else {
-                            group.size[0] = (group.size[1] / ratio.max(0.001)).max(1.0);
+                            group.layout.height = value;
+                            group.layout.width = value / ratio.max(0.001);
+                        }
+                    } else {
+                        if index == 0 {
+                            group.layout.width = value;
+                        } else {
+                            group.layout.height = value;
                         }
                     }
-                    let horizontal_limit = group.size[0] * 0.25;
-                    let vertical_limit = group.size[1] * 0.25;
+                    let horizontal_limit = group.layout.width * 0.25;
+                    let vertical_limit = group.layout.height * 0.25;
                     group.inner.padding[0] = group.inner.padding[0].min(vertical_limit).floor();
                     group.inner.padding[2] = group.inner.padding[2].min(vertical_limit).floor();
                     group.inner.padding[1] = group.inner.padding[1].min(horizontal_limit).floor();
@@ -634,11 +750,82 @@ fn draw_group_size_group(
             }
         },
     );
-    if ratio_control_changed.get() {
-        layout.lock_ratio = lock_ratio.get();
-        changed = true;
-    }
     changed
+}
+
+fn top_level_position_max(activity: egui::Vec2, size: egui::Vec2) -> egui::Pos2 {
+    egui::pos2(
+        (activity.x - size.x - HUD_PADDING).max(HUD_PADDING),
+        (activity.y - size.y - HUD_PADDING).max(HUD_PADDING),
+    )
+}
+
+fn group_adjustment_size_limits(
+    minimum: egui::Vec2,
+    maximum: egui::Vec2,
+    aspect_ratio: Option<f32>,
+) -> (egui::Vec2, egui::Vec2) {
+    let maximum = maximum.max(minimum);
+    let Some(ratio) = aspect_ratio.filter(|ratio| ratio.is_finite() && *ratio > 0.0) else {
+        return (minimum, maximum);
+    };
+    let min_width = minimum.x.max(minimum.y / ratio);
+    let max_width = maximum.x.min(maximum.y / ratio).max(min_width);
+    (
+        egui::vec2(min_width, min_width * ratio),
+        egui::vec2(max_width, max_width * ratio),
+    )
+}
+
+fn group_adjustment_min_size(
+    prefs: &UiPreferences,
+    group_id: &str,
+    item: &HudRenderItem,
+) -> egui::Vec2 {
+    let Some(group) = prefs.hud.groups.iter().find(|group| group.id == group_id) else {
+        return group_min_size();
+    };
+    let [top, right, bottom, left] = group.inner.padding;
+    let mut minimum = group_min_size();
+    for layer in &item.layers {
+        let Some(instance) = prefs
+            .hud
+            .instances
+            .iter()
+            .find(|instance| instance.id == layer.instance_id)
+        else {
+            continue;
+        };
+        let width = layer.base_size.width
+            * instance
+                .layout
+                .width
+                .clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX);
+        let height = layer.base_size.height
+            * instance
+                .layout
+                .height
+                .clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX);
+        minimum = include_group_member_in_minimum(
+            minimum,
+            [top, right, bottom, left],
+            egui::pos2(instance.layout.x.max(0.0), instance.layout.y.max(0.0)),
+            egui::vec2(width, height),
+        );
+    }
+    minimum
+}
+
+fn include_group_member_in_minimum(
+    minimum: egui::Vec2,
+    [top, right, bottom, left]: [f32; 4],
+    position: egui::Pos2,
+    size: egui::Vec2,
+) -> egui::Vec2 {
+    egui::vec2(
+        minimum.x.max(left + position.x + size.x + right),
+        minimum.y.max(top + position.y + size.y + bottom),
+    )
 }
 
 fn draw_size_group(
@@ -650,41 +837,26 @@ fn draw_size_group(
     ratio: f32,
 ) -> (bool, bool, bool) {
     let mut changed = false;
-    let lock_ratio = std::cell::Cell::new(layout.lock_ratio);
-    let ratio_control_changed = std::cell::Cell::new(false);
     let mut width_changed = false;
     let mut height_changed = false;
     let base = egui::vec2(item.base_size.width, item.base_size.height);
+    let limits = hud_adjustment_size_factor_limits(layout, prefs, slot, item);
     components::config_card_with_header(
         ui,
         |ui| {
-            ui.allocate_ui_with_layout(
-                egui::vec2(ui.available_width(), ADJUST_ROW_HEIGHT),
-                egui::Layout::left_to_right(egui::Align::Center),
-                |ui| {
-                    ui.label(
-                        egui::RichText::new(deskhud_ui::i18n::t(
-                            prefs.locale,
-                            MessageKey::HudAdjustSize,
-                        ))
-                        .strong(),
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ratio_control_changed.set(draw_ratio_lock_control(
-                            ui,
-                            &lock_ratio,
-                            prefs.locale,
-                        ));
-                    });
-                },
+            ui.label(
+                egui::RichText::new(deskhud_ui::i18n::t(prefs.locale, MessageKey::HudAdjustSize))
+                    .strong(),
             );
         },
         |ui| {
-            let width_max = if lock_ratio.get() {
-                (HUD_SIZE_FACTOR_MAX / ratio.max(0.001))
-                    .clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX)
+            let width_max = if layout.lock_ratio {
+                limits
+                    .x
+                    .min(limits.y / ratio.max(0.001))
+                    .max(HUD_SIZE_FACTOR_MIN)
             } else {
-                HUD_SIZE_FACTOR_MAX
+                limits.x
             };
             {
                 let mut shown = slot.width * base.x;
@@ -710,10 +882,10 @@ fn draw_size_group(
                 }
                 changed |= width_changed;
             }
-            let height_max = if lock_ratio.get() {
-                (HUD_SIZE_FACTOR_MAX * ratio).clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX)
+            let height_max = if layout.lock_ratio {
+                limits.y.min(limits.x * ratio).max(HUD_SIZE_FACTOR_MIN)
             } else {
-                HUD_SIZE_FACTOR_MAX
+                limits.y
             };
             {
                 let mut shown = slot.height * base.y;
@@ -741,9 +913,110 @@ fn draw_size_group(
             }
         },
     );
-    if ratio_control_changed.get() {
-        layout.lock_ratio = lock_ratio.get();
-        changed = true;
-    }
     (changed, width_changed, height_changed)
+}
+
+fn hud_adjustment_size_factor_limits(
+    layout: &LayoutState,
+    prefs: &UiPreferences,
+    slot: &deskhud_ui::HudSlotLayout,
+    item: &HudRenderItem,
+) -> egui::Vec2 {
+    let base = egui::vec2(item.base_size.width, item.base_size.height);
+    let bottom_right = if let HudLayoutTarget::Instance(instance_id) = &item.target
+        && let Some(group) = prefs
+            .hud
+            .groups
+            .iter()
+            .find(|group| group.children.contains(instance_id))
+    {
+        let group_size = layout
+            .transient_group_sizes
+            .get(&group.id)
+            .copied()
+            .or(item.container_size)
+            .unwrap_or_else(|| egui::vec2(group.layout.width, group.layout.height));
+        let [top, right, bottom, left] = effective_group_padding(group, group_size);
+        egui::vec2(
+            (group_size.x - left - right).max(0.0),
+            (group_size.y - top - bottom).max(0.0),
+        )
+    } else if let Some(activity) = layout.activity_size {
+        activity - egui::Vec2::splat(HUD_PADDING)
+    } else {
+        egui::vec2(
+            slot.x + base.x * HUD_SIZE_FACTOR_MAX,
+            slot.y + base.y * HUD_SIZE_FACTOR_MAX,
+        )
+    };
+    remaining_size_factor_limits(base, egui::pos2(slot.x, slot.y), bottom_right)
+}
+
+fn remaining_size_factor_limits(
+    base: egui::Vec2,
+    position: egui::Pos2,
+    bottom_right: egui::Vec2,
+) -> egui::Vec2 {
+    egui::vec2(
+        ((bottom_right.x - position.x) / base.x.max(1.0))
+            .clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX),
+        ((bottom_right.y - position.y) / base.y.max(1.0))
+            .clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn group_adjustment_minimum_includes_member_position_size_and_padding() {
+        let minimum = include_group_member_in_minimum(
+            group_min_size(),
+            [8.0, 12.0, 10.0, 6.0],
+            egui::pos2(175.0, 90.0),
+            egui::vec2(80.0, 40.0),
+        );
+        assert_eq!(minimum, egui::vec2(273.0, 148.0));
+    }
+
+    #[test]
+    fn hud_adjustment_limits_size_at_the_available_bottom_right_edges() {
+        let limits = remaining_size_factor_limits(
+            egui::vec2(100.0, 50.0),
+            egui::pos2(220.0, 160.0),
+            egui::vec2(500.0, 300.0),
+        );
+        assert_eq!(limits, egui::vec2(2.8, 2.8));
+    }
+
+    #[test]
+    fn group_adjustment_position_and_locked_size_stop_at_screen_edges() {
+        assert_eq!(
+            top_level_position_max(egui::vec2(800.0, 600.0), egui::vec2(240.0, 140.0)),
+            egui::pos2(552.0, 452.0),
+        );
+        let (minimum, maximum) = group_adjustment_size_limits(
+            egui::vec2(120.0, 80.0),
+            egui::vec2(300.0, 160.0),
+            Some(0.75),
+        );
+        assert_eq!(minimum, egui::vec2(120.0, 90.0));
+        assert_eq!(maximum, egui::vec2(160.0 / 0.75, 160.0));
+    }
+
+    #[test]
+    fn grouped_member_editor_exposes_screen_position_but_keeps_local_bounds() {
+        let geometry = grouped_member_position_geometry_from_parts(
+            egui::pos2(100.0, 100.0),
+            egui::vec2(300.0, 200.0),
+            [10.0, 20.0, 30.0, 40.0],
+            egui::vec2(80.0, 50.0),
+            egui::pos2(25.0, 15.0),
+        );
+        assert_eq!(geometry.position, egui::pos2(165.0, 125.0));
+        assert_eq!(geometry.minimum, egui::pos2(140.0, 110.0));
+        assert_eq!(geometry.maximum, egui::pos2(300.0, 220.0));
+        assert_eq!(geometry.position - geometry.minimum, egui::vec2(25.0, 15.0));
+    }
 }

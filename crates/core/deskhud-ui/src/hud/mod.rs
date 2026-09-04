@@ -10,9 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::shell::LayerPreference;
 
 pub use layout::{HUD_SIZE_FACTOR_MAX, HUD_SIZE_FACTOR_MIN, HudSlotLayout};
-pub use model::{
-    HudGroup, HudGroupMemberLayout, HudInstance, HudInstanceConfig, HudRecoveryReport,
-};
+pub use model::{HudGroup, HudInstance, HudInstanceConfig, HudRecoveryReport};
 
 /// `[hud]` 里单个键的值：bool / 数字 / 字符串。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -64,12 +62,18 @@ impl HudConfigValue {
 /// "hud.deskhud.demo.enable" = true
 /// "hud.deskhud.demo.tip.enable" = true
 /// "hud.deskhud.demo.tip.display" = "primary"
-/// "hud.deskhud.demo.tip.x" = 0.54
-/// "hud.deskhud.demo.tip.y" = 0.82
+/// "hud.deskhud.demo.tip.x" = 540.0
+/// "hud.deskhud.demo.tip.y" = 820.0
 /// "hud.deskhud.demo.tip.size" = [1.0, 1.0]
 /// ```
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HudPrefs {
+    /// Normal-mode HUD window size in physical pixels.
+    #[serde(default = "default_window_size")]
+    pub window_size: [u32; 2],
+    /// Normal-mode HUD window top-left position in physical pixels.
+    #[serde(default = "default_window_position")]
+    pub window_position: [i32; 2],
     /// HUD 桌面覆盖层级。
     #[serde(default, skip_serializing)]
     pub layer: LayerPreference,
@@ -85,6 +89,28 @@ pub struct HudPrefs {
     /// 统一扁平配置表（直接落在 `[hud]` 下）。
     #[serde(default, flatten)]
     pub config: HashMap<String, HudConfigValue>,
+}
+
+impl Default for HudPrefs {
+    fn default() -> Self {
+        Self {
+            window_size: default_window_size(),
+            window_position: default_window_position(),
+            layer: Default::default(),
+            instances: Vec::new(),
+            groups: Vec::new(),
+            suppressed_default_sources: Vec::new(),
+            config: HashMap::new(),
+        }
+    }
+}
+
+fn default_window_size() -> [u32; 2] {
+    [1600, 900]
+}
+
+fn default_window_position() -> [i32; 2] {
+    [100, 100]
 }
 
 impl HudPrefs {

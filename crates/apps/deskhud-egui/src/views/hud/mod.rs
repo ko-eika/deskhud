@@ -18,8 +18,19 @@ use crate::views::ViewOutput;
 /// HUD 内部子窗口的布局状态。
 #[derive(Default)]
 pub(crate) struct LayoutState {
-    /// 按 `plugin_id/contribution_id` 保留的 HUD 条目逻辑坐标。
+    /// 布局编辑器活动画布中的 egui 逻辑坐标。
     pub(crate) positions: HashMap<String, egui::Pos2>,
+    /// Layout-session positions in global physical screen pixels.
+    /// Persisted slots are converted to/from these coordinates only when
+    /// entering or leaving layout mode.
+    pub(crate) absolute_positions: HashMap<String, egui::Pos2>,
+    /// Global physical pixel coordinate of the expanded layout canvas origin.
+    pub(crate) activity_origin: Option<egui::Pos2>,
+    /// Scale used to project physical screen pixels into the egui canvas.
+    pub(crate) scale_factor: f32,
+    /// Group sizes temporarily held stable while a member is being dragged.
+    /// These must never be persisted as the group's manual size.
+    pub(crate) transient_group_sizes: HashMap<String, egui::Vec2>,
     /// HUD currently being dragged in layout-window coordinates.
     ///
     /// A grouped HUD is detached when this state is created and is assigned
@@ -27,12 +38,20 @@ pub(crate) struct LayoutState {
     pub(crate) active_hud_drag: Option<HudDragState>,
     /// 是否处于可拖动布局模式。
     pub(crate) layout_mode: bool,
+    /// The in-canvas completion action requests the same transition as Escape.
+    pub(crate) finish_layout_requested: bool,
     /// 当前显示器活动区域的逻辑尺寸。
     pub(crate) activity_size: Option<egui::Vec2>,
     /// 是否等待下一帧切回紧凑窗口尺寸。
     pub(crate) compact_pending: bool,
-    /// 当前高亮的 HUD 条目；右键调整窗口也绑定到此条目。
+    /// 当前高亮的 HUD 或组；右侧调节窗口绑定到此条目。
     pub(crate) selected: Option<String>,
+    /// Selection that the adjustment panels were last synchronized to.
+    pub(crate) adjustment_selection: Option<String>,
+    /// Adjustment panel kinds in the order in which they were opened.
+    pub(crate) adjustment_order: Vec<&'static str>,
+    /// Revision used to reset panel geometry when a panel is reopened.
+    pub(crate) adjustment_window_revision: u64,
     pub(crate) adjust_open: bool,
     pub(crate) group_adjust_open: bool,
     pub(crate) hud_adjust_open: bool,
@@ -42,11 +61,11 @@ pub(crate) struct LayoutState {
     pub(crate) shadow_target: Option<ShadowTarget>,
     /// Whether layout positions should snap to the visible alignment grid.
     pub(crate) snap_to_grid: bool,
-    /// Recreates HUD egui windows when entering a new editing session or
-    /// when their size is changed from the adjustment panel.
+    /// Recreates HUD egui windows when entering a new editing session.
+    /// Size changes are applied to existing windows to preserve position.
     pub(crate) window_revision: u64,
     pub(crate) adjust_session: u64,
-    /// Whether the adjustment panel should preserve the selected HUD aspect ratio.
+    /// Whether layout editing should preserve the selected HUD aspect ratio.
     pub(crate) lock_ratio: bool,
     pub(crate) locked_ratio: Option<f32>,
 }
@@ -78,6 +97,9 @@ pub(crate) enum HudLayoutTarget {
 pub(crate) struct HudRenderLayer {
     pub(crate) instance_id: HudInstanceId,
     pub(crate) source: HudSourceId,
+    /// Names belonging to this member, even when rendered inside a group.
+    pub(crate) plugin_name: String,
+    pub(crate) contribution_name: String,
     pub(crate) config: HudInstanceConfig,
     pub(crate) base_size: HudLogicalSize,
     pub(crate) frame: HudFrame,
@@ -268,6 +290,8 @@ fn resolved_hud_slots(
             continue;
         }
         let size = measured_frame_size(&frame.frame);
+        let (plugin_name, contribution_name) =
+            source_names(registry, frame.plugin_id, frame.contribution_id);
         let rect = HudLogicalRect {
             x: 0.0,
             y: 0.0,
@@ -285,6 +309,8 @@ fn resolved_hud_slots(
             layers: vec![HudRenderLayer {
                 instance_id: frame.instance_id.clone(),
                 source: frame.source.clone(),
+                plugin_name,
+                contribution_name,
                 config: frame.config.clone(),
                 base_size: size,
                 frame: frame.frame.clone(),
@@ -303,20 +329,9 @@ fn resolved_hud_slots(
         let members: Vec<_> = group
             .children
             .iter()
-            .enumerate()
-            .filter_map(|(index, id)| {
+            .filter_map(|id| {
                 let frame = by_instance.remove(id)?;
-                let member_layout = group
-                    .member_layouts
-                    .iter()
-                    .find(|layout| layout.instance_id == *id)
-                    .cloned()
-                    .unwrap_or(deskhud_ui::HudGroupMemberLayout {
-                        instance_id: id.clone(),
-                        x: index as f32 * group.inner.spacing,
-                        y: index as f32 * group.inner.spacing,
-                    })
-                    .normalized();
+                let member_layout = frame.layout.clone();
                 Some((frame, member_layout))
             })
             .collect();
@@ -340,29 +355,27 @@ fn resolved_hud_slots(
             })
             .collect();
         let mut inner_layout = group.inner.clone();
-        if group.size[0] > 0.0 && group.size[1] > 0.0 {
-            let horizontal_limit = group.size[0] * 0.25;
-            let vertical_limit = group.size[1] * 0.25;
+        if group.layout.width > 0.0 && group.layout.height > 0.0 {
+            let horizontal_limit = group.layout.width * 0.25;
+            let vertical_limit = group.layout.height * 0.25;
             inner_layout.padding[0] = inner_layout.padding[0].min(vertical_limit).floor();
             inner_layout.padding[2] = inner_layout.padding[2].min(vertical_limit).floor();
             inner_layout.padding[1] = inner_layout.padding[1].min(horizontal_limit).floor();
             inner_layout.padding[3] = inner_layout.padding[3].min(horizontal_limit).floor();
         }
-        let composition = if inner_layout.arrangement == deskhud_engine::HudGroupArrangement::Free {
-            let frames = measured
-                .iter()
-                .zip(&members)
-                .map(|(size, (_, member_layout))| HudLogicalRect {
-                    x: member_layout.x,
-                    y: member_layout.y,
-                    width: size.width,
-                    height: size.height,
-                })
-                .collect::<Vec<_>>();
-            inner_layout.compose_free(&frames)
-        } else {
-            inner_layout.compose(&measured)
-        };
+        // Groups currently have one layout mode: freely positioned members.
+        // The persisted member rectangles are the source of truth.
+        let frames = measured
+            .iter()
+            .zip(&members)
+            .map(|(size, (_, member_layout))| HudLogicalRect {
+                x: member_layout.x,
+                y: member_layout.y,
+                width: size.width,
+                height: size.height,
+            })
+            .collect::<Vec<_>>();
+        let composition = inner_layout.compose_free(&frames);
         let style_frame = HudFrame {
             visuals: members
                 .iter()
@@ -374,9 +387,13 @@ fn resolved_hud_slots(
             .zip(composition.members)
             .map(|((member, _), placement)| {
                 let base_size = measured_frame_size(&member.frame);
+                let (plugin_name, contribution_name) =
+                    source_names(registry, member.plugin_id, member.contribution_id);
                 HudRenderLayer {
                     instance_id: member.instance_id,
                     source: member.source,
+                    plugin_name,
+                    contribution_name,
                     config: member.config,
                     base_size,
                     frame: member.frame,
@@ -404,6 +421,30 @@ fn resolved_hud_slots(
         });
     }
     slots
+}
+
+fn source_names(
+    registry: &EngineRegistry,
+    plugin_id: &str,
+    contribution_id: &str,
+) -> (String, String) {
+    let plugin_name = registry
+        .plugin_infos()
+        .into_iter()
+        .find(|plugin| plugin.id == plugin_id)
+        .map_or_else(
+            || plugin_id.to_owned(),
+            |plugin| plugin.display_name.to_owned(),
+        );
+    let contribution_name = registry
+        .all_hud_contributions()
+        .into_iter()
+        .find(|(id, contribution)| *id == plugin_id && contribution.id == contribution_id)
+        .map_or_else(
+            || contribution_id.to_owned(),
+            |(_, contribution)| contribution.label.to_owned(),
+        );
+    (plugin_name, contribution_name)
 }
 
 fn measured_frame_size(frame: &HudFrame) -> HudLogicalSize {
@@ -460,7 +501,9 @@ pub(crate) fn run(
 
     ViewOutput {
         full_output,
-        resize_to: Some(content_size),
+        // Normal mode is intentionally driven by the persisted window preset.
+        // The activity canvas remains the only dynamically sized surface.
+        resize_to: layout.layout_mode.then_some(content_size),
         move_by,
         applied_preferences: changed.then(|| prefs.clone()),
         ..Default::default()
@@ -606,8 +649,18 @@ mod tests {
             .rev()
             .map(|instance| instance.id.clone())
             .collect();
-        prefs.hud.groups[0].inner.arrangement = HudGroupArrangement::Vertical;
+        prefs.hud.groups[0].inner.arrangement = HudGroupArrangement::Free;
         prefs.hud.groups[0].inner.spacing = 7.0;
+        for (index, instance_id) in prefs.hud.groups[0].children.iter().enumerate() {
+            let instance = prefs
+                .hud
+                .instances
+                .iter_mut()
+                .find(|instance| &instance.id == instance_id)
+                .unwrap();
+            instance.layout.x = index as f32 * 40.0;
+            instance.layout.y = index as f32 * 24.0;
+        }
 
         let slots = resolved_hud_slots(&bootstrap.registry, &prefs, 1.0, false);
         assert_eq!(slots.len(), 1);
@@ -642,9 +695,10 @@ mod tests {
         prefs.hud.add_instance_to_group(&group_id, &member);
         let group = &mut prefs.hud.groups[0];
         group.inner.arrangement = HudGroupArrangement::Free;
-        group.size = [4096.0, 4096.0];
-        group.member_layouts[0].x = 42.0;
-        group.member_layouts[0].y = 17.0;
+        group.layout.width = 4096.0;
+        group.layout.height = 4096.0;
+        prefs.hud.instances[0].layout.x = 42.0;
+        prefs.hud.instances[0].layout.y = 17.0;
 
         let slots = resolved_hud_slots(&bootstrap.registry, &prefs, 1.0, true);
         assert_eq!(slots.len(), 2);

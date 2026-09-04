@@ -8,9 +8,9 @@ use deskhud_engine::HudVisual;
 pub(super) struct FrameResponse {
     pub(super) body: egui::Response,
     pub(super) group_drag: Option<egui::Response>,
-    pub(super) size: egui::Vec2,
     pub(super) resize_drag: Option<ResizeDrag>,
     pub(super) resize_started: bool,
+    pub(super) group_inner_rect: Option<egui::Rect>,
     pub(super) members: Vec<MemberResponse>,
 }
 
@@ -207,13 +207,13 @@ pub(super) fn draw_frame(
     ui: &mut egui::Ui,
     item: &HudRenderItem,
     layout_mode: bool,
+    custom_resize: bool,
     prefs: &UiPreferences,
 ) -> FrameResponse {
     let base_size = egui::vec2(item.base_size.width, item.base_size.height);
     let available = ui.available_size_before_wrap();
     let is_group = matches!(item.target, HudLayoutTarget::Group(_));
     let size = if layout_mode
-        && !is_group
         && available.x.is_finite()
         && available.y.is_finite()
         && available.x > 1.0
@@ -255,6 +255,7 @@ pub(super) fn draw_frame(
         rect.height() / item.base_size.height.max(1.0)
     };
     let mut member_responses = Vec::new();
+    let mut group_inner_rect = None;
     if layout_mode && let Some([red, green, blue]) = item.group_color {
         let radius = (item.corner_radius.clamp(0.0, 1.0) * HUD_CORNER_RADIUS_MAX)
             .round()
@@ -285,6 +286,7 @@ pub(super) fn draw_frame(
                 rect.min + egui::vec2(left, top),
                 rect.max - egui::vec2(right, bottom),
             );
+            group_inner_rect = Some(inner);
             hud_painter.rect_stroke(
                 inner,
                 corner_radius,
@@ -461,7 +463,7 @@ pub(super) fn draw_frame(
             });
         }
     }
-    let (resize_drag, resize_started) = if layout_mode {
+    let (resize_drag, resize_started) = if custom_resize {
         hud_resize_interaction(ui, &item.key, rect)
     } else {
         (None, false)
@@ -469,9 +471,9 @@ pub(super) fn draw_frame(
     FrameResponse {
         body: response,
         group_drag: None,
-        size,
         resize_drag,
         resize_started,
+        group_inner_rect,
         members: member_responses,
     }
 }
@@ -615,7 +617,11 @@ fn hud_resize_interaction(
         if response.dragged() {
             drag = Some(ResizeDrag {
                 edges,
-                delta: response.drag_delta(),
+                // The stored geometry already contains every previous frame
+                // of this gesture, so apply only the current pointer step.
+                // Response::drag_delta is cumulative and would accelerate
+                // into a boundary, producing the apparent squeeze/offset.
+                delta: ui.input(|input| input.pointer.delta()),
             });
         }
     }

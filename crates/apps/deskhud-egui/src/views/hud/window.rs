@@ -49,13 +49,19 @@ impl HudWindow {
         let activity_area = area::get(viewport.window());
         let mut hud = Self {
             viewport,
-            layout: LayoutState::default(),
+            layout: LayoutState {
+                // Keep newly opened layout sessions aspect-ratio safe by
+                // default; the adjustment panel can still toggle this off.
+                lock_ratio: true,
+                ..LayoutState::default()
+            },
             activity_area,
             layout_restore_layer: None,
             prefs,
             registry,
             started: Instant::now(),
         };
+        hud.apply_window_preset();
         hud.viewport
             .set_window_layer(window_layer(hud.prefs.hud.layer));
         // HUD 普通显示时只提供视觉叠加，不应拦截下面应用的鼠标输入。
@@ -64,6 +70,9 @@ impl HudWindow {
     }
 
     pub(crate) fn show(&mut self) {
+        if !self.layout.layout_mode {
+            self.apply_window_preset();
+        }
         self.viewport.set_visible(true);
         self.viewport.set_cursor_hittest(self.layout.layout_mode);
     }
@@ -137,35 +146,59 @@ impl HudWindow {
         self.layout_restore_layer = Some(self.viewport.window_layer());
         self.viewport.set_window_layer(WindowLayer::AlwaysOnTop);
         let scale = self.viewport.window().scale_factor() as f32;
-        if let Ok(previous_position) = self.viewport.window().inner_position() {
-            let delta = egui::vec2(
-                (previous_position.x - activity.position.x) as f32 / scale,
-                (previous_position.y - activity.position.y) as f32 / scale,
-            );
-            for position in self.layout.positions.values_mut() {
-                *position += delta;
-            }
-        }
+        self.layout.scale_factor = scale;
         self.layout.activity_size = Some(egui::vec2(
             activity.size.width as f32 / scale,
             activity.size.height as f32 / scale,
         ));
+        // Persisted HUD position and slot x/y use the same physical-pixel
+        // coordinate system. Only the egui canvas projection is logical.
+        let activity_origin = egui::pos2(activity.position.x as f32, activity.position.y as f32);
+        let window_origin = egui::pos2(
+            self.prefs.hud.window_position[0] as f32,
+            self.prefs.hud.window_position[1] as f32,
+        );
         // Positions are relative to the current editor canvas. Rebuild them
         // from persisted slots each time, rather than reusing stale window
         // coordinates from the previous layout session.
         self.layout.active_hud_drag = None;
         self.layout.positions.clear();
-        self.layout.selected = resolved_hud_slots(
+        self.layout.transient_group_sizes.clear();
+        let slots = resolved_hud_slots(
             &self.registry,
             &self.prefs,
             self.started.elapsed().as_secs_f32(),
             true,
-        )
-        .first()
-        .map(|item| item.key.clone());
-        self.layout.adjust_open = true;
+        );
+        self.layout.activity_origin = Some(activity_origin);
+        let scale = self.layout.scale_factor.max(1.0);
+        self.layout.absolute_positions = slots
+            .iter()
+            .map(|item| {
+                let absolute = window_origin + egui::vec2(item.layout.x, item.layout.y);
+                (item.key.clone(), absolute)
+            })
+            .collect();
+        self.layout.positions = self
+            .layout
+            .absolute_positions
+            .iter()
+            .map(|(key, position)| (key.clone(), *position - activity_origin.to_vec2()))
+            .map(|(key, position)| (key, position / scale))
+            .collect();
+        // Entering layout mode starts with no target selected. The editor
+        // panels are opened only after the user selects a HUD or a group.
+        self.layout.selected = None;
+        self.layout.adjustment_selection = None;
+        self.layout.adjustment_order.clear();
+        self.layout.adjust_open = false;
+        self.layout.hud_adjust_open = false;
+        self.layout.group_adjust_open = false;
+        self.layout.hud_adjust_key = None;
+        self.layout.group_adjust_key = None;
         self.layout.adjust_session = self.layout.adjust_session.wrapping_add(1);
         self.layout.window_revision = self.layout.window_revision.wrapping_add(1);
+        self.layout.finish_layout_requested = false;
         self.layout.layout_mode = true;
         // 布局模式需要接收鼠标，才能拖动 HUD 面板。
         self.viewport.set_cursor_hittest(true);
@@ -175,6 +208,7 @@ impl HudWindow {
     }
 
     fn leave_layout_mode(&mut self) {
+        self.layout.finish_layout_requested = false;
         if !self.layout.layout_mode {
             return;
         }
@@ -182,17 +216,24 @@ impl HudWindow {
         // mode is closed before a pointer-up frame arrives, finish it as a
         // screen HUD so no transient drag state or stale membership remains.
         super::drawing::finish_active_hud_drag_as_screen(&mut self.layout, &mut self.prefs);
-        // Layout positions live in the temporary activity-canvas coordinate
-        // system. Persist them before switching modes; the compact render
-        // path intentionally stops synchronizing editor geometry.
-        if let Some(activity) = self.layout.activity_size {
-            for (key, position) in &self.layout.positions {
-                let x = (position.x / activity.x.max(1.0)).clamp(0.0, 1.0);
-                let y = (position.y / activity.y.max(1.0)).clamp(0.0, 1.0);
+        super::drawing::sync_absolute_positions(&mut self.layout);
+        // Calculate the compact window before leaving the editor. This lets
+        // the next normal frame use a stable preset instead of resizing from
+        // whatever content happened to be visible in the previous frame.
+        let items = self.render_items();
+        if let Some((position, size)) = compact_geometry(
+            &items,
+            &self.layout,
+            self.layout.activity_size,
+            self.viewport.window().scale_factor() as f32,
+        ) {
+            let window_origin = egui::pos2(position[0] as f32, position[1] as f32);
+            for (key, absolute) in &self.layout.absolute_positions {
+                let local = *absolute - window_origin.to_vec2();
                 if let Some(id) = key.strip_prefix("group/") {
                     if let Some(group) = self.prefs.hud.groups.iter_mut().find(|g| g.id == id) {
-                        group.layout.x = x;
-                        group.layout.y = y;
+                        group.layout.x = local.x.max(0.0);
+                        group.layout.y = local.y.max(0.0);
                     }
                 } else if let Some(id) = key.strip_prefix("instance/")
                     && let Some(instance) = self
@@ -202,18 +243,32 @@ impl HudWindow {
                         .iter_mut()
                         .find(|i| i.id.as_str() == id)
                 {
-                    instance.layout.x = x;
-                    instance.layout.y = y;
+                    instance.layout.x = local.x.max(0.0);
+                    instance.layout.y = local.y.max(0.0);
                 }
             }
+            self.prefs.hud.window_position = position;
+            self.prefs.hud.window_size = size;
+            self.apply_window_preset();
         }
         self.layout.layout_mode = false;
+        // The editor keeps canvas coordinates only for the duration of the
+        // session. Normal mode must rebuild positions from the translated
+        // persisted slots and the compact window origin.
+        self.layout.positions.clear();
+        self.layout.absolute_positions.clear();
+        self.layout.activity_origin = None;
+        self.layout.transient_group_sizes.clear();
         if let Some(layer) = self.layout_restore_layer.take() {
             self.viewport.set_window_layer(layer);
         }
     }
 
     pub(crate) fn should_close(&mut self) -> (bool, Option<UiPreferences>) {
+        if !self.layout.layout_mode {
+            self.apply_window_preset();
+        }
+        let prefs_before = self.prefs.clone();
         self.viewport.apply_ui_preferences(&self.prefs);
         let items = self.render_items();
         let result = self.viewport.render(|context, raw_input| {
@@ -225,7 +280,30 @@ impl HudWindow {
                 &mut self.prefs,
             )
         });
-        (result.should_close, result.applied_preferences)
+        if self.layout.finish_layout_requested {
+            self.leave_layout_mode();
+            self.layout.compact_pending = true;
+            self.viewport.set_cursor_hittest(false);
+        }
+        super::drawing::sync_absolute_positions(&mut self.layout);
+        // Keep the post-layout normal-mode geometry warm while the activity
+        // canvas is still expanded. The native window remains full-screen;
+        // only the persisted preset is updated here.
+        if self.layout.layout_mode
+            && let Some((position, size)) = compact_geometry(
+                &items,
+                &self.layout,
+                self.layout.activity_size,
+                self.viewport.window().scale_factor() as f32,
+            )
+        {
+            self.prefs.hud.window_position = position;
+            self.prefs.hud.window_size = size;
+        }
+        let applied_preferences = (self.prefs != prefs_before)
+            .then(|| self.prefs.clone())
+            .or(result.applied_preferences);
+        (result.should_close, applied_preferences)
     }
 
     pub(crate) fn apply_preferences(&mut self, prefs: UiPreferences) {
@@ -233,16 +311,27 @@ impl HudWindow {
         self.viewport
             .set_window_layer(window_layer(self.prefs.hud.layer));
         self.layout.positions.clear();
+        if !self.layout.layout_mode {
+            self.apply_window_preset();
+        }
+    }
+
+    fn apply_window_preset(&self) {
+        let size = PhysicalSize::new(self.prefs.hud.window_size[0], self.prefs.hud.window_size[1]);
+        if self.viewport.window().inner_size() != size {
+            self.viewport.request_inner_size(size);
+        }
+        let position = winit::dpi::PhysicalPosition::new(
+            self.prefs.hud.window_position[0],
+            self.prefs.hud.window_position[1],
+        );
+        if self.viewport.window().outer_position().ok() != Some(position) {
+            self.viewport.request_outer_position(position);
+        }
     }
 
     fn render_items(&self) -> Vec<HudRenderItem> {
         let elapsed = self.started.elapsed().as_secs_f32();
-        let window_position = self.viewport.window().outer_position().unwrap_or_default();
-        let scale_factor = self.viewport.window().scale_factor() as f32;
-        let activity = self.activity_area.unwrap_or(ActivityArea {
-            position: window_position,
-            size: self.viewport.window().inner_size(),
-        });
         resolved_hud_slots(
             &self.registry,
             &self.prefs,
@@ -283,8 +372,6 @@ impl HudWindow {
                 "border_radius",
                 default_corner_radius,
             );
-            let target_x = activity.position.x as f32 + item.layout.x * activity.size.width as f32;
-            let target_y = activity.position.y as f32 + item.layout.y * activity.size.height as f32;
             let instance_value = |name: &str, default: f32| {
                 item.config
                     .get(name)
@@ -328,8 +415,13 @@ impl HudWindow {
                     .iter()
                     .find(|group| &group.id == group_id)
                     .and_then(|group| {
-                        (group.size[0] > 0.0 && group.size[1] > 0.0)
-                            .then_some(egui::vec2(group.size[0], group.size[1]))
+                        let transient = self.layout.transient_group_sizes.get(group_id);
+                        ((group.layout.width > 0.0 && group.layout.height > 0.0)
+                            || transient.is_some())
+                        .then_some(egui::vec2(
+                            transient.map_or(group.layout.width, |size| size.x),
+                            transient.map_or(group.layout.height, |size| size.y),
+                        ))
                     }),
                 HudLayoutTarget::Instance(_) => None,
             };
@@ -384,7 +476,7 @@ impl HudWindow {
                     |(_, contribution)| contribution.label.to_owned(),
                 );
             Some(HudRenderItem {
-                key: item.key,
+                key: item.key.clone(),
                 target: item.target,
                 source: item.source,
                 plugin_name,
@@ -392,10 +484,21 @@ impl HudWindow {
                 layers: item.layers,
                 base_size: item.base_size,
                 container_size,
-                initial_position: egui::pos2(
-                    (target_x - window_position.x as f32) / scale_factor,
-                    (target_y - window_position.y as f32) / scale_factor,
-                ),
+                initial_position: if self.layout.layout_mode {
+                    self.layout
+                        .positions
+                        .get(&item.key)
+                        .copied()
+                        .unwrap_or_else(|| egui::pos2(item.layout.x, item.layout.y))
+                } else {
+                    // Normal mode is already rendering in the HUD window's
+                    // own coordinate system. Do not subtract the native
+                    // window position here: move/resize requests are async,
+                    // so outer_position() can still describe the previous
+                    // layout window for one or more frames.
+                    let scale = self.viewport.window().scale_factor() as f32;
+                    egui::pos2(item.layout.x / scale, item.layout.y / scale)
+                },
                 width: item.layout.width,
                 height: item.layout.height,
                 background_enabled: self.prefs.hud.visual_value(
@@ -597,6 +700,50 @@ impl HudWindow {
     pub(crate) fn destroy(&mut self) {
         self.viewport.destroy();
     }
+}
+
+/// Returns the smallest normal-mode window containing all editor items.
+/// Coordinates are kept in physical screen pixels, matching `hud.position`.
+fn compact_geometry(
+    items: &[HudRenderItem],
+    layout: &LayoutState,
+    activity: Option<egui::Vec2>,
+    scale: f32,
+) -> Option<([i32; 2], [u32; 2])> {
+    let activity = activity?;
+    let mut bounds = egui::Rect::NOTHING;
+    for item in items {
+        let size = item.container_size.unwrap_or_else(|| {
+            egui::vec2(
+                item.base_size.width * item.width,
+                item.base_size.height * item.height,
+            )
+        }) * scale;
+        let position = layout
+            .absolute_positions
+            .get(&item.key)
+            .copied()
+            .unwrap_or(egui::pos2(
+                layout.activity_origin?.x + item.initial_position.x * scale,
+                layout.activity_origin?.y + item.initial_position.y * scale,
+            ));
+        bounds = bounds.union(egui::Rect::from_min_size(position, size));
+    }
+    if !bounds.is_positive() {
+        return None;
+    }
+    let padding = 12.0 * scale;
+    let min = bounds.min - egui::vec2(padding, padding);
+    let size = bounds.size() + egui::vec2(padding * 2.0, padding * 2.0);
+    let max_size = activity * scale;
+    let size = size.min(max_size).max(egui::vec2(160.0, 100.0));
+    Some((
+        [min.x.round() as i32, min.y.round() as i32],
+        [
+            size.x.round().max(1.0) as u32,
+            size.y.round().max(1.0) as u32,
+        ],
+    ))
 }
 
 fn config_f32(value: &HudConfigValue) -> Option<f32> {

@@ -42,10 +42,7 @@ pub struct HudGroup {
     /// User-selected identifier color used only by the layout editor.
     #[serde(default = "default_group_color")]
     pub color: [u8; 3],
-    /// Actual logical container size. Zero keeps the legacy factor-based size.
-    #[serde(default)]
-    pub size: [f32; 2],
-    /// Screen layout of the group as one virtual HUD slot.
+    /// Screen position and actual pixel size of the group as one virtual HUD slot.
     #[serde(default)]
     pub layout: HudSlotLayout,
     /// Arrangement, spacing, padding, grid columns and alignment inside the group.
@@ -54,31 +51,6 @@ pub struct HudGroup {
     /// Ordered instance identities. An instance may occur in at most one group.
     #[serde(default)]
     pub children: Vec<HudInstanceId>,
-    /// Per-member geometry used by free layout and member-level sizing.
-    #[serde(default)]
-    pub member_layouts: Vec<HudGroupMemberLayout>,
-}
-
-/// Persisted geometry for one HUD while it belongs to a group.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct HudGroupMemberLayout {
-    /// Stable member identity.
-    pub instance_id: HudInstanceId,
-    /// Logical horizontal offset inside the group content area.
-    #[serde(default)]
-    pub x: f32,
-    /// Logical vertical offset inside the group content area.
-    #[serde(default)]
-    pub y: f32,
-}
-
-impl HudGroupMemberLayout {
-    /// Returns safe geometry for layout and rendering.
-    pub fn normalized(mut self) -> Self {
-        self.x = finite_clamp(self.x, 0.0, 16_384.0);
-        self.y = finite_clamp(self.y, 0.0, 16_384.0);
-        self
-    }
 }
 
 /// Counts of independently recovered records after loading untrusted preferences.
@@ -194,16 +166,19 @@ impl super::HudPrefs {
     /// Creates an empty group. Empty/orphan groups remain valid and persist.
     pub fn create_group(&mut self, name: impl Into<String>) -> String {
         let id = self.next_group_id();
+        let mut layout = HudSlotLayout::default_for_index(self.groups.len());
+        // A new group starts with content-sized geometry. Once the user
+        // adjusts it, layout.width/height become the fixed pixel container.
+        layout.width = 0.0;
+        layout.height = 0.0;
         self.groups.push(HudGroup {
             id: id.clone(),
             name: name.into(),
             enabled: true,
             color: default_group_color(),
-            size: [0.0, 0.0],
-            layout: HudSlotLayout::default_for_index(self.groups.len()),
+            layout,
             inner: HudGroupLayout::default(),
             children: Vec::new(),
-            member_layouts: Vec::new(),
         });
         id
     }
@@ -238,11 +213,14 @@ impl super::HudPrefs {
         self.groups.retain_mut(|group| {
             let valid = valid_text_id(&group.id) && group_ids.insert(group.id.clone());
             if valid {
-                group.layout = group.layout.clone().clamp01();
-                for size in &mut group.size {
-                    if !size.is_finite() || *size <= 0.0 {
-                        *size = 0.0;
-                    }
+                group.layout = group.layout.clone().clamp_position();
+                group.layout.x = group.layout.x.max(0.0);
+                group.layout.y = group.layout.y.max(0.0);
+                if !group.layout.width.is_finite() || group.layout.width <= 0.0 {
+                    group.layout.width = 0.0;
+                }
+                if !group.layout.height.is_finite() || group.layout.height <= 0.0 {
+                    group.layout.height = 0.0;
                 }
                 group.inner = group.inner.clone().normalized();
             } else {
@@ -260,29 +238,6 @@ impl super::HudPrefs {
                 }
                 keep
             });
-            let children = group.children.iter().cloned().collect::<HashSet<_>>();
-            let mut layouts = HashSet::new();
-            group.member_layouts.retain_mut(|layout| {
-                let keep = children.contains(&layout.instance_id)
-                    && layouts.insert(layout.instance_id.clone());
-                if keep {
-                    *layout = layout.clone().normalized();
-                }
-                keep
-            });
-            for (index, child) in group.children.iter().enumerate() {
-                if group
-                    .member_layouts
-                    .iter()
-                    .all(|layout| &layout.instance_id != child)
-                {
-                    group.member_layouts.push(HudGroupMemberLayout {
-                        instance_id: child.clone(),
-                        x: index as f32 * group.inner.spacing,
-                        y: index as f32 * group.inner.spacing,
-                    });
-                }
-            }
         }
         let mut suppressed = HashSet::new();
         self.suppressed_default_sources
@@ -302,9 +257,6 @@ impl super::HudPrefs {
         }
         for group in &mut self.groups {
             group.children.retain(|child| child != instance_id);
-            group
-                .member_layouts
-                .retain(|layout| &layout.instance_id != instance_id);
         }
         let group = self
             .groups
@@ -312,11 +264,6 @@ impl super::HudPrefs {
             .find(|group| group.id == group_id)
             .expect("validated group must remain present");
         group.children.push(instance_id.clone());
-        group.member_layouts.push(HudGroupMemberLayout {
-            instance_id: instance_id.clone(),
-            x: 0.0,
-            y: 0.0,
-        });
         true
     }
 
@@ -327,9 +274,6 @@ impl super::HudPrefs {
             let before = group.children.len();
             group.children.retain(|child| child != instance_id);
             removed |= before != group.children.len();
-            group
-                .member_layouts
-                .retain(|layout| &layout.instance_id != instance_id);
         }
         removed
     }
@@ -379,14 +323,6 @@ fn default_enabled() -> bool {
 
 fn default_group_color() -> [u8; 3] {
     [86, 156, 255]
-}
-
-fn finite_clamp(value: f32, min: f32, max: f32) -> f32 {
-    if value.is_finite() {
-        value.clamp(min, max)
-    } else {
-        min
-    }
 }
 
 fn valid_text_id(value: &str) -> bool {
@@ -477,7 +413,7 @@ mod tests {
         assert!(prefs.add_instance_to_group(&second, &instance_id));
         assert!(prefs.groups[0].children.is_empty());
         assert_eq!(prefs.groups[1].children, vec![instance_id.clone()]);
-        assert_eq!(prefs.groups[1].member_layouts.len(), 1);
+        assert_eq!(prefs.instances[0].layout.x, 32.0);
         assert!(prefs.remove_instance_from_group(&instance_id));
         assert!(prefs.groups.iter().all(|group| group.children.is_empty()));
     }

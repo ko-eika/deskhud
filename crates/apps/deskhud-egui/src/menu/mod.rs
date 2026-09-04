@@ -508,6 +508,43 @@ fn menu_gap(ui: &mut egui::Ui) {
     ui.allocate_space(Vec2::new(ui.available_width(), MENU_ITEM_GAP));
 }
 
+/// Applies the native pet menu's content geometry to an egui-owned popup.
+pub(crate) fn embedded_menu_begin(ui: &mut egui::Ui, labels: &[&str]) {
+    let font_id = menu_font_id(ui.ctx());
+    let text_width = ui.ctx().fonts_mut(|fonts| {
+        labels
+            .iter()
+            .map(|label| {
+                fonts
+                    .layout_no_wrap((*label).to_owned(), font_id.clone(), Color32::WHITE)
+                    .size()
+                    .x
+            })
+            .fold(0.0, f32::max)
+    });
+    ui.set_width(text_width + MENU_LEFT_ICON_WIDTH + MENU_RIGHT_ICON_WIDTH + MENU_TEXT_GAP * 2.0);
+    ui.spacing_mut().item_spacing = Vec2::ZERO;
+}
+
+/// Draws an embedded popup row using the pet menu's icon/check, hover and text layout.
+pub(crate) fn embedded_menu_item(
+    ui: &mut egui::Ui,
+    text: &str,
+    icon: Option<&'static str>,
+    checked: bool,
+) -> egui::Response {
+    let item_height = (menu_font_id(ui.ctx()).size + 14.0).max(MENU_MIN_ITEM_HEIGHT);
+    menu_item(ui, text, icon, checked, true, false, false, item_height)
+}
+
+pub(crate) fn embedded_menu_separator(ui: &mut egui::Ui) {
+    menu_separator(ui);
+}
+
+pub(crate) fn embedded_menu_gap(ui: &mut egui::Ui) {
+    menu_gap(ui);
+}
+
 fn menu_text_width(ctx: &Context, definition: &MenuDefinition, title: Option<&str>) -> f32 {
     let font_id = menu_font_id(ctx);
     ctx.fonts_mut(|fonts| {

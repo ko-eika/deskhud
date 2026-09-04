@@ -163,7 +163,7 @@ pub struct HudGroupComposition {
 impl Default for HudGroupLayout {
     fn default() -> Self {
         Self {
-            arrangement: HudGroupArrangement::Horizontal,
+            arrangement: HudGroupArrangement::Free,
             grid_columns: default_grid_columns(),
             spacing: 8.0,
             padding: [8.0; 4],
@@ -444,6 +444,7 @@ mod tests {
     #[test]
     fn horizontal_composition_applies_padding_spacing_and_alignment() {
         let layout = HudGroupLayout {
+            arrangement: HudGroupArrangement::Horizontal,
             spacing: 5.0,
             padding: [1.0, 2.0, 3.0, 4.0],
             alignment: HudGroupAlignment::End,

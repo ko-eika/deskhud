@@ -12,6 +12,7 @@ const ADJUST_HORIZONTAL: &[u8] = include_bytes!("../../../../../assets/svg/adjus
 const BRIGHTNESS: &[u8] = include_bytes!("../../../../../assets/svg/brightness.svg");
 const LAYERS_SUBTRACT: &[u8] = include_bytes!("../../../../../assets/svg/layers-subtract.svg");
 const CREATE_FILLED: &[u8] = include_bytes!("../../../../../assets/svg/create-filled.svg");
+const CHECK: &[u8] = include_bytes!("../../../../../assets/svg/check.svg");
 const CLOSE: &[u8] = include_bytes!("../../../../../assets/svg/close.svg");
 const ANALYTICS: &[u8] = include_bytes!("../../../../../assets/svg/analytics.svg");
 const PUZZLE: &[u8] = include_bytes!("../../../../../assets/svg/puzzle.svg");
@@ -47,6 +48,7 @@ fn texture(ui: &Ui, name: &'static str) -> Option<TextureHandle> {
         "brightness" => BRIGHTNESS,
         "layers-subtract" => LAYERS_SUBTRACT,
         "create-filled" => CREATE_FILLED,
+        "check" => CHECK,
         "close" => CLOSE,
         "analytics" => ANALYTICS,
         "puzzle" => PUZZLE,

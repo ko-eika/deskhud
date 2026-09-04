@@ -17,8 +17,8 @@ pub mod system_locale;
 
 pub use font::{FontFace, FontFamilyEntry, FontSelection};
 pub use hud::{
-    HUD_SIZE_FACTOR_MAX, HUD_SIZE_FACTOR_MIN, HudConfigValue, HudGroup, HudGroupMemberLayout,
-    HudInstance, HudInstanceConfig, HudPrefs, HudRecoveryReport, HudSlotLayout,
+    HUD_SIZE_FACTOR_MAX, HUD_SIZE_FACTOR_MIN, HudConfigValue, HudGroup, HudInstance,
+    HudInstanceConfig, HudPrefs, HudRecoveryReport, HudSlotLayout,
 };
 pub use i18n::{
     CatalogStore, Locale, MessageKey, locale_file_candidates, locale_tag, normalize_locale_tag,

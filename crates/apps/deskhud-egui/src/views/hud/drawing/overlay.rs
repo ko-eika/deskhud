@@ -74,6 +74,23 @@ pub(super) fn draw_border(ui: &mut egui::Ui, time: f32, rect: egui::Rect) {
     );
 }
 
+/// Draws the pending compact-window preview as a static theme-aware border.
+pub(super) fn draw_preview_border(ui: &egui::Ui, rect: egui::Rect) {
+    let color = ui
+        .visuals()
+        .widgets
+        .noninteractive
+        .fg_stroke
+        .color
+        .gamma_multiply(0.9);
+    ui.painter().rect_stroke(
+        rect,
+        0.0,
+        egui::Stroke::new(2.0, color),
+        egui::StrokeKind::Outside,
+    );
+}
+
 fn draw_animated_border(
     painter: &egui::Painter,
     time: f32,

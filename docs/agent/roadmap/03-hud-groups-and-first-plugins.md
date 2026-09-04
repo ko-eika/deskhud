@@ -2,7 +2,7 @@
 
 状态：实施中（第一阶段已完成）
 计划顺序：HUD 组基础能力 → 系统插件 → 便签插件  
-当前基线：DeskHud 0.9.6 / engine 0.9 / Guest API 4
+当前基线：DeskHud 0.9.7 / engine 0.9 / Guest API 4
 
 ## 目标
 
