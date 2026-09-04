@@ -1,4 +1,5 @@
 //! Interface font configuration.
+#![allow(clippy::collapsible_if)]
 
 use super::text;
 use crate::{components, fonts};
@@ -58,10 +59,11 @@ pub(super) fn draw(ui: &mut egui::Ui, model: &mut SettingsModel) {
                 .iter()
                 .map(|family| (family.family_key.clone(), family.label_for_locale(&locale)))
                 .collect();
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsUiFontFamily),
                 None::<RichText>,
+                true,
                 |ui| {
                     if let Some(selected) = components::dropdown(
                         ui,
@@ -79,7 +81,6 @@ pub(super) fn draw(ui: &mut egui::Ui, model: &mut SettingsModel) {
                     }
                 },
             );
-            ui.separator();
             let selected_family = families
                 .iter()
                 .find(|f| f.family_key == model.draft.shell.ui_font_family);
@@ -90,10 +91,11 @@ pub(super) fn draw(ui: &mut egui::Ui, model: &mut SettingsModel) {
                 // 样式名称直接使用字体扫描结果，不再做本地化或规范化显示。
                 .map(|style| (style.clone(), style.clone()))
                 .collect();
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsUiFontStyle),
                 None::<RichText>,
+                true,
                 |ui| {
                     if let Some(style) = components::dropdown(
                         ui,
@@ -110,16 +112,16 @@ pub(super) fn draw(ui: &mut egui::Ui, model: &mut SettingsModel) {
                     }
                 },
             );
-            ui.separator();
             let size_options: Vec<components::DropdownOption> =
                 [12.0, 13.0, 14.0, 15.0, 16.0, 18.0, 20.0]
                     .into_iter()
                     .map(|size| (format!("{size:.0}"), format!("{size:.0}")))
                     .collect();
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsUiFontSize),
                 None::<RichText>,
+                false,
                 |ui| {
                     let selected_size = format!("{:.0}", model.draft.shell.ui_font_size);
                     if let Some(size) = components::dropdown(

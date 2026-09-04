@@ -215,7 +215,8 @@ impl Plugin for MyPlugin {
 
 `HudFrameCtx` 已预留当前实例、来源与宿主单调时间；运行态按实例请求帧。宿主测量帧后，
 使用中性的 `HudGroupLayout::compose` 得到横向、纵向或网格排列的成员矩形和裁剪矩形，
-再将整个组作为单一屏幕槽渲染；插件不会接触 egui、窗口句柄或 OS 类型。实例配置以及
+或通过 `compose_free` 应用宿主持久化的自由布局矩形，再将整个组作为单一屏幕槽渲染；
+布局模式负责创建组、拖放成员和调整实例样式，插件不会接触 egui、窗口句柄或 OS 类型。实例配置以及
 社区 Guest HUD ABI 仍在后续阶段接入。现有原生插件继续使用：
 
 - `Plugin::hud_frame(...)` → 中性 `HudFrame`（文本 / 进度等）

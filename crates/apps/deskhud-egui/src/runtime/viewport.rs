@@ -1,7 +1,7 @@
 //! 单个原生视口的运行时封装。
 //!
 //! 该模块负责维护窗口、egui 输入状态、egui 上下文和 OpenGL 绘制器之间的关系。
-
+#![allow(clippy::collapsible_if)]
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use std::sync::Arc;

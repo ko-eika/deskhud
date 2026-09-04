@@ -1,4 +1,5 @@
 //! Small rasterized SVG icons used by the settings controls.
+#![allow(clippy::collapsible_if)]
 
 use egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, Ui};
 

@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 use crate::shell::LayerPreference;
 
 pub use layout::{HUD_SIZE_FACTOR_MAX, HUD_SIZE_FACTOR_MIN, HudSlotLayout};
-pub use model::{HudGroup, HudInstance, HudInstanceConfig, HudRecoveryReport};
+pub use model::{
+    HudGroup, HudGroupMemberLayout, HudInstance, HudInstanceConfig, HudRecoveryReport,
+};
 
 /// `[hud]` 里单个键的值：bool / 数字 / 字符串。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -87,7 +89,7 @@ pub struct HudPrefs {
 
 impl HudPrefs {
     /// Persisted representation revision for readable instance/group array tables.
-    pub const MODEL_FORMAT_VERSION: i64 = 1;
+    pub const MODEL_FORMAT_VERSION: i64 = 2;
     /// Internal key used to rewrite older equivalent TOML representations once.
     pub const MODEL_FORMAT_KEY: &'static str = "hud.global.model_format";
     /// HUD 层级键：`hud.global.layer`。
@@ -202,14 +204,16 @@ impl HudPrefs {
     pub fn set_enabled(&mut self, plugin_id: &str, contribution_id: &str, on: bool) {
         let source = deskhud_engine::HudSourceId::new(plugin_id, contribution_id);
         let default_id = Self::default_instance_id(&source);
+        let key = Self::contribution_enable_key(plugin_id, contribution_id);
         if let Some(instance) = self
             .instances
             .iter_mut()
             .find(|instance| instance.id == default_id && instance.source == source)
         {
             instance.enabled = on;
+            self.config.remove(&key);
+            return;
         }
-        let key = Self::contribution_enable_key(plugin_id, contribution_id);
         self.config.insert(key, HudConfigValue::Bool(on));
         self.config
             .remove(&format!("{plugin_id}.{contribution_id}"));
@@ -276,7 +280,8 @@ impl HudPrefs {
         HudSlotLayout::default_for_index(index)
     }
 
-    /// 写入布局到扁平 `[hud]` 键（会 clamp）。
+    /// Writes layout to the stable instance when it exists; otherwise keeps
+    /// the flattened form only for one-time legacy migration.
     pub fn set_slot_layout(
         &mut self,
         plugin_id: &str,
@@ -284,6 +289,19 @@ impl HudPrefs {
         layout: HudSlotLayout,
     ) {
         let layout = layout.clamp01();
+        let updated_instance = if let Some(instance) = self.instances.iter_mut().find(|instance| {
+            instance.source.plugin_id == plugin_id
+                && instance.source.contribution_id == contribution_id
+        }) {
+            instance.layout = layout.clone();
+            true
+        } else {
+            false
+        };
+        if updated_instance {
+            self.clear_legacy_layout_keys(plugin_id, contribution_id);
+            return;
+        }
         let base = Self::layout_key(plugin_id, contribution_id);
         self.config.insert(
             format!("{base}.display"),
@@ -300,6 +318,15 @@ impl HudPrefs {
         // Remove keys written by older versions once the new shape is saved.
         self.config.remove(&format!("{base}.width"));
         self.config.remove(&format!("{base}.height"));
+    }
+
+    fn clear_legacy_layout_keys(&mut self, plugin_id: &str, contribution_id: &str) {
+        let base = Self::layout_key(plugin_id, contribution_id);
+        for suffix in [
+            "enable", "display", "position", "size", "x", "y", "width", "height", "scale",
+        ] {
+            self.config.remove(&format!("{base}.{suffix}"));
+        }
     }
 
     /// Returns a visual tuning value for a HUD item. Visual values deliberately
@@ -326,6 +353,56 @@ impl HudPrefs {
         let key = format!("{}.{}.{name}", plugin_id, contribution_id);
         self.config
             .insert(key, HudConfigValue::Float(value.clamp(0.0, 1.0) as f64));
+    }
+
+    /// Reads an instance-owned visual value, falling back to its source default.
+    pub fn instance_visual_value(
+        &self,
+        instance_id: &deskhud_engine::HudInstanceId,
+        name: &str,
+        default: f32,
+    ) -> f32 {
+        let Some(instance) = self
+            .instances
+            .iter()
+            .find(|instance| &instance.id == instance_id)
+        else {
+            return default.clamp(0.0, 1.0);
+        };
+        instance
+            .config
+            .get(name)
+            .and_then(HudConfigValue::as_f32)
+            .unwrap_or_else(|| {
+                self.visual_value(
+                    &instance.source.plugin_id,
+                    &instance.source.contribution_id,
+                    name,
+                    default,
+                )
+            })
+            .clamp(0.0, 1.0)
+    }
+
+    /// Stores a visual override owned by one stable HUD instance.
+    pub fn set_instance_visual_value(
+        &mut self,
+        instance_id: &deskhud_engine::HudInstanceId,
+        name: impl Into<String>,
+        value: f32,
+    ) -> bool {
+        let Some(instance) = self
+            .instances
+            .iter_mut()
+            .find(|instance| &instance.id == instance_id)
+        else {
+            return false;
+        };
+        instance.config.insert(
+            name.into(),
+            HudConfigValue::Float(value.clamp(0.0, 1.0) as f64),
+        );
+        true
     }
 
     /// 将 `other` 中的布局扁平键同步到 `self`（不影响 enable 等开关）。

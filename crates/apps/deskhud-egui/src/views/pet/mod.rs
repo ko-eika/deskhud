@@ -1,4 +1,5 @@
 //! Pet 主视口的 UI 入口。
+#![allow(clippy::too_many_arguments)]
 
 mod dock;
 mod drawing;

@@ -39,6 +39,12 @@ pub struct HudGroup {
     /// Group-level enable switch.
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// User-selected identifier color used only by the layout editor.
+    #[serde(default = "default_group_color")]
+    pub color: [u8; 3],
+    /// Actual logical container size. Zero keeps the legacy factor-based size.
+    #[serde(default)]
+    pub size: [f32; 2],
     /// Screen layout of the group as one virtual HUD slot.
     #[serde(default)]
     pub layout: HudSlotLayout,
@@ -48,6 +54,31 @@ pub struct HudGroup {
     /// Ordered instance identities. An instance may occur in at most one group.
     #[serde(default)]
     pub children: Vec<HudInstanceId>,
+    /// Per-member geometry used by free layout and member-level sizing.
+    #[serde(default)]
+    pub member_layouts: Vec<HudGroupMemberLayout>,
+}
+
+/// Persisted geometry for one HUD while it belongs to a group.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HudGroupMemberLayout {
+    /// Stable member identity.
+    pub instance_id: HudInstanceId,
+    /// Logical horizontal offset inside the group content area.
+    #[serde(default)]
+    pub x: f32,
+    /// Logical vertical offset inside the group content area.
+    #[serde(default)]
+    pub y: f32,
+}
+
+impl HudGroupMemberLayout {
+    /// Returns safe geometry for layout and rendering.
+    pub fn normalized(mut self) -> Self {
+        self.x = finite_clamp(self.x, 0.0, 16_384.0);
+        self.y = finite_clamp(self.y, 0.0, 16_384.0);
+        self
+    }
 }
 
 /// Counts of independently recovered records after loading untrusted preferences.
@@ -97,6 +128,7 @@ impl super::HudPrefs {
                 self.is_enabled(&source.plugin_id, &source.contribution_id, default_enabled);
             let layout = self.slot_layout(&source.plugin_id, &source.contribution_id, index);
             let config = self.legacy_instance_config(&source);
+            self.clear_legacy_layout_keys(&source.plugin_id, &source.contribution_id);
             self.instances.push(HudInstance {
                 id: Self::default_instance_id(&source),
                 source,
@@ -166,9 +198,12 @@ impl super::HudPrefs {
             id: id.clone(),
             name: name.into(),
             enabled: true,
+            color: default_group_color(),
+            size: [0.0, 0.0],
             layout: HudSlotLayout::default_for_index(self.groups.len()),
             inner: HudGroupLayout::default(),
             children: Vec::new(),
+            member_layouts: Vec::new(),
         });
         id
     }
@@ -204,6 +239,11 @@ impl super::HudPrefs {
             let valid = valid_text_id(&group.id) && group_ids.insert(group.id.clone());
             if valid {
                 group.layout = group.layout.clone().clamp01();
+                for size in &mut group.size {
+                    if !size.is_finite() || *size <= 0.0 {
+                        *size = 0.0;
+                    }
+                }
                 group.inner = group.inner.clone().normalized();
             } else {
                 report.removed_groups += 1;
@@ -220,11 +260,78 @@ impl super::HudPrefs {
                 }
                 keep
             });
+            let children = group.children.iter().cloned().collect::<HashSet<_>>();
+            let mut layouts = HashSet::new();
+            group.member_layouts.retain_mut(|layout| {
+                let keep = children.contains(&layout.instance_id)
+                    && layouts.insert(layout.instance_id.clone());
+                if keep {
+                    *layout = layout.clone().normalized();
+                }
+                keep
+            });
+            for (index, child) in group.children.iter().enumerate() {
+                if group
+                    .member_layouts
+                    .iter()
+                    .all(|layout| &layout.instance_id != child)
+                {
+                    group.member_layouts.push(HudGroupMemberLayout {
+                        instance_id: child.clone(),
+                        x: index as f32 * group.inner.spacing,
+                        y: index as f32 * group.inner.spacing,
+                    });
+                }
+            }
         }
         let mut suppressed = HashSet::new();
         self.suppressed_default_sources
             .retain(|source| source.is_valid() && suppressed.insert(source.clone()));
         report
+    }
+
+    /// Moves an instance into a group, removing any previous group membership.
+    pub fn add_instance_to_group(&mut self, group_id: &str, instance_id: &HudInstanceId) -> bool {
+        if !self
+            .instances
+            .iter()
+            .any(|instance| &instance.id == instance_id)
+            || !self.groups.iter().any(|group| group.id == group_id)
+        {
+            return false;
+        }
+        for group in &mut self.groups {
+            group.children.retain(|child| child != instance_id);
+            group
+                .member_layouts
+                .retain(|layout| &layout.instance_id != instance_id);
+        }
+        let group = self
+            .groups
+            .iter_mut()
+            .find(|group| group.id == group_id)
+            .expect("validated group must remain present");
+        group.children.push(instance_id.clone());
+        group.member_layouts.push(HudGroupMemberLayout {
+            instance_id: instance_id.clone(),
+            x: 0.0,
+            y: 0.0,
+        });
+        true
+    }
+
+    /// Removes an instance from its group while retaining the instance itself.
+    pub fn remove_instance_from_group(&mut self, instance_id: &HudInstanceId) -> bool {
+        let mut removed = false;
+        for group in &mut self.groups {
+            let before = group.children.len();
+            group.children.retain(|child| child != instance_id);
+            removed |= before != group.children.len();
+            group
+                .member_layouts
+                .retain(|layout| &layout.instance_id != instance_id);
+        }
+        removed
     }
 
     fn legacy_instance_config(&self, source: &HudSourceId) -> HudInstanceConfig {
@@ -268,6 +375,18 @@ impl super::HudPrefs {
 
 fn default_enabled() -> bool {
     true
+}
+
+fn default_group_color() -> [u8; 3] {
+    [86, 156, 255]
+}
+
+fn finite_clamp(value: f32, min: f32, max: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(min, max)
+    } else {
+        min
+    }
 }
 
 fn valid_text_id(value: &str) -> bool {
@@ -342,5 +461,43 @@ mod tests {
         assert_eq!(prefs.groups[0].children, vec![id]);
         assert_eq!(prefs.groups[1].id, second);
         assert!(prefs.groups[1].children.is_empty());
+    }
+
+    #[test]
+    fn moving_members_between_groups_keeps_one_owner() {
+        let mut prefs = HudPrefs::default();
+        let source = source("hud.deskhud.demo", "clock");
+        prefs.ensure_default_instances([(source, true)]);
+        let instance_id = prefs.instances[0].id.clone();
+        let first = prefs.create_group("First");
+        let second = prefs.create_group("Second");
+
+        assert!(prefs.add_instance_to_group(&first, &instance_id));
+        assert_eq!(prefs.groups[0].children, vec![instance_id.clone()]);
+        assert!(prefs.add_instance_to_group(&second, &instance_id));
+        assert!(prefs.groups[0].children.is_empty());
+        assert_eq!(prefs.groups[1].children, vec![instance_id.clone()]);
+        assert_eq!(prefs.groups[1].member_layouts.len(), 1);
+        assert!(prefs.remove_instance_from_group(&instance_id));
+        assert!(prefs.groups.iter().all(|group| group.children.is_empty()));
+    }
+
+    #[test]
+    fn visual_overrides_are_owned_by_the_instance() {
+        let mut prefs = HudPrefs::default();
+        let source = source("hud.deskhud.demo", "clock");
+        prefs.ensure_default_instances([(source, true)]);
+        let first = prefs.instances[0].id.clone();
+        let second = prefs.copy_instance(&first).expect("copy");
+
+        assert!(prefs.set_instance_visual_value(&first, "content_opacity", 0.25));
+        assert_eq!(
+            prefs.instance_visual_value(&first, "content_opacity", 1.0),
+            0.25
+        );
+        assert_eq!(
+            prefs.instance_visual_value(&second, "content_opacity", 1.0),
+            1.0
+        );
     }
 }

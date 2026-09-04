@@ -1,4 +1,5 @@
 //! 平台级全局输入快照；仅由 UI 壳读取并转换为引擎中性状态。
+#![allow(clippy::needless_return)]
 
 #[cfg(target_os = "macos")]
 use deskhud_engine::{PetEvent, PetKey, PetModifiers};

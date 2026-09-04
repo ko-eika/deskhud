@@ -1,4 +1,5 @@
 //! Pet 原生窗口生命周期。
+#![allow(clippy::collapsible_if)]
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use deskhud_engine::{

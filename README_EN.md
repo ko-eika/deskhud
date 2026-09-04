@@ -2,7 +2,7 @@
 <h4 align="center">An extensible desktop pet engine</h4>
 <p align="center">
 	<img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license">
-    <img src="https://img.shields.io/badge/version-0.9.5-green.svg" alt="version">
+    <img src="https://img.shields.io/badge/version-0.9.6-green.svg" alt="version">
     <img src="https://img.shields.io/badge/rustc-1.95+-green.svg" alt="rustc">
     <img src="https://img.shields.io/badge/egui-0.36-green.svg" alt="egui">
 </p>
@@ -13,7 +13,7 @@
 
 [简体中文](./README.md) | English
 
-DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.9.5`, with instance-based HUD frame resolution and cross-plugin horizontal, vertical, and grid groups rendered as unified virtual slots.
+DeskHud is an extensible **desktop pet engine**: switch **pet packs** (look + behavior), and toggle **HUD plugins** and their contributions. The UI is built with **egui + winit / egui_glow**, with multi-language support and local community pack loading (a store comes later). Current release: `0.9.6`, with layout-mode HUD group creation, member drag-and-drop, free or automatic group layouts, and per-instance visual editing.
 
 ## Features
 
@@ -133,8 +133,8 @@ cargo build -p deskhud-egui --release
 # macOS / Linux: target/release/deskhud-egui
 
 # 4. Tag, push, and attach binaries on a GitHub Release
-git tag -a v0.9.5 -m "DeskHud 0.9.5"
-git push origin v0.9.5
+git tag -a v0.9.6 -m "DeskHud 0.9.6"
+git push origin v0.9.6
 ```
 
 CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs cross-platform `check` / tests only; it does **not** publish installers yet.

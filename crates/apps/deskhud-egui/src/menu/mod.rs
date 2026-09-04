@@ -1,5 +1,5 @@
 //! 可复用的独立菜单窗口，支持勾选项和悬浮二级菜单。
-
+#![allow(clippy::too_many_arguments)]
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 pub(crate) mod controller;

@@ -5,7 +5,7 @@ use super::{catalog_text, text};
 use crate::components;
 use deskhud_engine::EngineRegistry;
 use deskhud_ui::{CatalogStore, LayerPreference, MessageKey, SettingsModel};
-use egui::{Align, Layout, RichText, Sense, Ui, Vec2};
+use egui::{RichText, Sense, Ui, Vec2};
 use std::sync::Arc;
 
 pub(super) fn draw(
@@ -25,7 +25,7 @@ pub(super) fn draw(
                 .into(),
         ),
         |ui| {
-            components::switch_row(
+            components::switch_row_with_divider(
                 ui,
                 RichText::new(text(model, MessageKey::HudMasterEnable)).strong(),
                 Some(
@@ -37,12 +37,13 @@ pub(super) fn draw(
                     .small(),
                 ),
                 &mut master_enabled,
+                true,
             );
-            ui.separator();
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::MenuPluginLayer),
                 None::<RichText>,
+                false,
                 |ui| {
                     let options = [
                         (
@@ -110,6 +111,8 @@ pub(super) fn draw(
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = Vec2::splat(gap);
             for plugin in &plugins {
+                let initial_enabled = model.draft.hud.is_plugin_enabled(plugin.id);
+                let mut enabled = initial_enabled;
                 hud_list::draw_plugin_list_card(
                     ui,
                     catalogs,
@@ -117,7 +120,11 @@ pub(super) fn draw(
                     plugin,
                     &selected_id,
                     card_width,
+                    &mut enabled,
                 );
+                if enabled != initial_enabled {
+                    model.draft.hud.set_plugin_enabled(plugin.id, enabled);
+                }
             }
         });
     });
@@ -138,36 +145,19 @@ pub(super) fn draw(
         "display_name",
         plugin.display_name,
     );
-    let initial_enabled = model.draft.hud.is_plugin_enabled(plugin.id);
-    let mut enabled = initial_enabled;
     let plugin_config_title = format!(
         "{} · {}",
         plugin_name,
         text(model, MessageKey::HudPluginConfig)
     );
-    let plugin_enable_label = text(model, MessageKey::HudMasterEnable).to_owned();
     let empty_contributions_label = text(model, MessageKey::HudSettingsEmpty).to_owned();
-    let rows_enabled = enabled;
-    components::config_card_with_header(
+    let rows_enabled = model.draft.hud.is_plugin_enabled(plugin.id);
+    components::config_card(
         ui,
-        |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(&plugin_config_title).strong());
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let (rect, _) = ui.allocate_exact_size(Vec2::new(42.0, 24.0), Sense::hover());
-                    components::toggle_switch(ui, rect, &mut enabled)
-                        .on_hover_text(&plugin_enable_label);
-                });
-            });
-        },
+        Some(RichText::new(&plugin_config_title).strong().into()),
         |ui| {
             ui.add_enabled_ui(rows_enabled, |ui| {
                 for (index, contribution) in contributions.iter().enumerate() {
-                    if index > 0 {
-                        ui.add_space(8.0);
-                        ui.separator();
-                        ui.add_space(8.0);
-                    }
                     let initial_item_enabled = model.draft.hud.is_enabled(
                         plugin.id,
                         contribution.id,
@@ -189,11 +179,12 @@ pub(super) fn draw(
                         "",
                     );
                     let icon = hud_list::hud_contribution_icon_texture(ui, plugin.id, contribution);
-                    components::config_row_with_icon(
+                    components::config_row_with_icon_and_divider(
                         ui,
                         icon.as_ref(),
                         RichText::new(label).strong(),
                         (!description.is_empty()).then_some(RichText::new(description).small()),
+                        index + 1 < contributions.len(),
                         |ui| {
                             let (rect, _) =
                                 ui.allocate_exact_size(Vec2::new(42.0, 24.0), Sense::hover());
@@ -212,8 +203,6 @@ pub(super) fn draw(
                 ui.label(&empty_contributions_label);
             }
         },
+        None,
     );
-    if enabled != initial_enabled {
-        model.draft.hud.set_plugin_enabled(plugin.id, enabled);
-    }
 }

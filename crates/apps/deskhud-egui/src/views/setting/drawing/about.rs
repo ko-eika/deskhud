@@ -22,38 +22,39 @@ pub(super) fn draw(ui: &mut Ui, model: &SettingsModel) {
                 .into(),
         ),
         |ui| {
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsAboutVersion),
                 None::<RichText>,
+                true,
                 |ui| value(ui, &info.version),
             );
-            ui.separator();
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsAboutAuthors),
                 None::<RichText>,
+                true,
                 |ui| value(ui, &info.authors),
             );
-            ui.separator();
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsAboutLicense),
                 None::<RichText>,
+                true,
                 |ui| value(ui, &info.license),
             );
-            ui.separator();
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsAboutStackLabel),
                 None::<RichText>,
+                true,
                 |ui| value(ui, &info.stack),
             );
-            ui.separator();
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsAboutHomepage),
                 None::<RichText>,
+                false,
                 |ui| {
                     ui.add(egui::Hyperlink::from_label_and_url(
                         RichText::new(&info.homepage).font(fonts::scaled_font(ui, 0.92)),

@@ -48,11 +48,6 @@ pub(super) fn draw(
         ),
         |ui| {
             for (index, option) in options.iter().enumerate() {
-                if index > 0 {
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.add_space(8.0);
-                }
                 let mut enabled =
                     model
                         .draft
@@ -73,7 +68,7 @@ pub(super) fn draw(
                     option.description,
                 );
                 let mut changed = false;
-                components::config_row(
+                components::config_row_with_divider(
                     ui,
                     RichText::new(label).strong(),
                     Some(
@@ -81,6 +76,7 @@ pub(super) fn draw(
                             .small()
                             .color(ui.visuals().weak_text_color()),
                     ),
+                    index + 1 < options.len(),
                     |ui| {
                         let (rect, _) =
                             ui.allocate_exact_size(Vec2::new(42.0, 24.0), Sense::hover());

@@ -1,4 +1,5 @@
 //! Pet 图形绘制职责。
+#![allow(clippy::collapsible_if, clippy::too_many_arguments)]
 
 /// 解释宠物包输出的中性场景节点。
 pub(super) struct EguiSceneRenderer;

@@ -10,10 +10,11 @@ pub(super) fn draw(ui: &mut egui::Ui, model: &mut SettingsModel) {
         ui,
         None,
         |ui| {
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsPerformanceFps),
                 None::<RichText>,
+                true,
                 |ui| {
                     let options: Vec<components::DropdownOption> = [
                         ("auto", text(model, MessageKey::SettingsPerformanceAuto)),
@@ -46,11 +47,11 @@ pub(super) fn draw(ui: &mut egui::Ui, model: &mut SettingsModel) {
                     }
                 },
             );
-            ui.separator();
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsPerformanceAnimation),
                 None::<RichText>,
+                true,
                 |ui| {
                     let options: Vec<components::DropdownOption> = [
                         ("low", text(model, MessageKey::SettingsPerformanceLow)),
@@ -83,11 +84,11 @@ pub(super) fn draw(ui: &mut egui::Ui, model: &mut SettingsModel) {
                     }
                 },
             );
-            ui.separator();
-            components::config_row(
+            components::config_row_with_divider(
                 ui,
                 text(model, MessageKey::SettingsPerformancePower),
                 None::<RichText>,
+                false,
                 |ui| {
                     let options: Vec<components::DropdownOption> = [
                         ("saving", text(model, MessageKey::SettingsPerformanceSaving)),

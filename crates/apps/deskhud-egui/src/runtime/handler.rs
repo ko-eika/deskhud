@@ -1,6 +1,7 @@
 //! 应用事件循环模块。
 //!
 //! 该模块只负责接收 winit 事件，并将窗口相关工作交给窗口管理器。
+#![allow(clippy::collapsible_if)]
 
 use std::{
     collections::HashMap,

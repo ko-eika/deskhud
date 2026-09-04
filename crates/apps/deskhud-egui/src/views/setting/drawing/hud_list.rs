@@ -1,7 +1,7 @@
 //! Plugin list cards and metadata previews.
 
 use super::{catalog_text, paint_preview_contain, tooltip_meta_row, truncate_ui_text};
-use crate::fonts;
+use crate::{components, fonts};
 use deskhud_ui::{CatalogStore, Locale, MessageKey, SettingsModel};
 use egui::{RichText, Sense, Stroke, Ui, Vec2};
 
@@ -82,6 +82,7 @@ pub(super) fn draw_plugin_list_card(
     plugin: &deskhud_engine::PluginInfo,
     selected_id: &str,
     card_width: f32,
+    enabled: &mut bool,
 ) {
     const HEIGHT: f32 = 82.0;
     let (rect, response) = ui.allocate_exact_size(Vec2::new(card_width, HEIGHT), Sense::click());
@@ -122,15 +123,15 @@ pub(super) fn draw_plugin_list_card(
         paint_preview_contain(ui, icon_rect.shrink(6.0), &texture);
     }
     let text_left = icon_rect.right() + 10.0;
+    let switch_rect = egui::Rect::from_center_size(
+        egui::pos2(rect.right() - 33.0, rect.center().y),
+        Vec2::new(42.0, 24.0),
+    );
+    let text_width = (switch_rect.left() - text_left - 10.0).max(0.0);
     ui.painter().text(
         egui::pos2(text_left, rect.top() + 14.0),
         egui::Align2::LEFT_TOP,
-        truncate_ui_text(
-            ui,
-            &name,
-            fonts::scaled_font(ui, 1.0),
-            rect.right() - text_left - 10.0,
-        ),
+        truncate_ui_text(ui, &name, fonts::scaled_font(ui, 1.0), text_width),
         fonts::scaled_font(ui, 1.0),
         ui.visuals().text_color(),
     );
@@ -144,17 +145,18 @@ pub(super) fn draw_plugin_list_card(
     ui.painter().text(
         egui::pos2(text_left, rect.top() + 57.0),
         egui::Align2::LEFT_TOP,
-        truncate_ui_text(
-            ui,
-            plugin.id,
-            fonts::scaled_font(ui, 0.72),
-            rect.right() - text_left - 10.0,
-        ),
+        truncate_ui_text(ui, plugin.id, fonts::scaled_font(ui, 0.72), text_width),
         fonts::scaled_font(ui, 0.72),
         ui.visuals().weak_text_color(),
     );
+    let toggle_response = components::toggle_switch_with_id(
+        ui,
+        switch_rect,
+        enabled,
+        ("hud-plugin-enable", plugin.id),
+    );
     let response = plugin_tooltip(response, plugin, &name, &description, model.draft.locale);
-    if response.clicked() {
+    if response.clicked() && !toggle_response.clicked() {
         ui.ctx().data_mut(|data| {
             data.insert_temp(
                 ui.make_persistent_id("hud.selected_plugin"),

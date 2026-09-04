@@ -1,4 +1,5 @@
 //! Settings card container.
+#![allow(clippy::type_complexity)]
 
 use egui::{
     Align, CornerRadius, FontId, Frame, Layout, Margin, RichText, Stroke, TextureHandle, Ui, Vec2,
@@ -140,6 +141,37 @@ pub(crate) fn config_row(
     add_control: impl FnOnce(&mut Ui),
 ) {
     config_row_with_icon(ui, None, title, description, add_control);
+}
+
+/// Draws a configuration row and, when requested, its bottom divider.
+/// Callers choose the divider so a card can separate successive settings
+/// without leaving an unnecessary rule below its final item.
+pub(crate) fn config_row_with_divider(
+    ui: &mut Ui,
+    title: impl Into<RichText>,
+    description: Option<impl Into<RichText>>,
+    show_divider: bool,
+    add_control: impl FnOnce(&mut Ui),
+) {
+    config_row(ui, title, description, add_control);
+    if show_divider {
+        ui.separator();
+    }
+}
+
+/// Draws an icon configuration row and, when requested, its bottom divider.
+pub(crate) fn config_row_with_icon_and_divider(
+    ui: &mut Ui,
+    icon: Option<&TextureHandle>,
+    title: impl Into<RichText>,
+    description: Option<impl Into<RichText>>,
+    show_divider: bool,
+    add_control: impl FnOnce(&mut Ui),
+) {
+    config_row_with_icon(ui, icon, title, description, add_control);
+    if show_divider {
+        ui.separator();
+    }
 }
 
 /// Draws a setting row with an optional leading icon before its label block.

@@ -6,10 +6,11 @@ use deskhud_ui::{LayerPreference, MessageKey, SettingsModel};
 use egui::{RichText, Sense, Stroke, Ui, Vec2};
 
 pub(super) fn draw(ui: &mut Ui, model: &mut SettingsModel) {
-    components::config_row(
+    components::config_row_with_divider(
         ui,
         text(model, MessageKey::SettingsPetLayer),
         Some(RichText::new(text(model, MessageKey::SettingsPetLayerHint)).small()),
+        true,
         |ui| {
             let options = [
                 (
@@ -41,26 +42,26 @@ pub(super) fn draw(ui: &mut Ui, model: &mut SettingsModel) {
             }
         },
     );
-    ui.separator();
-    components::switch_row(
+    components::switch_row_with_divider(
         ui,
         RichText::new(text(model, MessageKey::SettingsPetBubbles)),
         Some(RichText::new(text(model, MessageKey::SettingsPetBubblesHint)).small()),
         &mut model.draft.pet.bubbles,
+        true,
     );
-    ui.separator();
-    components::switch_row(
+    components::switch_row_with_divider(
         ui,
         RichText::new(text(model, MessageKey::SettingsPetKeyboardInput)),
         Some(RichText::new(text(model, MessageKey::SettingsPetKeyboardInputHint)).small()),
         &mut model.draft.pet.global_keyboard_input,
+        true,
     );
-    ui.separator();
-    components::switch_row(
+    components::switch_row_with_divider(
         ui,
         RichText::new(text(model, MessageKey::SettingsPetMouseInput)),
         Some(RichText::new(text(model, MessageKey::SettingsPetMouseInputHint)).small()),
         &mut model.draft.pet.global_mouse_input,
+        false,
     );
 }
 

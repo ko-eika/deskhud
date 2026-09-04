@@ -34,6 +34,21 @@ pub(crate) fn switch_row(
     response.union(toggle_switch(ui, switch_rect, value))
 }
 
+/// Draws a switch setting row and, when requested, its bottom divider.
+pub(crate) fn switch_row_with_divider(
+    ui: &mut Ui,
+    title: impl Into<RichText>,
+    description: Option<impl Into<RichText>>,
+    value: &mut bool,
+    show_divider: bool,
+) -> egui::Response {
+    let response = switch_row(ui, title, description, value);
+    if show_divider {
+        ui.separator();
+    }
+    response
+}
+
 pub(crate) fn toggle_switch(ui: &mut Ui, rect: egui::Rect, value: &mut bool) -> egui::Response {
     // Keep the legacy helper usable by callers that do not need a semantic id.
     // The adjustment panel uses `toggle_switch_with_id` below because a rect's

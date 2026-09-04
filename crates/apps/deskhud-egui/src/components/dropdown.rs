@@ -6,21 +6,54 @@
 //! the same state machine: opening selects the current text, normal typing
 //! performs prefix matching and selects the completion suffix, while delete
 //! and IME preedit are never overwritten by matching.
+#![allow(clippy::clone_on_copy, clippy::if_same_then_else)]
 
 use egui::{
     Align2, Area, Color32, CornerRadius, Frame, Margin, Order, ScrollArea, Sense, Stroke, TextEdit,
     TextStyle, Ui, Vec2,
 };
 
-const DROPDOWN_WIDTH: f32 = 200.0;
 const DROPDOWN_MAX_HEIGHT: f32 = 320.0;
-const DROPDOWN_RADIUS: u8 = 11;
-const DROPDOWN_OPTION_RADIUS: u8 = 8;
-const DROPDOWN_BUTTON_HEIGHT: f32 = 40.0;
 const DROPDOWN_OPTION_HEIGHT: f32 = 36.0;
 const DROPDOWN_OPTION_GAP: f32 = 6.0;
-const DROPDOWN_HORIZONTAL_PADDING: f32 = 14.0;
-const DROPDOWN_VERTICAL_PADDING: f32 = 10.0;
+
+/// Visual metrics for a dropdown while retaining the shared interaction and
+/// popup behavior. Different surfaces can match their neighboring controls
+/// without duplicating the dropdown state machine.
+#[derive(Clone, Copy)]
+pub(crate) struct DropdownStyle {
+    pub(crate) width: f32,
+    pub(crate) button_height: f32,
+    pub(crate) button_radius: u8,
+    pub(crate) popup_radius: u8,
+    pub(crate) option_radius: u8,
+    pub(crate) horizontal_padding: f32,
+    pub(crate) vertical_padding: f32,
+}
+
+impl DropdownStyle {
+    /// Standard settings-page dropdown metrics.
+    pub(crate) const SETTINGS: Self = Self {
+        width: 200.0,
+        button_height: 40.0,
+        button_radius: 11,
+        popup_radius: 11,
+        option_radius: 8,
+        horizontal_padding: 14.0,
+        vertical_padding: 10.0,
+    };
+
+    /// Compact metrics for HUD adjustment cards, matching their 216×32 inputs.
+    pub(crate) const ADJUSTMENT: Self = Self {
+        width: 216.0,
+        button_height: 32.0,
+        button_radius: 4,
+        popup_radius: 8,
+        option_radius: 4,
+        horizontal_padding: 12.0,
+        vertical_padding: 6.0,
+    };
+}
 
 /// A key/label pair rendered by [`dropdown`].
 pub(crate) type DropdownOption = (String, String);
@@ -44,7 +77,26 @@ pub(crate) fn dropdown(
     options: &[DropdownOption],
     searchable: bool,
 ) -> Option<String> {
-    dropdown_impl(ui, id_source, selected, options, searchable)
+    dropdown_with_style(
+        ui,
+        id_source,
+        selected,
+        options,
+        searchable,
+        DropdownStyle::SETTINGS,
+    )
+}
+
+/// Shows a dropdown using shared behavior with caller-selected visual metrics.
+pub(crate) fn dropdown_with_style(
+    ui: &mut Ui,
+    id_source: impl std::hash::Hash + std::fmt::Debug,
+    selected: &str,
+    options: &[DropdownOption],
+    searchable: bool,
+    style: DropdownStyle,
+) -> Option<String> {
+    dropdown_impl(ui, id_source, selected, options, searchable, style)
 }
 
 fn dropdown_impl(
@@ -53,6 +105,7 @@ fn dropdown_impl(
     selected: &str,
     options: &[DropdownOption],
     searchable: bool,
+    style: DropdownStyle,
 ) -> Option<String> {
     let id = ui.make_persistent_id(id_source);
     let mut state = ui.ctx().data_mut(|data| {
@@ -66,12 +119,8 @@ fn dropdown_impl(
     state.ime_composing = update_ime_composing(ui, state.ime_composing);
     let mut changed = None;
 
-    ui.spacing_mut().button_padding =
-        Vec2::new(DROPDOWN_HORIZONTAL_PADDING, DROPDOWN_VERTICAL_PADDING);
-    let (button_rect, button_response) = ui.allocate_exact_size(
-        Vec2::new(DROPDOWN_WIDTH, DROPDOWN_BUTTON_HEIGHT),
-        Sense::click(),
-    );
+    let (button_rect, button_response) =
+        ui.allocate_exact_size(Vec2::new(style.width, style.button_height), Sense::click());
     let opened_now = !state.open && button_response.clicked();
     if opened_now {
         state.open = true;
@@ -91,13 +140,13 @@ fn dropdown_impl(
     };
     ui.painter().rect(
         button_rect,
-        CornerRadius::same(DROPDOWN_RADIUS),
+        CornerRadius::same(style.button_radius),
         visuals.weak_bg_fill,
         visuals.bg_stroke,
         egui::StrokeKind::Inside,
     );
 
-    let inner = button_rect.shrink2(ui.spacing().button_padding);
+    let inner = button_rect.shrink2(Vec2::new(style.horizontal_padding, style.vertical_padding));
     let arrow_rect =
         egui::Rect::from_min_max(egui::pos2(inner.right() - 24.0, inner.top()), inner.max);
     let text_rect = egui::Rect::from_min_max(
@@ -157,7 +206,7 @@ fn dropdown_impl(
     if state.open {
         let popup_id = id.with("popup");
         let item_count = options.len();
-        let content_height = 2.0 * DROPDOWN_VERTICAL_PADDING
+        let content_height = 2.0 * style.vertical_padding
             + item_count as f32 * DROPDOWN_OPTION_HEIGHT
             + item_count.saturating_sub(1) as f32 * DROPDOWN_OPTION_GAP;
         let popup_height = content_height.min(DROPDOWN_MAX_HEIGHT);
@@ -178,10 +227,10 @@ fn dropdown_impl(
                 Frame::NONE
                     .fill(ui.visuals().window_fill)
                     .stroke(Stroke::new(1.0, ui.visuals().window_stroke.color))
-                    .corner_radius(CornerRadius::same(DROPDOWN_RADIUS))
+                    .corner_radius(CornerRadius::same(style.popup_radius))
                     .inner_margin(Margin::symmetric(
-                        DROPDOWN_HORIZONTAL_PADDING as i8,
-                        DROPDOWN_VERTICAL_PADDING as i8,
+                        style.horizontal_padding as i8,
+                        style.vertical_padding as i8,
                     ))
                     .shadow(ui.visuals().popup_shadow)
                     .show(ui, |ui| {
@@ -206,7 +255,7 @@ fn dropdown_impl(
                                 if fill != Color32::TRANSPARENT {
                                     ui.painter().rect_filled(
                                         rect,
-                                        CornerRadius::same(DROPDOWN_OPTION_RADIUS),
+                                        CornerRadius::same(style.option_radius),
                                         fill,
                                     );
                                 }
@@ -214,12 +263,12 @@ fn dropdown_impl(
                                 let label = truncate_text(
                                     ui,
                                     label,
-                                    (rect.width() - DROPDOWN_HORIZONTAL_PADDING * 2.0).max(0.0),
+                                    (rect.width() - style.horizontal_padding * 2.0).max(0.0),
                                     option_font.clone(),
                                 );
                                 ui.painter().with_clip_rect(rect).text(
                                     egui::pos2(
-                                        rect.left() + DROPDOWN_HORIZONTAL_PADDING,
+                                        rect.left() + style.horizontal_padding,
                                         rect.center().y,
                                     ),
                                     Align2::LEFT_CENTER,
@@ -238,7 +287,7 @@ fn dropdown_impl(
                         };
                         if content_height > DROPDOWN_MAX_HEIGHT {
                             let viewport_height =
-                                (DROPDOWN_MAX_HEIGHT - DROPDOWN_VERTICAL_PADDING * 2.0).max(0.0);
+                                (DROPDOWN_MAX_HEIGHT - style.vertical_padding * 2.0).max(0.0);
                             let mut scroll = ScrollArea::vertical()
                                 .max_height(DROPDOWN_MAX_HEIGHT)
                                 .auto_shrink([false, true]);

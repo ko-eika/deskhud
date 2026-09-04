@@ -20,6 +20,11 @@ use crate::views::ViewOutput;
 pub(crate) struct LayoutState {
     /// 按 `plugin_id/contribution_id` 保留的 HUD 条目逻辑坐标。
     pub(crate) positions: HashMap<String, egui::Pos2>,
+    /// HUD currently being dragged in layout-window coordinates.
+    ///
+    /// A grouped HUD is detached when this state is created and is assigned
+    /// back to a group (or to the screen) only after the drag finishes.
+    pub(crate) active_hud_drag: Option<HudDragState>,
     /// 是否处于可拖动布局模式。
     pub(crate) layout_mode: bool,
     /// 当前显示器活动区域的逻辑尺寸。
@@ -29,6 +34,10 @@ pub(crate) struct LayoutState {
     /// 当前高亮的 HUD 条目；右键调整窗口也绑定到此条目。
     pub(crate) selected: Option<String>,
     pub(crate) adjust_open: bool,
+    pub(crate) group_adjust_open: bool,
+    pub(crate) hud_adjust_open: bool,
+    pub(crate) hud_adjust_key: Option<String>,
+    pub(crate) group_adjust_key: Option<String>,
     pub(crate) shadow_open: bool,
     pub(crate) shadow_target: Option<ShadowTarget>,
     /// Whether layout positions should snap to the visible alignment grid.
@@ -40,8 +49,14 @@ pub(crate) struct LayoutState {
     /// Whether the adjustment panel should preserve the selected HUD aspect ratio.
     pub(crate) lock_ratio: bool,
     pub(crate) locked_ratio: Option<f32>,
-    pub(crate) position_unit: AdjustmentUnit,
-    pub(crate) size_unit: AdjustmentUnit,
+}
+
+pub(crate) struct HudDragState {
+    pub(crate) instance_id: HudInstanceId,
+    pub(crate) source_group_id: Option<String>,
+    pub(crate) source_group_rect: Option<egui::Rect>,
+    pub(crate) position: egui::Pos2,
+    pub(crate) size: egui::Vec2,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -49,13 +64,8 @@ pub(crate) enum ShadowTarget {
     Global,
     Window,
     Content,
-}
-
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) enum AdjustmentUnit {
-    #[default]
-    Percent,
-    Pixels,
+    Border,
+    Background,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,19 +74,31 @@ pub(crate) enum HudLayoutTarget {
     Group(String),
 }
 
+#[derive(Clone)]
 pub(crate) struct HudRenderLayer {
+    pub(crate) instance_id: HudInstanceId,
+    pub(crate) source: HudSourceId,
+    pub(crate) config: HudInstanceConfig,
+    pub(crate) base_size: HudLogicalSize,
     pub(crate) frame: HudFrame,
     pub(crate) rect: HudLogicalRect,
     pub(crate) clip: HudLogicalRect,
 }
 
 /// One virtual HUD slot after instance resolution and optional group composition.
+#[derive(Clone)]
 pub(crate) struct HudRenderItem {
     pub(crate) key: String,
     pub(crate) target: HudLayoutTarget,
     pub(crate) source: Option<HudSourceId>,
+    /// User-facing plugin name resolved from the registry.
+    pub(crate) plugin_name: String,
+    /// User-facing contribution name resolved from the registry.
+    pub(crate) contribution_name: String,
     pub(crate) layers: Vec<HudRenderLayer>,
     pub(crate) base_size: HudLogicalSize,
+    /// Optional actual container size for virtual groups.
+    pub(crate) container_size: Option<egui::Vec2>,
     pub(crate) initial_position: egui::Pos2,
     pub(crate) width: f32,
     pub(crate) height: f32,
@@ -85,10 +107,6 @@ pub(crate) struct HudRenderItem {
     pub(crate) background_blur: f32,
     pub(crate) content_opacity: f32,
     pub(crate) shadow_enabled: bool,
-    pub(crate) window_shadow_global: bool,
-    pub(crate) content_shadow_global: bool,
-    pub(crate) window_shadow_enabled: bool,
-    pub(crate) content_shadow_enabled: bool,
     pub(crate) window_shadow: f32,
     pub(crate) window_shadow_blur: f32,
     pub(crate) window_shadow_distance: f32,
@@ -110,6 +128,9 @@ pub(crate) struct HudRenderItem {
     pub(crate) border_width: f32,
     pub(crate) corner_radius: f32,
     pub(crate) border_color: [u8; 3],
+    /// Layout-editor-only group identifier color.
+    pub(crate) group_color: Option<[u8; 3]>,
+    pub(crate) group_padding: Option<[f32; 4]>,
 }
 
 struct ActiveHudFrame {
@@ -230,6 +251,7 @@ fn resolved_hud_slots(
     registry: &EngineRegistry,
     prefs: &UiPreferences,
     elapsed_secs: f32,
+    include_empty_groups: bool,
 ) -> Vec<ResolvedHudSlot> {
     let frames = active_hud_frames(registry, prefs, elapsed_secs);
     let mut by_instance: HashMap<_, _> = frames
@@ -261,6 +283,10 @@ fn resolved_hud_slots(
             config: frame.config.clone(),
             frame: frame.frame.clone(),
             layers: vec![HudRenderLayer {
+                instance_id: frame.instance_id.clone(),
+                source: frame.source.clone(),
+                config: frame.config.clone(),
+                base_size: size,
                 frame: frame.frame.clone(),
                 rect,
                 clip: rect,
@@ -271,37 +297,99 @@ fn resolved_hud_slots(
     }
 
     for group in &prefs.hud.groups {
-        if !group.enabled {
+        if !group.enabled && !include_empty_groups {
             continue;
         }
         let members: Vec<_> = group
             .children
             .iter()
-            .filter_map(|id| by_instance.remove(id))
+            .enumerate()
+            .filter_map(|(index, id)| {
+                let frame = by_instance.remove(id)?;
+                let member_layout = group
+                    .member_layouts
+                    .iter()
+                    .find(|layout| layout.instance_id == *id)
+                    .cloned()
+                    .unwrap_or(deskhud_ui::HudGroupMemberLayout {
+                        instance_id: id.clone(),
+                        x: index as f32 * group.inner.spacing,
+                        y: index as f32 * group.inner.spacing,
+                    })
+                    .normalized();
+                Some((frame, member_layout))
+            })
             .collect();
-        if members.is_empty() {
+        if members.is_empty() && !include_empty_groups {
             continue;
         }
         let measured: Vec<_> = members
             .iter()
-            .map(|member| measured_frame_size(&member.frame))
+            .map(|(member, _member_layout)| {
+                let size = measured_frame_size(&member.frame);
+                let instance_layout = prefs
+                    .hud
+                    .instances
+                    .iter()
+                    .find(|instance| instance.id == member.instance_id)
+                    .map(|instance| &instance.layout);
+                HudLogicalSize::new(
+                    size.width * instance_layout.map(|layout| layout.width).unwrap_or(1.0),
+                    size.height * instance_layout.map(|layout| layout.height).unwrap_or(1.0),
+                )
+            })
             .collect();
-        let composition = group.inner.compose(&measured);
+        let mut inner_layout = group.inner.clone();
+        if group.size[0] > 0.0 && group.size[1] > 0.0 {
+            let horizontal_limit = group.size[0] * 0.25;
+            let vertical_limit = group.size[1] * 0.25;
+            inner_layout.padding[0] = inner_layout.padding[0].min(vertical_limit).floor();
+            inner_layout.padding[2] = inner_layout.padding[2].min(vertical_limit).floor();
+            inner_layout.padding[1] = inner_layout.padding[1].min(horizontal_limit).floor();
+            inner_layout.padding[3] = inner_layout.padding[3].min(horizontal_limit).floor();
+        }
+        let composition = if inner_layout.arrangement == deskhud_engine::HudGroupArrangement::Free {
+            let frames = measured
+                .iter()
+                .zip(&members)
+                .map(|(size, (_, member_layout))| HudLogicalRect {
+                    x: member_layout.x,
+                    y: member_layout.y,
+                    width: size.width,
+                    height: size.height,
+                })
+                .collect::<Vec<_>>();
+            inner_layout.compose_free(&frames)
+        } else {
+            inner_layout.compose(&measured)
+        };
         let style_frame = HudFrame {
             visuals: members
                 .iter()
-                .flat_map(|member| member.frame.visuals.iter().cloned())
+                .flat_map(|(member, _)| member.frame.visuals.iter().cloned())
                 .collect(),
         };
         let layers = members
             .into_iter()
             .zip(composition.members)
-            .map(|(member, placement)| HudRenderLayer {
-                frame: member.frame,
-                rect: placement.frame,
-                clip: placement.clip,
+            .map(|((member, _), placement)| {
+                let base_size = measured_frame_size(&member.frame);
+                HudRenderLayer {
+                    instance_id: member.instance_id,
+                    source: member.source,
+                    config: member.config,
+                    base_size,
+                    frame: member.frame,
+                    rect: placement.frame,
+                    clip: placement.clip,
+                }
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let base_size = if layers.is_empty() {
+            HudLogicalSize::new(240.0, 140.0)
+        } else {
+            composition.size
+        };
         slots.push(ResolvedHudSlot {
             key: format!("group/{}", group.id),
             target: HudLayoutTarget::Group(group.id.clone()),
@@ -311,7 +399,7 @@ fn resolved_hud_slots(
             config: HudInstanceConfig::new(),
             frame: style_frame,
             layers,
-            base_size: composition.size,
+            base_size,
             layout: group.layout.clone(),
         });
     }
@@ -521,7 +609,7 @@ mod tests {
         prefs.hud.groups[0].inner.arrangement = HudGroupArrangement::Vertical;
         prefs.hud.groups[0].inner.spacing = 7.0;
 
-        let slots = resolved_hud_slots(&bootstrap.registry, &prefs, 1.0);
+        let slots = resolved_hud_slots(&bootstrap.registry, &prefs, 1.0, false);
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].target, HudLayoutTarget::Group(group_id.clone()));
         assert_eq!(slots[0].key, format!("group/{group_id}"));
@@ -530,5 +618,59 @@ mod tests {
         assert_eq!(slots[0].layers[0].clip, slots[0].layers[0].rect);
         assert_eq!(slots[0].layers[1].clip, slots[0].layers[1].rect);
         assert_eq!(slots[0].layout, prefs.hud.groups[0].layout);
+    }
+
+    #[test]
+    fn free_group_uses_persisted_member_geometry() {
+        let bootstrap = deskhud_runtime::bootstrap_registry();
+        let mut prefs = deskhud_ui::UiPreferences::default();
+        prefs.hud.ensure_default_instances(
+            bootstrap
+                .registry
+                .all_hud_contributions()
+                .into_iter()
+                .map(|(plugin, contribution)| {
+                    (
+                        deskhud_engine::HudSourceId::new(plugin, contribution.id),
+                        true,
+                    )
+                }),
+        );
+        let member = prefs.hud.instances[0].id.clone();
+        prefs.hud.instances[0].layout.width = 1.5;
+        let group_id = prefs.hud.create_group("free");
+        prefs.hud.add_instance_to_group(&group_id, &member);
+        let group = &mut prefs.hud.groups[0];
+        group.inner.arrangement = HudGroupArrangement::Free;
+        group.size = [4096.0, 4096.0];
+        group.member_layouts[0].x = 42.0;
+        group.member_layouts[0].y = 17.0;
+
+        let slots = resolved_hud_slots(&bootstrap.registry, &prefs, 1.0, true);
+        assert_eq!(slots.len(), 2);
+        let group = slots
+            .iter()
+            .find(|slot| slot.target == HudLayoutTarget::Group(group_id.clone()))
+            .expect("group slot");
+        assert_eq!(group.layers.len(), 1);
+        assert!(group.layers[0].rect.x >= 42.0);
+        assert!(group.layers[0].rect.y >= 17.0);
+        assert!(group.layers[0].rect.width > group.layers[0].base_size.width);
+        // Free layout derives the container from member bounds; a persisted
+        // manual size must not override that calculation.
+        assert!(group.base_size.width < 4096.0);
+        assert!(group.base_size.height < 4096.0);
+    }
+
+    #[test]
+    fn empty_groups_only_produce_editor_slots() {
+        let bootstrap = deskhud_runtime::bootstrap_registry();
+        let mut prefs = deskhud_ui::UiPreferences::default();
+        let group_id = prefs.hud.create_group("empty");
+        assert!(resolved_hud_slots(&bootstrap.registry, &prefs, 1.0, false).is_empty());
+        let slots = resolved_hud_slots(&bootstrap.registry, &prefs, 1.0, true);
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].target, HudLayoutTarget::Group(group_id));
+        assert!(slots[0].layers.is_empty());
     }
 }

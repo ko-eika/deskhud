@@ -188,7 +188,7 @@ msgid "HudLayoutEdit"
 msgstr "插件布局"
 
 msgid "HudLayoutEditingHint"
-msgstr "布局编辑已打开：拖移条目；顶栏可重置/取消/应用"
+msgstr "布局编辑已打开：可将 HUD 拖入组，或右击创建组"
 
 msgid "HudLayoutDone"
 msgstr "应用"
@@ -197,7 +197,7 @@ msgid "HudLayoutCancel"
 msgstr "取消"
 
 msgid "HudLayoutHint"
-msgstr "点击选中 · 拖移/拖角按格跟手"
+msgstr "点击选中 · 拖动调整 · 右击管理组"
 
 msgid "HudLayoutResetSize"
 msgstr "重置大小"
@@ -206,7 +206,19 @@ msgid "HudLayoutResetSizeHint"
 msgstr "恢复为默认 1× 尺寸"
 
 msgid "HudAdjustTitle"
-msgstr "调整 HUD"
+msgstr "信息调整窗口"
+
+msgid "HudAdjustInfo"
+msgstr "信息"
+
+msgid "HudAdjustPlugin"
+msgstr "插件"
+
+msgid "HudAdjustContribution"
+msgstr "贡献项"
+
+msgid "HudAdjustInstance"
+msgstr "实例 ID"
 
 msgid "HudAdjustPosition"
 msgstr "位置"
@@ -295,6 +307,9 @@ msgstr "角度"
 msgid "HudAdjustShadowSettings"
 msgstr "阴影设置"
 
+msgid "HudAdjustOpenSettings"
+msgstr "调整"
+
 msgid "HudAdjustGlobalShadow"
 msgstr "全局阴影"
 
@@ -318,6 +333,69 @@ msgstr "背景"
 
 msgid "HudAdjustSnapGrid"
 msgstr "对齐网格"
+
+msgid "HudGroupCreate"
+msgstr "创建组"
+
+msgid "HudGroupEdit"
+msgstr "调整组"
+
+msgid "HudGroupDelete"
+msgstr "删除组"
+
+msgid "HudGroupAdjustTitle"
+msgstr "信息组调整窗口"
+
+msgid "HudGroupInfo"
+msgstr "信息"
+
+msgid "HudGroupName"
+msgstr "名称"
+
+msgid "HudGroupColor"
+msgstr "组颜色"
+
+msgid "HudGroupDefaultName"
+msgstr "组"
+
+msgid "HudGroupArrangement"
+msgstr "布局"
+
+msgid "HudGroupArrangementFree"
+msgstr "自由"
+
+msgid "HudGroupArrangementHorizontal"
+msgstr "横向"
+
+msgid "HudGroupArrangementVertical"
+msgstr "纵向"
+
+msgid "HudGroupArrangementGrid"
+msgstr "网格"
+
+msgid "HudGroupSpacing"
+msgstr "间距"
+
+msgid "HudGroupPadding"
+msgstr "内边距"
+
+msgid "HudGroupColumns"
+msgstr "列数"
+
+msgid "HudGroupAlignment"
+msgstr "对齐"
+
+msgid "HudGroupAlignmentStart"
+msgstr "起始"
+
+msgid "HudGroupAlignmentCenter"
+msgstr "居中"
+
+msgid "HudGroupAlignmentEnd"
+msgstr "末端"
+
+msgid "HudGroupRemoveMember"
+msgstr "移出组"
 
 msgid "SettingsTopmost"
 msgstr "置顶"

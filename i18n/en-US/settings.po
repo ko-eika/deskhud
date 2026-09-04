@@ -188,7 +188,7 @@ msgid "HudLayoutEdit"
 msgstr "Plugin layout"
 
 msgid "HudLayoutEditingHint"
-msgstr "Layout editor is open: drag chips; Reset/Cancel/Apply at the top"
+msgstr "Layout editor is open: drag HUDs into groups or right-click to create a group"
 
 msgid "HudLayoutDone"
 msgstr "Apply"
@@ -197,7 +197,7 @@ msgid "HudLayoutCancel"
 msgstr "Cancel"
 
 msgid "HudLayoutHint"
-msgstr "Click to select · drag to move · corner scales by grid"
+msgstr "Click to select · drag to move · right-click for group actions"
 
 msgid "HudLayoutResetSize"
 msgstr "Reset size"
@@ -206,7 +206,19 @@ msgid "HudLayoutResetSizeHint"
 msgstr "Restore the default 1× size"
 
 msgid "HudAdjustTitle"
-msgstr "Adjust HUD"
+msgstr "Information adjustment"
+
+msgid "HudAdjustInfo"
+msgstr "Information"
+
+msgid "HudAdjustPlugin"
+msgstr "Plugin"
+
+msgid "HudAdjustContribution"
+msgstr "Contribution"
+
+msgid "HudAdjustInstance"
+msgstr "Instance ID"
 
 msgid "HudAdjustPosition"
 msgstr "Position"
@@ -295,6 +307,9 @@ msgstr "Angle"
 msgid "HudAdjustShadowSettings"
 msgstr "Shadow settings"
 
+msgid "HudAdjustOpenSettings"
+msgstr "Adjust"
+
 msgid "HudAdjustGlobalShadow"
 msgstr "Global shadow"
 
@@ -318,6 +333,69 @@ msgstr "Background"
 
 msgid "HudAdjustSnapGrid"
 msgstr "Snap to grid"
+
+msgid "HudGroupCreate"
+msgstr "Create group"
+
+msgid "HudGroupEdit"
+msgstr "Adjust group"
+
+msgid "HudGroupDelete"
+msgstr "Delete group"
+
+msgid "HudGroupAdjustTitle"
+msgstr "Information group adjustment"
+
+msgid "HudGroupInfo"
+msgstr "Information"
+
+msgid "HudGroupName"
+msgstr "Name"
+
+msgid "HudGroupColor"
+msgstr "Group color"
+
+msgid "HudGroupDefaultName"
+msgstr "Group"
+
+msgid "HudGroupArrangement"
+msgstr "Layout"
+
+msgid "HudGroupArrangementFree"
+msgstr "Free"
+
+msgid "HudGroupArrangementHorizontal"
+msgstr "Horizontal"
+
+msgid "HudGroupArrangementVertical"
+msgstr "Vertical"
+
+msgid "HudGroupArrangementGrid"
+msgstr "Grid"
+
+msgid "HudGroupSpacing"
+msgstr "Spacing"
+
+msgid "HudGroupPadding"
+msgstr "Padding"
+
+msgid "HudGroupColumns"
+msgstr "Columns"
+
+msgid "HudGroupAlignment"
+msgstr "Alignment"
+
+msgid "HudGroupAlignmentStart"
+msgstr "Start"
+
+msgid "HudGroupAlignmentCenter"
+msgstr "Center"
+
+msgid "HudGroupAlignmentEnd"
+msgstr "End"
+
+msgid "HudGroupRemoveMember"
+msgstr "Remove from group"
 
 msgid "SettingsTopmost"
 msgstr "Keep on top"

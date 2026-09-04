@@ -1,4 +1,5 @@
 //! 右键菜单的屏幕位置计算。
+#![allow(clippy::too_many_arguments)]
 
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},

@@ -161,6 +161,14 @@ pub enum MessageKey {
     HudLayoutResetSizeHint,
     /// HUD 右键调整窗口标题。
     HudAdjustTitle,
+    /// HUD read-only information card title.
+    HudAdjustInfo,
+    /// HUD owning plugin field.
+    HudAdjustPlugin,
+    /// HUD contribution field.
+    HudAdjustContribution,
+    /// HUD instance identity field.
+    HudAdjustInstance,
     /// HUD 位置字段。
     HudAdjustPosition,
     /// HUD 大小字段。
@@ -215,6 +223,8 @@ pub enum MessageKey {
     HudAdjustShadowAngle,
     /// HUD dedicated shadow settings window.
     HudAdjustShadowSettings,
+    /// Opens the detail editor for an effect.
+    HudAdjustOpenSettings,
     /// Global shadow editor title.
     HudAdjustGlobalShadow,
     /// Custom shadow editor title.
@@ -235,6 +245,48 @@ pub enum MessageKey {
     HudAdjustPercent,
     /// Pixel unit option.
     HudAdjustPixels,
+    /// Create a virtual HUD group.
+    HudGroupCreate,
+    /// Edit the selected HUD group.
+    HudGroupEdit,
+    /// Delete the selected HUD group.
+    HudGroupDelete,
+    /// HUD group adjustment window title.
+    HudGroupAdjustTitle,
+    /// HUD group information card title.
+    HudGroupInfo,
+    /// HUD group name field.
+    HudGroupName,
+    /// HUD group identifier color.
+    HudGroupColor,
+    /// Default HUD group name.
+    HudGroupDefaultName,
+    /// HUD group arrangement field.
+    HudGroupArrangement,
+    /// Free group arrangement.
+    HudGroupArrangementFree,
+    /// Horizontal group arrangement.
+    HudGroupArrangementHorizontal,
+    /// Vertical group arrangement.
+    HudGroupArrangementVertical,
+    /// Grid group arrangement.
+    HudGroupArrangementGrid,
+    /// HUD group spacing field.
+    HudGroupSpacing,
+    /// HUD group padding field.
+    HudGroupPadding,
+    /// HUD group grid column field.
+    HudGroupColumns,
+    /// HUD group alignment field.
+    HudGroupAlignment,
+    /// Leading group alignment.
+    HudGroupAlignmentStart,
+    /// Centered group alignment.
+    HudGroupAlignmentCenter,
+    /// Trailing group alignment.
+    HudGroupAlignmentEnd,
+    /// Remove a HUD member from its group.
+    HudGroupRemoveMember,
     /// 右键：插件布局。
     MenuHudLayout,
     /// 右键：插件窗口层级。
@@ -343,6 +395,10 @@ impl MessageKey {
         Self::HudLayoutResetSize,
         Self::HudLayoutResetSizeHint,
         Self::HudAdjustTitle,
+        Self::HudAdjustInfo,
+        Self::HudAdjustPlugin,
+        Self::HudAdjustContribution,
+        Self::HudAdjustInstance,
         Self::HudAdjustPosition,
         Self::HudAdjustSize,
         Self::HudAdjustBackgroundOpacity,
@@ -370,6 +426,7 @@ impl MessageKey {
         Self::HudAdjustShadowDistance,
         Self::HudAdjustShadowAngle,
         Self::HudAdjustShadowSettings,
+        Self::HudAdjustOpenSettings,
         Self::HudAdjustGlobalShadow,
         Self::HudAdjustCustomShadow,
         Self::HudAdjustShadowMode,
@@ -380,6 +437,27 @@ impl MessageKey {
         Self::HudAdjustSnapGrid,
         Self::HudAdjustPercent,
         Self::HudAdjustPixels,
+        Self::HudGroupCreate,
+        Self::HudGroupEdit,
+        Self::HudGroupDelete,
+        Self::HudGroupAdjustTitle,
+        Self::HudGroupInfo,
+        Self::HudGroupName,
+        Self::HudGroupColor,
+        Self::HudGroupDefaultName,
+        Self::HudGroupArrangement,
+        Self::HudGroupArrangementFree,
+        Self::HudGroupArrangementHorizontal,
+        Self::HudGroupArrangementVertical,
+        Self::HudGroupArrangementGrid,
+        Self::HudGroupSpacing,
+        Self::HudGroupPadding,
+        Self::HudGroupColumns,
+        Self::HudGroupAlignment,
+        Self::HudGroupAlignmentStart,
+        Self::HudGroupAlignmentCenter,
+        Self::HudGroupAlignmentEnd,
+        Self::HudGroupRemoveMember,
         Self::MenuHudLayout,
         Self::MenuPluginLayer,
         Self::MenuLayerTop,

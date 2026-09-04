@@ -66,6 +66,8 @@ pub struct HudFrameCtx<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HudGroupArrangement {
+    /// Place members at host-provided logical rectangles.
+    Free,
     /// Place members from left to right.
     #[default]
     Horizontal,
@@ -198,6 +200,27 @@ impl HudGroupLayout {
         }
 
         let (content_width, content_height, origins) = match layout.arrangement {
+            HudGroupArrangement::Free => {
+                let origins = measured
+                    .iter()
+                    .enumerate()
+                    .map(|(index, _)| {
+                        let offset = layout.spacing * index as f32;
+                        (offset, offset)
+                    })
+                    .collect::<Vec<_>>();
+                let width = measured
+                    .iter()
+                    .zip(&origins)
+                    .map(|(size, (x, _))| x + size.width)
+                    .fold(0.0, f32::max);
+                let height = measured
+                    .iter()
+                    .zip(&origins)
+                    .map(|(size, (_, y))| y + size.height)
+                    .fold(0.0, f32::max);
+                (width, height, origins)
+            }
             HudGroupArrangement::Horizontal => compose_horizontal(&layout, &measured),
             HudGroupArrangement::Vertical => compose_vertical(&layout, &measured),
             HudGroupArrangement::Grid => compose_grid(&layout, &measured),
@@ -217,6 +240,53 @@ impl HudGroupLayout {
                     y: top + y,
                     width: size.width,
                     height: size.height,
+                };
+                HudGroupMemberPlacement {
+                    frame,
+                    clip: intersect_rect(frame, content_clip),
+                }
+            })
+            .collect();
+        HudGroupComposition {
+            size: HudLogicalSize::new(left + content_width + right, top + content_height + bottom),
+            members,
+        }
+    }
+
+    /// Composes freely positioned child rectangles supplied by the host.
+    pub fn compose_free(&self, frames: &[HudLogicalRect]) -> HudGroupComposition {
+        let layout = self.clone().normalized();
+        let [top, right, bottom, left] = layout.padding;
+        let frames = frames
+            .iter()
+            .map(|frame| HudLogicalRect {
+                x: finite_clamp(frame.x, 0.0, 16_384.0),
+                y: finite_clamp(frame.y, 0.0, 16_384.0),
+                width: finite_clamp(frame.width, 1.0, 16_384.0),
+                height: finite_clamp(frame.height, 1.0, 16_384.0),
+            })
+            .collect::<Vec<_>>();
+        let content_width = frames
+            .iter()
+            .map(|frame| frame.x + frame.width)
+            .fold(1.0, f32::max);
+        let content_height = frames
+            .iter()
+            .map(|frame| frame.y + frame.height)
+            .fold(1.0, f32::max);
+        let content_clip = HudLogicalRect {
+            x: left,
+            y: top,
+            width: content_width,
+            height: content_height,
+        };
+        let members = frames
+            .into_iter()
+            .map(|frame| {
+                let frame = HudLogicalRect {
+                    x: left + frame.x,
+                    y: top + frame.y,
+                    ..frame
                 };
                 HudGroupMemberPlacement {
                     frame,
@@ -408,5 +478,31 @@ mod tests {
         assert_eq!(result.members[0].frame.x, 10.0);
         assert_eq!(result.members[2].frame.x, 0.0);
         assert_eq!(result.members[2].frame.y, 22.0);
+    }
+
+    #[test]
+    fn free_composition_uses_host_rectangles_and_padding() {
+        let layout = HudGroupLayout {
+            arrangement: HudGroupArrangement::Free,
+            padding: [2.0, 3.0, 4.0, 5.0],
+            ..HudGroupLayout::default()
+        };
+        let result = layout.compose_free(&[
+            HudLogicalRect {
+                x: 10.0,
+                y: 20.0,
+                width: 30.0,
+                height: 40.0,
+            },
+            HudLogicalRect {
+                x: 50.0,
+                y: 5.0,
+                width: 20.0,
+                height: 10.0,
+            },
+        ]);
+        assert_eq!(result.size, HudLogicalSize::new(78.0, 66.0));
+        assert_eq!(result.members[0].frame.x, 15.0);
+        assert_eq!(result.members[0].frame.y, 22.0);
     }
 }

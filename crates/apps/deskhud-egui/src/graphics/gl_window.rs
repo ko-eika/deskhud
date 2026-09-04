@@ -1,4 +1,5 @@
 //! 原生窗口和 OpenGL 上下文生命周期。
+#![allow(clippy::too_many_arguments)]
 
 use glutin::{
     config::ConfigTemplateBuilder,

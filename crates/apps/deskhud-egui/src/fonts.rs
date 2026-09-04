@@ -1,4 +1,5 @@
 //! 应用层字体适配：扫描结果由 `deskhud-ui` 提供，应用只负责缓存。
+#![allow(clippy::collapsible_if, clippy::needless_borrow)]
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, OnceLock};

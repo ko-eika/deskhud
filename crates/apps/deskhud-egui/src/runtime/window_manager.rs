@@ -2,6 +2,7 @@
 //!
 //! 具体视口的创建、事件处理和绘制封装在 [`crate::views`] 与 [`super::viewport`] 下，
 //! 本模块只负责视口之间的协调和生命周期管理。
+#![allow(clippy::collapsible_if)]
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use deskhud_engine::{EngineRegistry, HudSourceId, PetEvent, PetKeyTracker};
@@ -177,10 +178,17 @@ impl WindowManager {
     }
 
     fn show_hud(&mut self) {
-        if self.hud.is_none() {
+        let prefs = self.prefs.clone();
+        let Some(hud) = self.hud.as_mut() else {
             return;
+        };
+        // The menu can change the master switch while this native window is
+        // hidden. Its render state owns a snapshot of preferences, so refresh
+        // that snapshot before exposing the window again; otherwise it would
+        // still build an empty frame from the previous disabled state.
+        if !hud.is_visible() {
+            hud.apply_preferences(prefs);
         }
-        let hud = self.hud.as_mut().expect("HUD viewport disappeared");
         hud.show();
     }
 
