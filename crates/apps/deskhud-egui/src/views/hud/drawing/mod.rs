@@ -9,19 +9,27 @@ mod adjustment;
 mod frame;
 mod layout;
 mod overlay;
+mod tree_panels;
 
 use adjustment::draw_adjust_window;
 use frame::draw_frame;
 use layout::{draw_alignment_grid, layout_slot, set_layout_slot, snap_coordinate};
 use overlay::{
-    EditorOverlay, GroupDropFeedback, draw_border, draw_editor_overlays, draw_group_drop_feedback,
-    draw_preview_background, draw_preview_border,
+    EditorOverlay, GroupDropFeedback, draw_alignment_guides, draw_border, draw_editor_overlays,
+    draw_group_drop_feedback, draw_preview_background, draw_preview_border,
 };
 
 const HUD_PADDING: f32 = 8.0;
 /// Grid spacing in the same pixel coordinate system as layout x/y.
 const GRID_STEP: f32 = 32.0;
-const ADJUST_PANEL_WIDTH: f32 = 440.0;
+/// Maximum distance at which a moving edge or centre is attracted to another
+/// HUD/group alignment line.
+const ALIGNMENT_SNAP_DISTANCE: f32 = 8.0;
+const EDITOR_PANEL_WIDTH: f32 = 440.0;
+const EDITOR_PANEL_HEIGHT: f32 = 420.0;
+const EDITOR_PANEL_LEFT_MARGIN: f32 = 24.0;
+const EDITOR_PANEL_TOP: f32 = 32.0;
+const EDITOR_PANEL_GAP: f32 = 10.0;
 const ADJUST_ROW_HEIGHT: f32 = 32.0;
 const ADJUST_ROW_GAP: f32 = 8.0;
 const ADJUST_LABEL_INDENT: f32 = 36.0;
@@ -37,10 +45,47 @@ const HUD_BORDER_WIDTH_MAX: f32 = 6.0;
 // rectangle capped at the old 32 px threshold.
 const HUD_CORNER_RADIUS_MAX: f32 = 160.0;
 
+const CANVAS_CONTEXT_MENU_KEYS: &[MessageKey] = &[
+    MessageKey::HudLayoutInformationTree,
+    MessageKey::HudLayoutActiveTree,
+    MessageKey::HudAdjustSnapGrid,
+    MessageKey::HudAdjustLockRatio,
+    MessageKey::HudGroupCreate,
+    MessageKey::HudLayoutDone,
+    MessageKey::HudLayoutCancel,
+];
+const GROUP_CONTEXT_MENU_KEYS: &[MessageKey] = &[
+    MessageKey::HudAdjustSnapGrid,
+    MessageKey::HudAdjustLockRatio,
+    MessageKey::HudAdjustResetPosition,
+    MessageKey::HudAdjustResetSize,
+    MessageKey::HudGroupDelete,
+];
+const HUD_CONTEXT_MENU_KEYS: &[MessageKey] = &[
+    MessageKey::HudAdjustSnapGrid,
+    MessageKey::HudAdjustLockRatio,
+    MessageKey::HudAdjustResetPosition,
+    MessageKey::HudAdjustResetSize,
+    MessageKey::HudLayoutCloseInformation,
+];
+
 pub(super) struct DrawResult {
     pub(super) size: [f32; 2],
     pub(super) move_by: Option<[f32; 2]>,
     pub(super) changed: bool,
+}
+
+#[derive(Clone, Copy, Default)]
+pub(super) struct AlignmentSnap {
+    pub(super) delta: egui::Vec2,
+    pub(super) vertical: Option<f32>,
+    pub(super) horizontal: Option<f32>,
+}
+
+impl AlignmentSnap {
+    fn is_active(self) -> bool {
+        self.vertical.is_some() || self.horizontal.is_some()
+    }
 }
 
 enum EditorAction {
@@ -49,6 +94,14 @@ enum EditorAction {
         position: egui::Pos2,
     },
     DeleteGroup(String),
+    ResetTopLevelPosition {
+        key: String,
+        position: egui::Pos2,
+    },
+    ResetMemberPosition(HudInstanceId),
+    ResetHudSize(HudInstanceId),
+    ResetGroupSize(String),
+    DisableHud(HudInstanceId),
     BeginHudDrag {
         member: HudInstanceId,
         source_group_id: Option<String>,
@@ -56,10 +109,6 @@ enum EditorAction {
         position: egui::Pos2,
         size: egui::Vec2,
         initial_delta: egui::Vec2,
-    },
-    RemoveMember {
-        member: HudInstanceId,
-        position: egui::Pos2,
     },
 }
 
@@ -96,19 +145,54 @@ fn draw_layout_options_menu(
     changed
 }
 
-fn style_layout_context_menu(ui: &mut egui::Ui, locale: deskhud_ui::Locale) {
-    crate::menu::embedded_menu_begin(
+fn style_context_menu(ui: &mut egui::Ui, locale: deskhud_ui::Locale, labels: &[MessageKey]) {
+    let labels = labels
+        .iter()
+        .map(|key| deskhud_ui::i18n::t(locale, *key))
+        .collect::<Vec<_>>();
+    crate::menu::embedded_menu_begin(ui, &labels);
+}
+
+fn style_canvas_context_menu(ui: &mut egui::Ui, locale: deskhud_ui::Locale) {
+    style_context_menu(ui, locale, CANVAS_CONTEXT_MENU_KEYS);
+}
+
+fn style_hud_context_menu(ui: &mut egui::Ui, locale: deskhud_ui::Locale) {
+    style_context_menu(ui, locale, HUD_CONTEXT_MENU_KEYS);
+}
+
+fn style_group_context_menu(ui: &mut egui::Ui, locale: deskhud_ui::Locale) {
+    style_context_menu(ui, locale, GROUP_CONTEXT_MENU_KEYS);
+}
+
+fn draw_tree_panel_menu(
+    ui: &mut egui::Ui,
+    information_tree_open: &mut bool,
+    active_tree_open: &mut bool,
+    locale: deskhud_ui::Locale,
+) {
+    if crate::menu::embedded_menu_item(
         ui,
-        &[
-            deskhud_ui::i18n::t(locale, MessageKey::HudAdjustSnapGrid),
-            deskhud_ui::i18n::t(locale, MessageKey::HudAdjustLockRatio),
-            deskhud_ui::i18n::t(locale, MessageKey::HudGroupCreate),
-            deskhud_ui::i18n::t(locale, MessageKey::HudGroupRemoveMember),
-            deskhud_ui::i18n::t(locale, MessageKey::HudGroupEdit),
-            deskhud_ui::i18n::t(locale, MessageKey::HudGroupDelete),
-            deskhud_ui::i18n::t(locale, MessageKey::HudLayoutDone),
-        ],
-    );
+        deskhud_ui::i18n::t(locale, MessageKey::HudLayoutInformationTree),
+        None,
+        *information_tree_open,
+    )
+    .clicked()
+    {
+        *information_tree_open = true;
+        ui.close();
+    }
+    if crate::menu::embedded_menu_item(
+        ui,
+        deskhud_ui::i18n::t(locale, MessageKey::HudLayoutActiveTree),
+        None,
+        *active_tree_open,
+    )
+    .clicked()
+    {
+        *active_tree_open = true;
+        ui.close();
+    }
 }
 
 fn context_menu_button(
@@ -119,14 +203,25 @@ fn context_menu_button(
     crate::menu::embedded_menu_item(ui, label, icon, false)
 }
 
-fn draw_finish_layout_context_menu(ui: &mut egui::Ui, locale: deskhud_ui::Locale) -> bool {
+fn draw_layout_exit_context_menu(ui: &mut egui::Ui, locale: deskhud_ui::Locale) -> Option<bool> {
     crate::menu::embedded_menu_separator(ui);
-    context_menu_button(
+    if context_menu_button(
         ui,
         deskhud_ui::i18n::t(locale, MessageKey::HudLayoutDone),
-        Some("check"),
+        Some("circle-check"),
     )
     .clicked()
+    {
+        return Some(false);
+    }
+    crate::menu::embedded_menu_gap(ui);
+    context_menu_button(
+        ui,
+        deskhud_ui::i18n::t(locale, MessageKey::HudLayoutCancel),
+        Some("close-circle"),
+    )
+    .clicked()
+    .then_some(true)
 }
 
 fn sync_adjustment_targets(layout: &mut LayoutState, prefs: &UiPreferences) {
@@ -183,17 +278,12 @@ fn adjustment_panel_top(layout: &LayoutState, panel: &str) -> f32 {
         .activity_size
         .map(|size| (size.y - 64.0).max(360.0))
         .unwrap_or(720.0);
-    let mut top = 32.0;
+    let mut top = EDITOR_PANEL_TOP;
     for current in &layout.adjustment_order {
         if *current == panel {
             break;
         }
-        let height = if *current == "hud-adjust" {
-            500.0_f32.min(max_height)
-        } else {
-            390.0_f32.min(max_height)
-        };
-        top += height + 10.0;
+        top += EDITOR_PANEL_HEIGHT.min(max_height) + EDITOR_PANEL_GAP;
     }
     top
 }
@@ -204,21 +294,31 @@ pub(super) fn draw(
     time: f32,
     layout: &mut LayoutState,
     items: &[HudRenderItem],
+    registry: &deskhud_engine::EngineRegistry,
+    catalogs: &deskhud_ui::CatalogStore,
     prefs: &mut UiPreferences,
 ) -> DrawResult {
     let mut bounds = egui::Rect::NOTHING;
     let mut changed = false;
     let mut finish_layout_requested = false;
+    let mut discard_layout_requested = false;
     project_absolute_positions(layout);
+    if layout.layout_mode {
+        layout.rendered_rects.clear();
+    }
     let mut editor_overlays = Vec::new();
     let mut editor_action = None;
+    let mut active_group_drag: Option<(String, egui::Vec2, bool)> = None;
+    let mut alignment_guides = AlignmentSnap::default();
     let drag_released =
         layout.active_hud_drag.is_some() && ui.input(|input| input.pointer.primary_released());
+    let root_drag_released =
+        layout.root_dragging && ui.input(|input| input.pointer.primary_released());
     advance_hud_drag(layout, ui.input(|input| input.pointer.delta()));
     let canvas_response = ui.interact(
         ui.max_rect(),
         ui.make_persistent_id("hud-layout-canvas"),
-        egui::Sense::drag(),
+        egui::Sense::click_and_drag(),
     );
     if layout.layout_mode {
         let canvas_rect = ui.max_rect();
@@ -229,9 +329,18 @@ pub(super) fn draw(
             .unwrap_or(egui::Pos2::ZERO);
         let mut menu_snap_to_grid = layout.snap_to_grid;
         let mut menu_lock_ratio = layout.lock_ratio;
+        let mut menu_information_tree_open = layout.information_tree_open;
+        let mut menu_active_tree_open = layout.active_tree_open;
         let mut menu_changed = false;
         canvas_response.context_menu(|ui| {
-            style_layout_context_menu(ui, prefs.locale);
+            style_canvas_context_menu(ui, prefs.locale);
+            draw_tree_panel_menu(
+                ui,
+                &mut menu_information_tree_open,
+                &mut menu_active_tree_open,
+                prefs.locale,
+            );
+            crate::menu::embedded_menu_separator(ui);
             menu_changed |= draw_layout_options_menu(
                 ui,
                 &mut menu_snap_to_grid,
@@ -252,8 +361,9 @@ pub(super) fn draw(
                 });
                 ui.close();
             }
-            if draw_finish_layout_context_menu(ui, prefs.locale) {
-                finish_layout_requested = true;
+            if let Some(discard) = draw_layout_exit_context_menu(ui, prefs.locale) {
+                discard_layout_requested = discard;
+                finish_layout_requested = !discard;
                 ui.close();
             }
         });
@@ -262,6 +372,8 @@ pub(super) fn draw(
             layout.lock_ratio = menu_lock_ratio;
             changed = true;
         }
+        layout.information_tree_open = menu_information_tree_open;
+        layout.active_tree_open = menu_active_tree_open;
     }
     if layout.layout_mode {
         draw_preview_background(ui, preview_bounds(layout, items).expand(HUD_PADDING));
@@ -273,6 +385,8 @@ pub(super) fn draw(
         draw_alignment_grid(ui, activity);
     }
     for item in items {
+        let reset_position =
+            adjustment::adjustment_default_position(layout, prefs, items, item, &item.key, false);
         let position = layout
             .positions
             .entry(item.key.clone())
@@ -336,11 +450,18 @@ pub(super) fn draw(
         let Some(frame) = response.inner else {
             continue;
         };
+        if layout.layout_mode {
+            layout
+                .rendered_rects
+                .insert(item.key.clone(), frame.body.rect);
+        }
         let member_active = frame.members.iter().any(|member| {
-            member.response.clicked()
-                || member.response.drag_started()
-                || member.response.dragged()
-                || member.response.secondary_clicked()
+            member.response.clicked_by(egui::PointerButton::Primary)
+                || member
+                    .response
+                    .drag_started_by(egui::PointerButton::Primary)
+                || member.response.dragged_by(egui::PointerButton::Primary)
+                || member.context_response.secondary_clicked()
                 || member.resize_drag.is_some()
         });
         if let HudLayoutTarget::Group(group_id) = &item.target {
@@ -390,17 +511,21 @@ pub(super) fn draw(
                     }
                     changed = true;
                 }
-                if member.response.clicked()
-                    || member.response.drag_started()
-                    || member.response.secondary_clicked()
+                if member.response.clicked_by(egui::PointerButton::Primary)
+                    || member
+                        .response
+                        .drag_started_by(egui::PointerButton::Primary)
                 {
                     layout.selected = Some(member_key.clone());
                     layout.adjust_open = true;
                 }
-                if member.response.secondary_clicked() {
-                    layout.adjust_open = true;
+                if member.context_response.secondary_clicked() {
+                    layout.selected = Some(member_key.clone());
                 }
-                if member.response.drag_started() {
+                if member
+                    .response
+                    .drag_started_by(egui::PointerButton::Primary)
+                {
                     editor_action = Some(EditorAction::BeginHudDrag {
                         member: member.instance_id.clone(),
                         source_group_id: Some(group_id.clone()),
@@ -413,8 +538,8 @@ pub(super) fn draw(
                 let mut menu_snap_to_grid = layout.snap_to_grid;
                 let mut menu_lock_ratio = layout.lock_ratio;
                 let mut menu_changed = false;
-                member.response.context_menu(|ui| {
-                    style_layout_context_menu(ui, prefs.locale);
+                member.context_response.context_menu(|ui| {
+                    style_hud_context_menu(ui, prefs.locale);
                     menu_changed |= draw_layout_options_menu(
                         ui,
                         &mut menu_snap_to_grid,
@@ -424,19 +549,36 @@ pub(super) fn draw(
                     crate::menu::embedded_menu_separator(ui);
                     if context_menu_button(
                         ui,
-                        deskhud_ui::i18n::t(prefs.locale, MessageKey::HudGroupRemoveMember),
+                        deskhud_ui::i18n::t(prefs.locale, MessageKey::HudAdjustResetPosition),
+                        Some("reset"),
+                    )
+                    .clicked()
+                    {
+                        editor_action = Some(EditorAction::ResetMemberPosition(
+                            member.instance_id.clone(),
+                        ));
+                        ui.close();
+                    }
+                    if context_menu_button(
+                        ui,
+                        deskhud_ui::i18n::t(prefs.locale, MessageKey::HudAdjustResetSize),
+                        Some("reset"),
+                    )
+                    .clicked()
+                    {
+                        editor_action =
+                            Some(EditorAction::ResetHudSize(member.instance_id.clone()));
+                        ui.close();
+                    }
+                    crate::menu::embedded_menu_separator(ui);
+                    if context_menu_button(
+                        ui,
+                        deskhud_ui::i18n::t(prefs.locale, MessageKey::HudLayoutCloseInformation),
                         Some("close"),
                     )
                     .clicked()
                     {
-                        editor_action = Some(EditorAction::RemoveMember {
-                            member: member.instance_id.clone(),
-                            position: member.rect.min,
-                        });
-                        ui.close();
-                    }
-                    if draw_finish_layout_context_menu(ui, prefs.locale) {
-                        finish_layout_requested = true;
+                        editor_action = Some(EditorAction::DisableHud(member.instance_id.clone()));
                         ui.close();
                     }
                 });
@@ -455,25 +597,27 @@ pub(super) fn draw(
         }
         if layout.layout_mode
             && !member_active
-            && (frame.body.clicked() || frame.body.drag_started() || frame.resize_started)
+            && (frame.body.clicked_by(egui::PointerButton::Primary)
+                || frame.body.drag_started_by(egui::PointerButton::Primary)
+                || frame.resize_started)
         {
             layout.selected = Some(item.key.clone());
-            if frame.body.clicked() {
+            if frame.body.clicked_by(egui::PointerButton::Primary) {
                 layout.adjust_open = true;
             }
         }
-        if layout.layout_mode && !member_active && frame.body.secondary_clicked() {
+        if layout.layout_mode && !member_active && frame.context_response.secondary_clicked() {
             layout.selected = Some(item.key.clone());
-            layout.adjust_open = true;
         }
         if layout.layout_mode && !member_active {
             let mut menu_snap_to_grid = layout.snap_to_grid;
             let mut menu_lock_ratio = layout.lock_ratio;
             let mut menu_changed = false;
-            frame.body.context_menu(|ui| {
-                style_layout_context_menu(ui, prefs.locale);
-                match &item.target {
+            frame
+                .context_response
+                .context_menu(|ui| match &item.target {
                     HudLayoutTarget::Instance(id) => {
+                        style_hud_context_menu(ui, prefs.locale);
                         menu_changed |= draw_layout_options_menu(
                             ui,
                             &mut menu_snap_to_grid,
@@ -483,22 +627,44 @@ pub(super) fn draw(
                         crate::menu::embedded_menu_separator(ui);
                         if context_menu_button(
                             ui,
-                            deskhud_ui::i18n::t(prefs.locale, MessageKey::HudGroupCreate),
-                            Some("create-filled"),
+                            deskhud_ui::i18n::t(prefs.locale, MessageKey::HudAdjustResetPosition),
+                            Some("reset"),
                         )
                         .clicked()
                         {
-                            editor_action = Some(EditorAction::CreateGroup {
-                                member: Some(id.clone()),
-                                // The group replaces this HUD's window slot.
-                                // Its origin must therefore be the HUD rect's
-                                // top-left, not the context-menu pointer.
-                                position: frame.body.rect.min,
+                            editor_action = Some(EditorAction::ResetTopLevelPosition {
+                                key: item.key.clone(),
+                                position: reset_position,
                             });
+                            ui.close();
+                        }
+                        if context_menu_button(
+                            ui,
+                            deskhud_ui::i18n::t(prefs.locale, MessageKey::HudAdjustResetSize),
+                            Some("reset"),
+                        )
+                        .clicked()
+                        {
+                            editor_action = Some(EditorAction::ResetHudSize(id.clone()));
+                            ui.close();
+                        }
+                        crate::menu::embedded_menu_separator(ui);
+                        if context_menu_button(
+                            ui,
+                            deskhud_ui::i18n::t(
+                                prefs.locale,
+                                MessageKey::HudLayoutCloseInformation,
+                            ),
+                            Some("close"),
+                        )
+                        .clicked()
+                        {
+                            editor_action = Some(EditorAction::DisableHud(id.clone()));
                             ui.close();
                         }
                     }
                     HudLayoutTarget::Group(id) => {
+                        style_group_context_menu(ui, prefs.locale);
                         menu_changed |= draw_layout_options_menu(
                             ui,
                             &mut menu_snap_to_grid,
@@ -508,16 +674,28 @@ pub(super) fn draw(
                         crate::menu::embedded_menu_separator(ui);
                         if context_menu_button(
                             ui,
-                            deskhud_ui::i18n::t(prefs.locale, MessageKey::HudGroupEdit),
-                            Some("adjust-horizontal"),
+                            deskhud_ui::i18n::t(prefs.locale, MessageKey::HudAdjustResetPosition),
+                            Some("reset"),
                         )
                         .clicked()
                         {
-                            layout.selected = Some(item.key.clone());
-                            layout.adjust_open = true;
+                            editor_action = Some(EditorAction::ResetTopLevelPosition {
+                                key: item.key.clone(),
+                                position: reset_position,
+                            });
                             ui.close();
                         }
-                        crate::menu::embedded_menu_gap(ui);
+                        if context_menu_button(
+                            ui,
+                            deskhud_ui::i18n::t(prefs.locale, MessageKey::HudAdjustResetSize),
+                            Some("reset"),
+                        )
+                        .clicked()
+                        {
+                            editor_action = Some(EditorAction::ResetGroupSize(id.clone()));
+                            ui.close();
+                        }
+                        crate::menu::embedded_menu_separator(ui);
                         if context_menu_button(
                             ui,
                             deskhud_ui::i18n::t(prefs.locale, MessageKey::HudGroupDelete),
@@ -529,12 +707,7 @@ pub(super) fn draw(
                             ui.close();
                         }
                     }
-                }
-                if draw_finish_layout_context_menu(ui, prefs.locale) {
-                    finish_layout_requested = true;
-                    ui.close();
-                }
-            });
+                });
             if menu_changed {
                 layout.snap_to_grid = menu_snap_to_grid;
                 layout.lock_ratio = menu_lock_ratio;
@@ -553,7 +726,8 @@ pub(super) fn draw(
         {
             match &item.target {
                 HudLayoutTarget::Instance(id)
-                    if layout.active_hud_drag.is_none() && drag_response.drag_started() =>
+                    if layout.active_hud_drag.is_none()
+                        && drag_response.drag_started_by(egui::PointerButton::Primary) =>
                 {
                     editor_action = Some(EditorAction::BeginHudDrag {
                         member: id.clone(),
@@ -564,10 +738,11 @@ pub(super) fn draw(
                         initial_delta: drag_response.drag_delta(),
                     });
                 }
-                HudLayoutTarget::Group(_)
-                    if drag_response.dragged() || drag_response.drag_stopped() =>
+                HudLayoutTarget::Group(group_id)
+                    if drag_response.dragged_by(egui::PointerButton::Primary)
+                        || drag_response.drag_stopped_by(egui::PointerButton::Primary) =>
                 {
-                    if drag_response.dragged() {
+                    if drag_response.dragged_by(egui::PointerButton::Primary) {
                         // `Response::drag_delta()` is cumulative. Applying it
                         // every frame accelerates the group and can skip past
                         // the activity edge, so use the pointer's frame delta.
@@ -577,17 +752,11 @@ pub(super) fn draw(
                                 clamp_hud_position(*position, frame.body.rect.size(), activity);
                         }
                     }
-                    // Snap once, after the pointer is released. Snapping on
-                    // every drag frame makes the group visibly fight the
-                    // pointer and causes unnecessary layout churn.
-                    if layout.snap_to_grid
-                        && drag_response.drag_stopped()
-                        && let Some(activity) = layout.activity_size
-                    {
-                        position.x = snap_coordinate(position.x, activity.x);
-                        position.y = snap_coordinate(position.y, activity.y);
-                        *position = clamp_hud_position(*position, frame.body.rect.size(), activity);
-                    }
+                    active_group_drag = Some((
+                        format!("group/{group_id}"),
+                        frame.body.rect.size(),
+                        drag_response.drag_stopped_by(egui::PointerButton::Primary),
+                    ));
                     changed = true;
                 }
                 _ => {}
@@ -689,6 +858,88 @@ pub(super) fn draw(
         ));
     }
 
+    // All overlays are available only after the item pass. Apply group
+    // alignment here so a group can attract to HUDs that are painted later
+    // in preference order as well as to those painted earlier.
+    if let Some((key, size, released)) = active_group_drag
+        && let Some(mut position) = layout.positions.get(&key).copied()
+    {
+        if released
+            && layout.snap_to_grid
+            && let Some(activity) = layout.activity_size
+        {
+            position.x = snap_coordinate(position.x, activity.x);
+            position.y = snap_coordinate(position.y, activity.y);
+        }
+        let alignment = alignment_snap_for_drag(
+            egui::Rect::from_min_size(position, size),
+            &editor_overlays,
+            &key,
+            layout.activity_size,
+            prefs,
+            layout.snap_to_grid,
+        );
+        if released {
+            position += alignment.delta;
+        } else {
+            alignment_guides = alignment;
+        }
+        if let Some(activity) = layout.activity_size {
+            position = clamp_hud_position(position, size, activity);
+        }
+        if layout.positions.get(&key).copied() != Some(position) {
+            layout.positions.insert(key, position);
+            changed = true;
+        }
+    }
+
+    // A dragged member is temporarily represented as a top-level HUD. Snap
+    // its screen rectangle against every other visible HUD/group before the
+    // drop target is evaluated, so the persisted group-local coordinates use
+    // the aligned position too.
+    if let Some(drag) = layout.active_hud_drag.as_ref() {
+        let key = format!("instance/{}", drag.instance_id.as_str());
+        let size = drag.size;
+        let mut position = drag.position;
+        if drag_released
+            && layout.snap_to_grid
+            && let Some(activity) = layout.activity_size
+        {
+            position.x = snap_coordinate(position.x, activity.x);
+            position.y = snap_coordinate(position.y, activity.y);
+        }
+        let alignment = alignment_snap_for_drag(
+            egui::Rect::from_min_size(position, size),
+            &editor_overlays,
+            &key,
+            layout.activity_size,
+            prefs,
+            layout.snap_to_grid,
+        );
+        if drag_released {
+            position += alignment.delta;
+        } else {
+            alignment_guides = alignment;
+        }
+        if let Some(activity) = layout.activity_size {
+            position = clamp_hud_position(position, size, activity);
+        }
+        if let Some(drag) = layout.active_hud_drag.as_mut() {
+            if drag.position != position {
+                changed = true;
+            }
+            drag.position = position;
+        }
+        layout.positions.insert(key, position);
+    }
+
+    if layout.layout_mode
+        && alignment_guides.is_active()
+        && let Some(activity) = layout.activity_size
+    {
+        draw_alignment_guides(ui, alignment_guides, activity);
+    }
+
     if let Some(action) = editor_action {
         changed |= apply_editor_action(action, layout, prefs, &editor_overlays);
     }
@@ -704,7 +955,7 @@ pub(super) fn draw(
                 .iter()
                 .any(|overlay| overlay.rect.contains(pointer))
         });
-        if canvas_response.drag_started()
+        if canvas_response.drag_started_by(egui::PointerButton::Primary)
             && pointer_pos.is_some_and(|pointer| preview_rect.contains(pointer))
             && !pointer_over_child
         {
@@ -713,7 +964,7 @@ pub(super) fn draw(
         if !ui.input(|input| input.pointer.primary_down()) {
             layout.root_dragging = false;
         }
-        if layout.root_dragging && canvas_response.dragged() {
+        if layout.root_dragging && canvas_response.dragged_by(egui::PointerButton::Primary) {
             let delta = root_drag_delta(
                 preview_rect,
                 ui.input(|input| input.pointer.delta()),
@@ -724,6 +975,21 @@ pub(super) fn draw(
                     *position += delta;
                 }
                 changed = true;
+            }
+        }
+        if root_drag_released && layout.snap_to_grid {
+            // The preview is a virtual root group. Snap that root rectangle,
+            // not each child independently, so the internal HUD geometry is
+            // preserved while the whole preview lands on the grid.
+            let preview_rect = preview_bounds(layout, items).expand(HUD_PADDING);
+            if let Some(activity) = layout.activity_size {
+                let delta = root_grid_snap_delta(preview_rect, activity);
+                if delta != egui::Vec2::ZERO {
+                    for position in layout.positions.values_mut() {
+                        *position += delta;
+                    }
+                    changed = true;
+                }
             }
         }
     }
@@ -773,11 +1039,17 @@ pub(super) fn draw(
         }
     }
     if drag_released && let Some((_, _, target_group_id, _)) = active_drop {
-        changed |= finish_hud_drag(layout, prefs, &editor_overlays, target_group_id.as_deref());
+        changed |= finish_hud_drag_after_release(
+            layout,
+            prefs,
+            &editor_overlays,
+            target_group_id.as_deref(),
+        );
     }
 
     if layout.layout_mode {
         draw_editor_overlays(ui, time, &editor_overlays, layout.selected.as_deref());
+        changed |= tree_panels::draw(ui, layout, registry, catalogs, prefs);
     }
 
     if layout.layout_mode {
@@ -832,6 +1104,7 @@ pub(super) fn draw(
     }
 
     layout.finish_layout_requested |= finish_layout_requested;
+    layout.discard_layout_requested |= discard_layout_requested;
 
     if !bounds.is_positive() {
         return DrawResult {
@@ -948,6 +1221,111 @@ fn clamp_hud_position(position: egui::Pos2, size: egui::Vec2, activity: egui::Ve
     )
 }
 
+/// Returns the translation needed to align the moving rectangle's nearest
+/// edge/centre with another visible HUD or group. X and Y are solved
+/// independently, allowing corner, edge, and centre alignment in one drag.
+fn alignment_snap(
+    moving: egui::Rect,
+    overlays: &[EditorOverlay],
+    moving_key: &str,
+    activity_size: Option<egui::Vec2>,
+    prefs: &UiPreferences,
+) -> AlignmentSnap {
+    let moving_group_id = moving_key.strip_prefix("group/");
+    let moving_x = [moving.left(), moving.center().x, moving.right()];
+    let moving_y = [moving.top(), moving.center().y, moving.bottom()];
+    let mut target_x = Vec::new();
+    let mut target_y = Vec::new();
+
+    // The layout window is a virtual root: it contributes only its centre
+    // lines, while concrete HUD/group rectangles contribute all three
+    // edge/centre lines below.
+    if let Some(activity) = activity_size {
+        target_x.push(activity.x * 0.5);
+        target_y.push(activity.y * 0.5);
+    }
+
+    for overlay in overlays {
+        // The compact layout preview is a virtual root, not an alignable HUD.
+        // Only concrete instance/group overlays may provide alignment lines.
+        if !is_alignable_overlay(&overlay.key)
+            || overlay.key == moving_key
+            || moving_group_id.is_some_and(|group_id| {
+                overlay
+                    .key
+                    .strip_prefix("instance/")
+                    .is_some_and(|instance_id| {
+                        prefs.hud.groups.iter().any(|group| {
+                            group.id == group_id
+                                && group
+                                    .children
+                                    .iter()
+                                    .any(|child| child.as_str() == instance_id)
+                        })
+                    })
+            })
+        {
+            continue;
+        }
+        target_x.extend([
+            overlay.rect.left(),
+            overlay.rect.center().x,
+            overlay.rect.right(),
+        ]);
+        target_y.extend([
+            overlay.rect.top(),
+            overlay.rect.center().y,
+            overlay.rect.bottom(),
+        ]);
+    }
+
+    let x = nearest_alignment(&moving_x, &target_x);
+    let y = nearest_alignment(&moving_y, &target_y);
+    AlignmentSnap {
+        delta: egui::vec2(
+            x.map_or(0.0, |(delta, _)| delta),
+            y.map_or(0.0, |(delta, _)| delta),
+        ),
+        vertical: x.map(|(_, target)| target),
+        horizontal: y.map(|(_, target)| target),
+    }
+}
+
+fn is_alignable_overlay(key: &str) -> bool {
+    key.starts_with("instance/") || key.starts_with("group/")
+}
+
+fn alignment_snap_for_drag(
+    moving: egui::Rect,
+    overlays: &[EditorOverlay],
+    moving_key: &str,
+    activity_size: Option<egui::Vec2>,
+    prefs: &UiPreferences,
+    snap_to_grid: bool,
+) -> AlignmentSnap {
+    if snap_to_grid {
+        AlignmentSnap::default()
+    } else {
+        alignment_snap(moving, overlays, moving_key, activity_size, prefs)
+    }
+}
+
+fn nearest_alignment(moving: &[f32; 3], targets: &[f32]) -> Option<(f32, f32)> {
+    moving
+        .iter()
+        .flat_map(|moving| targets.iter().map(move |target| (target - moving, *target)))
+        .filter(|(delta, _)| delta.abs() <= ALIGNMENT_SNAP_DISTANCE)
+        .min_by(|(left, _), (right, _)| left.abs().total_cmp(&right.abs()))
+}
+
+fn root_grid_snap_delta(preview_rect: egui::Rect, activity: egui::Vec2) -> egui::Vec2 {
+    let desired = egui::vec2(
+        snap_coordinate(preview_rect.min.x, activity.x) - preview_rect.min.x,
+        snap_coordinate(preview_rect.min.y, activity.y) - preview_rect.min.y,
+    );
+    root_drag_delta(preview_rect, desired, Some(activity))
+}
+
 fn advance_hud_drag(layout: &mut LayoutState, delta: egui::Vec2) {
     let Some(drag) = layout.active_hud_drag.as_mut() else {
         return;
@@ -1034,11 +1412,30 @@ pub(super) fn finish_active_hud_drag_as_screen(
     finish_hud_drag(layout, prefs, &[], None)
 }
 
+fn finish_hud_drag_after_release(
+    layout: &mut LayoutState,
+    prefs: &mut UiPreferences,
+    overlays: &[EditorOverlay],
+    target_group_id: Option<&str>,
+) -> bool {
+    finish_hud_drag_inner(layout, prefs, overlays, target_group_id, false)
+}
+
 fn finish_hud_drag(
     layout: &mut LayoutState,
     prefs: &mut UiPreferences,
     overlays: &[EditorOverlay],
     target_group_id: Option<&str>,
+) -> bool {
+    finish_hud_drag_inner(layout, prefs, overlays, target_group_id, true)
+}
+
+fn finish_hud_drag_inner(
+    layout: &mut LayoutState,
+    prefs: &mut UiPreferences,
+    overlays: &[EditorOverlay],
+    target_group_id: Option<&str>,
+    snap_to_grid: bool,
 ) -> bool {
     let Some(drag) = layout.active_hud_drag.take() else {
         return false;
@@ -1065,7 +1462,7 @@ fn finish_hud_drag(
                 .find(|group| group.id == group_id)
         {
             let padding = effective_group_padding(group, group_rect.size());
-            let drop_position = if layout.snap_to_grid {
+            let drop_position = if snap_to_grid && layout.snap_to_grid {
                 let activity = layout.activity_size.unwrap_or(egui::vec2(1.0, 1.0));
                 egui::pos2(
                     layout::snap_coordinate(drag.position.x, activity.x),
@@ -1106,7 +1503,7 @@ fn finish_hud_drag(
     }
     let mut x = drag.position.x.max(0.0);
     let mut y = drag.position.y.max(0.0);
-    if layout.snap_to_grid {
+    if snap_to_grid && layout.snap_to_grid {
         x = layout::snap_coordinate(x, activity.x);
         y = layout::snap_coordinate(y, activity.y);
     }
@@ -1170,6 +1567,86 @@ fn apply_editor_action(
             }
             changed
         }
+        EditorAction::ResetTopLevelPosition { key, position } => {
+            layout.positions.insert(key.clone(), position);
+            sync_absolute_positions(layout);
+            layout.adjustment_reset_sizes.remove(&key);
+            layout.window_revision = layout.window_revision.wrapping_add(1);
+            true
+        }
+        EditorAction::ResetMemberPosition(member) => {
+            let Some(instance) = prefs
+                .hud
+                .instances
+                .iter_mut()
+                .find(|instance| instance.id == member)
+            else {
+                return false;
+            };
+            instance.layout.x = 0.0;
+            instance.layout.y = 0.0;
+            layout
+                .adjustment_reset_sizes
+                .remove(&format!("instance/{}", member.as_str()));
+            layout.window_revision = layout.window_revision.wrapping_add(1);
+            true
+        }
+        EditorAction::ResetHudSize(instance_id) => {
+            let Some(instance) = prefs
+                .hud
+                .instances
+                .iter_mut()
+                .find(|instance| instance.id == instance_id)
+            else {
+                return false;
+            };
+            instance.layout.width = 1.0;
+            instance.layout.height = 1.0;
+            layout
+                .adjustment_reset_sizes
+                .remove(&format!("instance/{}", instance_id.as_str()));
+            layout.window_revision = layout.window_revision.wrapping_add(1);
+            true
+        }
+        EditorAction::ResetGroupSize(id) => {
+            let Some(group) = prefs.hud.groups.iter_mut().find(|group| group.id == id) else {
+                return false;
+            };
+            // A zero group size means content-sized automatic layout.
+            group.layout.width = 0.0;
+            group.layout.height = 0.0;
+            layout.transient_group_sizes.remove(&id);
+            layout.adjustment_reset_sizes.remove(&format!("group/{id}"));
+            layout.window_revision = layout.window_revision.wrapping_add(1);
+            true
+        }
+        EditorAction::DisableHud(instance_id) => {
+            let Some(instance) = prefs
+                .hud
+                .instances
+                .iter_mut()
+                .find(|instance| instance.id == instance_id)
+            else {
+                return false;
+            };
+            if !instance.enabled {
+                return false;
+            }
+            instance.enabled = false;
+            let key = format!("instance/{}", instance_id.as_str());
+            layout.positions.remove(&key);
+            layout.absolute_positions.remove(&key);
+            if layout.selected.as_deref() == Some(key.as_str()) {
+                layout.selected = None;
+                layout.adjustment_selection = None;
+                layout.adjust_open = false;
+                layout.hud_adjust_open = false;
+                layout.hud_adjust_key = None;
+                layout.shadow_open = false;
+            }
+            layout.window_revision = layout.window_revision.wrapping_add(1);
+            true
+        }
         EditorAction::BeginHudDrag {
             member,
             source_group_id,
@@ -1230,35 +1707,6 @@ fn apply_editor_action(
                 layout.window_revision = layout.window_revision.wrapping_add(1);
             }
             detached
-        }
-        EditorAction::RemoveMember { member, position } => {
-            let Some(_activity) = layout.activity_size else {
-                return false;
-            };
-            let display = prefs
-                .hud
-                .groups
-                .iter()
-                .find(|group| group.children.contains(&member))
-                .map(|group| group.layout.display.clone())
-                .unwrap_or_else(|| "primary".to_owned());
-            if let Some(instance) = prefs
-                .hud
-                .instances
-                .iter_mut()
-                .find(|instance| instance.id == member)
-            {
-                instance.layout.display = display;
-            }
-            let changed = prefs.hud.remove_instance_from_group(&member);
-            if changed {
-                let key = format!("instance/{}", member.as_str());
-                layout.positions.insert(key.clone(), position);
-                sync_absolute_positions(layout);
-                layout.selected = Some(key);
-                layout.window_revision = layout.window_revision.wrapping_add(1);
-            }
-            changed
         }
     }
 }
@@ -1443,6 +1891,254 @@ mod tests {
         let first = prefs.hud.instances[0].id.clone();
         let second = prefs.hud.instances[1].id.clone();
         (prefs, first, second)
+    }
+
+    #[test]
+    fn context_menus_keep_the_requested_actions_and_order() {
+        assert_eq!(
+            CANVAS_CONTEXT_MENU_KEYS,
+            &[
+                MessageKey::HudLayoutInformationTree,
+                MessageKey::HudLayoutActiveTree,
+                MessageKey::HudAdjustSnapGrid,
+                MessageKey::HudAdjustLockRatio,
+                MessageKey::HudGroupCreate,
+                MessageKey::HudLayoutDone,
+                MessageKey::HudLayoutCancel,
+            ]
+        );
+        assert_eq!(
+            GROUP_CONTEXT_MENU_KEYS,
+            &[
+                MessageKey::HudAdjustSnapGrid,
+                MessageKey::HudAdjustLockRatio,
+                MessageKey::HudAdjustResetPosition,
+                MessageKey::HudAdjustResetSize,
+                MessageKey::HudGroupDelete,
+            ]
+        );
+        assert_eq!(
+            HUD_CONTEXT_MENU_KEYS,
+            &[
+                MessageKey::HudAdjustSnapGrid,
+                MessageKey::HudAdjustLockRatio,
+                MessageKey::HudAdjustResetPosition,
+                MessageKey::HudAdjustResetSize,
+                MessageKey::HudLayoutCloseInformation,
+            ]
+        );
+    }
+
+    #[test]
+    fn context_menu_reset_and_close_actions_update_the_selected_records() {
+        let (mut prefs, first, _) = prefs_with_instances();
+        let group_id = prefs.hud.create_group("Group");
+        prefs.hud.instances[0].layout.x = 24.0;
+        prefs.hud.instances[0].layout.y = 36.0;
+        prefs.hud.instances[0].layout.width = 2.0;
+        prefs.hud.instances[0].layout.height = 2.5;
+        prefs.hud.groups[0].layout.width = 400.0;
+        prefs.hud.groups[0].layout.height = 300.0;
+        let mut layout = LayoutState::default();
+        let key = format!("instance/{}", first.as_str());
+        layout.positions.insert(key.clone(), egui::pos2(90.0, 80.0));
+
+        assert!(apply_editor_action(
+            EditorAction::ResetTopLevelPosition {
+                key: key.clone(),
+                position: egui::pos2(8.0, 8.0),
+            },
+            &mut layout,
+            &mut prefs,
+            &[],
+        ));
+        assert_eq!(layout.positions[&key], egui::pos2(8.0, 8.0));
+        assert!(apply_editor_action(
+            EditorAction::ResetHudSize(first.clone()),
+            &mut layout,
+            &mut prefs,
+            &[],
+        ));
+        assert_eq!(prefs.hud.instances[0].layout.width, 1.0);
+        assert_eq!(prefs.hud.instances[0].layout.height, 1.0);
+        assert!(apply_editor_action(
+            EditorAction::ResetGroupSize(group_id),
+            &mut layout,
+            &mut prefs,
+            &[],
+        ));
+        assert_eq!(prefs.hud.groups[0].layout.width, 0.0);
+        assert_eq!(prefs.hud.groups[0].layout.height, 0.0);
+        assert!(apply_editor_action(
+            EditorAction::DisableHud(first),
+            &mut layout,
+            &mut prefs,
+            &[],
+        ));
+        assert!(!prefs.hud.instances[0].enabled);
+    }
+
+    #[test]
+    fn adjustment_panels_use_the_shared_editor_size_and_stack_step() {
+        let layout = LayoutState {
+            adjustment_order: vec!["hud-adjust", "group-adjust"],
+            ..LayoutState::default()
+        };
+
+        assert_eq!(
+            adjustment_panel_top(&layout, "hud-adjust"),
+            EDITOR_PANEL_TOP
+        );
+        assert_eq!(
+            adjustment_panel_top(&layout, "group-adjust"),
+            EDITOR_PANEL_TOP + EDITOR_PANEL_HEIGHT + EDITOR_PANEL_GAP
+        );
+    }
+
+    #[test]
+    fn alignment_snap_matches_edges_and_centres_independently() {
+        let overlays = [EditorOverlay {
+            key: "instance/target".to_owned(),
+            rect: egui::Rect::from_min_max(egui::pos2(100.0, 100.0), egui::pos2(200.0, 200.0)),
+            layer_id: egui::LayerId::background(),
+            corner_radius: 0.0,
+        }];
+        let moving = egui::Rect::from_min_size(egui::pos2(123.0, 203.0), egui::vec2(40.0, 40.0));
+        let delta = alignment_snap(
+            moving,
+            &overlays,
+            "instance/moving",
+            None,
+            &UiPreferences::default(),
+        )
+        .delta;
+
+        // The moving centre is 7 px from the target centre, while its top is
+        // 3 px below the target bottom.
+        assert_eq!(delta, egui::vec2(7.0, -3.0));
+        let snap = alignment_snap(
+            moving,
+            &overlays,
+            "instance/moving",
+            None,
+            &UiPreferences::default(),
+        );
+        assert_eq!(snap.vertical, Some(150.0));
+        assert_eq!(snap.horizontal, Some(200.0));
+    }
+
+    #[test]
+    fn alignment_snap_does_not_use_a_groups_own_members() {
+        let (mut prefs, first, _) = prefs_with_instances();
+        let group_id = prefs.hud.create_group("Group");
+        prefs.hud.add_instance_to_group(&group_id, &first);
+        let overlays = [EditorOverlay {
+            key: format!("instance/{}", first.as_str()),
+            rect: egui::Rect::from_min_max(egui::pos2(100.0, 100.0), egui::pos2(200.0, 200.0)),
+            layer_id: egui::LayerId::background(),
+            corner_radius: 0.0,
+        }];
+
+        assert_eq!(
+            alignment_snap(
+                egui::Rect::from_min_size(egui::pos2(103.0, 103.0), egui::vec2(40.0, 40.0)),
+                &overlays,
+                &format!("group/{group_id}"),
+                None,
+                &prefs,
+            )
+            .delta,
+            egui::Vec2::ZERO
+        );
+    }
+
+    #[test]
+    fn alignment_snap_ignores_the_virtual_layout_preview() {
+        let overlays = [EditorOverlay {
+            key: "layout-preview".to_owned(),
+            rect: egui::Rect::from_min_max(egui::pos2(100.0, 100.0), egui::pos2(200.0, 200.0)),
+            layer_id: egui::LayerId::background(),
+            corner_radius: 0.0,
+        }];
+
+        let snap = alignment_snap(
+            egui::Rect::from_min_size(egui::pos2(203.0, 203.0), egui::vec2(40.0, 40.0)),
+            &overlays,
+            "instance/moving",
+            None,
+            &UiPreferences::default(),
+        );
+        assert!(!snap.is_active());
+        assert_eq!(snap.delta, egui::Vec2::ZERO);
+    }
+
+    #[test]
+    fn alignment_snap_uses_the_layout_window_centre() {
+        let moving = egui::Rect::from_min_size(egui::pos2(303.0, 223.0), egui::vec2(40.0, 40.0));
+        let snap = alignment_snap(
+            moving,
+            &[],
+            "instance/moving",
+            Some(egui::vec2(640.0, 480.0)),
+            &UiPreferences::default(),
+        );
+
+        assert_eq!(snap.delta, egui::vec2(-3.0, -3.0));
+        assert_eq!(snap.vertical, Some(320.0));
+        assert_eq!(snap.horizontal, Some(240.0));
+    }
+
+    #[test]
+    fn grouped_hud_can_align_to_its_own_group_edges_and_centres() {
+        let (mut prefs, first, _) = prefs_with_instances();
+        let group_id = prefs.hud.create_group("Group");
+        prefs.hud.add_instance_to_group(&group_id, &first);
+        let overlays = [EditorOverlay {
+            key: format!("group/{group_id}"),
+            rect: egui::Rect::from_min_max(egui::pos2(100.0, 100.0), egui::pos2(200.0, 200.0)),
+            layer_id: egui::LayerId::background(),
+            corner_radius: 0.0,
+        }];
+
+        let snap = alignment_snap(
+            egui::Rect::from_min_size(egui::pos2(203.0, 203.0), egui::vec2(40.0, 40.0)),
+            &overlays,
+            &format!("instance/{}", first.as_str()),
+            None,
+            &prefs,
+        );
+        assert_eq!(snap.delta, egui::vec2(-3.0, -3.0));
+        assert_eq!(snap.vertical, Some(200.0));
+        assert_eq!(snap.horizontal, Some(200.0));
+    }
+
+    #[test]
+    fn grid_snap_disables_hud_alignment_guides() {
+        let overlays = [EditorOverlay {
+            key: "instance/target".to_owned(),
+            rect: egui::Rect::from_min_max(egui::pos2(100.0, 100.0), egui::pos2(200.0, 200.0)),
+            layer_id: egui::LayerId::background(),
+            corner_radius: 0.0,
+        }];
+        let snap = alignment_snap_for_drag(
+            egui::Rect::from_min_size(egui::pos2(123.0, 203.0), egui::vec2(40.0, 40.0)),
+            &overlays,
+            "instance/moving",
+            None,
+            &UiPreferences::default(),
+            true,
+        );
+        assert!(!snap.is_active());
+        assert_eq!(snap.delta, egui::Vec2::ZERO);
+    }
+
+    #[test]
+    fn root_grid_snap_aligns_the_preview_as_one_rectangle() {
+        let preview = egui::Rect::from_min_size(egui::pos2(45.0, 77.0), egui::vec2(240.0, 120.0));
+        assert_eq!(
+            root_grid_snap_delta(preview, egui::vec2(640.0, 480.0)),
+            egui::vec2(-13.0, -13.0)
+        );
     }
 
     #[test]

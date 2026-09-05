@@ -191,10 +191,10 @@ msgid "HudLayoutEditingHint"
 msgstr "布局编辑已打开：可将 HUD 拖入分组，或右击创建分组"
 
 msgid "HudLayoutDone"
-msgstr "应用"
+msgstr "保存并退出"
 
 msgid "HudLayoutCancel"
-msgstr "取消"
+msgstr "放弃并退出"
 
 msgid "HudLayoutHint"
 msgstr "点击选中 · 拖动调整 · 右击管理分组"
@@ -402,6 +402,27 @@ msgstr "末端"
 
 msgid "HudGroupRemoveMember"
 msgstr "移出分组"
+
+msgid "HudLayoutInformationTree"
+msgstr "信息列表"
+
+msgid "HudLayoutActiveTree"
+msgstr "实例和组"
+
+msgid "HudLayoutUngrouped"
+msgstr "未分组"
+
+msgid "HudLayoutActiveEmpty"
+msgstr "没有已开启的实例或组"
+
+msgid "HudLayoutOpenInformationTree"
+msgstr "打开信息列表"
+
+msgid "HudLayoutOpenActiveTree"
+msgstr "打开实例和组窗口"
+
+msgid "HudLayoutCloseInformation"
+msgstr "关闭信息"
 
 msgid "SettingsTopmost"
 msgstr "置顶"

@@ -92,15 +92,9 @@ pub(super) fn draw_adjust_window(
         .activity_size
         .map(|size| (size.y - 64.0).max(360.0))
         .unwrap_or(720.0);
-    // Default to the space the current editor needs, but keep first-open
-    // windows compact. `max_height` below remains the activity-area limit,
-    // so users can still manually expand a window past 500 px.
-    let content_height: f32 = if matches!(item.target, HudLayoutTarget::Group(_)) {
-        390.0
-    } else {
-        620.0
-    };
-    let default_panel_height = content_height.min(500.0).min(max_panel_height);
+    // All four layout tools share one default size. Long forms remain
+    // scrollable, while the two left and two right columns align visually.
+    let default_panel_height = EDITOR_PANEL_HEIGHT.min(max_panel_height);
 
     let title_key = if matches!(item.target, HudLayoutTarget::Group(_)) {
         MessageKey::HudGroupAdjustTitle
@@ -121,14 +115,15 @@ pub(super) fn draw_adjust_window(
                 .activity_size
                 .map_or(egui::pos2(24.0, panel_top), |size| {
                     // Keep adjustment windows in the same right-aligned column.
-                    let right = (size.x - ADJUST_PANEL_WIDTH - 24.0).max(24.0);
+                    let right = (size.x - EDITOR_PANEL_WIDTH - EDITOR_PANEL_LEFT_MARGIN)
+                        .max(EDITOR_PANEL_LEFT_MARGIN);
                     egui::pos2(right, panel_top)
                 }),
         )
-        .default_width(ADJUST_PANEL_WIDTH)
+        .default_width(EDITOR_PANEL_WIDTH)
         .default_height(default_panel_height)
-        .min_width(ADJUST_PANEL_WIDTH)
-        .max_width(ADJUST_PANEL_WIDTH)
+        .min_width(EDITOR_PANEL_WIDTH)
+        .max_width(EDITOR_PANEL_WIDTH)
         .min_height(320.0)
         .max_height(max_panel_height)
         .resizable([false, true])
@@ -323,7 +318,7 @@ pub(super) fn draw_adjust_window(
 /// Returns the default reset position in the coordinate system used by the
 /// active adjustment editor. Top-level slots are projected from the persisted
 /// HUD window screen position; grouped members are relative to their group.
-fn adjustment_default_position(
+pub(super) fn adjustment_default_position(
     layout: &LayoutState,
     prefs: &UiPreferences,
     items: &[HudRenderItem],

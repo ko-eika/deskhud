@@ -1,6 +1,6 @@
 id = "hud.deskhud.system"
 kind = "plugin"
-version = "0.9.8"
+version = "0.9.9"
 engine = "0.9"
 api_version = 4
 display_name = "System Monitor"

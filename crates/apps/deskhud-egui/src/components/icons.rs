@@ -14,6 +14,8 @@ const LAYERS_SUBTRACT: &[u8] = include_bytes!("../../../../../assets/svg/layers-
 const CREATE_FILLED: &[u8] = include_bytes!("../../../../../assets/svg/create-filled.svg");
 const CHECK: &[u8] = include_bytes!("../../../../../assets/svg/check.svg");
 const CLOSE: &[u8] = include_bytes!("../../../../../assets/svg/close.svg");
+const CIRCLE_CHECK: &[u8] = include_bytes!("../../../../../assets/svg/circle-check.svg");
+const CLOSE_CIRCLE: &[u8] = include_bytes!("../../../../../assets/svg/close-circle.svg");
 const ANALYTICS: &[u8] = include_bytes!("../../../../../assets/svg/analytics.svg");
 const PUZZLE: &[u8] = include_bytes!("../../../../../assets/svg/puzzle.svg");
 const WINDOW: &[u8] = include_bytes!("../../../../../assets/svg/window.svg");
@@ -51,6 +53,8 @@ fn texture(ui: &Ui, name: &'static str) -> Option<TextureHandle> {
         "create-filled" => CREATE_FILLED,
         "check" => CHECK,
         "close" => CLOSE,
+        "circle-check" => CIRCLE_CHECK,
+        "close-circle" => CLOSE_CIRCLE,
         "analytics" => ANALYTICS,
         "puzzle" => PUZZLE,
         "window" => WINDOW,

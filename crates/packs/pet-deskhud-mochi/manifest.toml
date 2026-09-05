@@ -1,7 +1,7 @@
 id = "pet.deskhud.mochi"
 kind = "pet"
 load = "builtin"
-version = "0.9.8"
+version = "0.9.9"
 engine = "0.9"
 api_version = 4
 display_name = "Mochi"

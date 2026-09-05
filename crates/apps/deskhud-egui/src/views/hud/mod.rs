@@ -10,7 +10,7 @@ use std::{collections::HashMap, time::Duration};
 use deskhud_engine::{
     EngineRegistry, HudFrame, HudInstanceId, HudLogicalRect, HudLogicalSize, HudSourceId, HudVisual,
 };
-use deskhud_ui::{HudInstanceConfig, HudSlotLayout, UiPreferences};
+use deskhud_ui::{CatalogStore, HudInstanceConfig, HudSlotLayout, UiPreferences};
 use egui::{Context, RawInput};
 
 use crate::views::ViewOutput;
@@ -27,6 +27,9 @@ pub(crate) struct LayoutState {
     /// Persisted slots are converted to/from these coordinates only when
     /// entering or leaving layout mode.
     pub(crate) absolute_positions: HashMap<String, egui::Pos2>,
+    /// Exact rectangles painted in the most recent layout frame. These are
+    /// the WYSIWYG source used when committing a layout session.
+    pub(crate) rendered_rects: HashMap<String, egui::Rect>,
     /// Global physical pixel coordinate of the expanded layout canvas origin.
     pub(crate) activity_origin: Option<egui::Pos2>,
     /// Scale used to project physical screen pixels into the egui canvas.
@@ -45,12 +48,22 @@ pub(crate) struct LayoutState {
     pub(crate) layout_mode: bool,
     /// The in-canvas completion action requests the same transition as Escape.
     pub(crate) finish_layout_requested: bool,
+    /// The canvas menu can close the editor while restoring its entry snapshot.
+    pub(crate) discard_layout_requested: bool,
     /// 当前显示器活动区域的逻辑尺寸。
     pub(crate) activity_size: Option<egui::Vec2>,
     /// 是否等待下一帧切回紧凑窗口尺寸。
     pub(crate) compact_pending: bool,
     /// 当前高亮的 HUD 或组；右侧调节窗口绑定到此条目。
     pub(crate) selected: Option<String>,
+    /// Whether the plugin/HUD switch tree is visible in this layout session.
+    pub(crate) information_tree_open: bool,
+    /// Whether the enabled instance/group navigation tree is visible.
+    pub(crate) active_tree_open: bool,
+    /// Tree panels in their current top-to-bottom opening order.
+    pub(crate) tree_panel_order: Vec<&'static str>,
+    /// Recreates tree windows when their ordered column changes.
+    pub(crate) tree_window_revision: u64,
     /// Selection that the adjustment panels were last synchronized to.
     pub(crate) adjustment_selection: Option<String>,
     /// Adjustment panel kinds in the order in which they were opened.
@@ -537,6 +550,8 @@ pub(crate) fn run(
     raw_input: RawInput,
     layout: &mut LayoutState,
     items: &[HudRenderItem],
+    registry: &EngineRegistry,
+    catalogs: &CatalogStore,
     prefs: &mut UiPreferences,
 ) -> ViewOutput {
     let mut content_size = [320.0, 180.0];
@@ -548,7 +563,7 @@ pub(crate) fn run(
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::TRANSPARENT))
             .show(ctx, |ui| {
-                let result = drawing::draw(ui, time, layout, items, prefs);
+                let result = drawing::draw(ui, time, layout, items, registry, catalogs, prefs);
                 content_size = result.size;
                 move_by = result.move_by;
                 changed = result.changed;

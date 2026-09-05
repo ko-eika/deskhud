@@ -191,10 +191,10 @@ msgid "HudLayoutEditingHint"
 msgstr "Layout editor is open: drag HUDs into groups or right-click to create a group"
 
 msgid "HudLayoutDone"
-msgstr "Apply"
+msgstr "Save and exit"
 
 msgid "HudLayoutCancel"
-msgstr "Cancel"
+msgstr "Discard and exit"
 
 msgid "HudLayoutHint"
 msgstr "Click to select · drag to move · right-click for group actions"
@@ -402,6 +402,27 @@ msgstr "End"
 
 msgid "HudGroupRemoveMember"
 msgstr "Remove from group"
+
+msgid "HudLayoutInformationTree"
+msgstr "Information list"
+
+msgid "HudLayoutActiveTree"
+msgstr "Instances and groups"
+
+msgid "HudLayoutUngrouped"
+msgstr "Ungrouped"
+
+msgid "HudLayoutActiveEmpty"
+msgstr "No enabled instances or groups"
+
+msgid "HudLayoutOpenInformationTree"
+msgstr "Open information list"
+
+msgid "HudLayoutOpenActiveTree"
+msgstr "Open instances and groups"
+
+msgid "HudLayoutCloseInformation"
+msgstr "Close information"
 
 msgid "SettingsTopmost"
 msgstr "Keep on top"

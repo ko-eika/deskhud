@@ -149,9 +149,9 @@ pub enum MessageKey {
     HudLayoutEdit,
     /// 布局编辑中提示。
     HudLayoutEditingHint,
-    /// 应用 HUD 布局。
+    /// 保存 HUD 布局并退出。
     HudLayoutDone,
-    /// 取消 HUD 布局。
+    /// 放弃 HUD 布局改动并退出。
     HudLayoutCancel,
     /// 布局工具条提示。
     HudLayoutHint,
@@ -291,6 +291,20 @@ pub enum MessageKey {
     HudGroupAlignmentEnd,
     /// Remove a HUD member from its group.
     HudGroupRemoveMember,
+    /// Layout editor tree containing plugin and HUD switches.
+    HudLayoutInformationTree,
+    /// Layout editor tree containing enabled instances and groups.
+    HudLayoutActiveTree,
+    /// Root row for enabled instances that do not belong to a group.
+    HudLayoutUngrouped,
+    /// Empty state for the enabled instance and group tree.
+    HudLayoutActiveEmpty,
+    /// Context-menu action that opens the HUD information tree.
+    HudLayoutOpenInformationTree,
+    /// Context-menu action that opens the enabled instance/group tree.
+    HudLayoutOpenActiveTree,
+    /// Context-menu action that disables the selected HUD instance.
+    HudLayoutCloseInformation,
     /// 右键：插件布局。
     MenuHudLayout,
     /// 右键：插件窗口层级。
@@ -464,6 +478,13 @@ impl MessageKey {
         Self::HudGroupAlignmentCenter,
         Self::HudGroupAlignmentEnd,
         Self::HudGroupRemoveMember,
+        Self::HudLayoutInformationTree,
+        Self::HudLayoutActiveTree,
+        Self::HudLayoutUngrouped,
+        Self::HudLayoutActiveEmpty,
+        Self::HudLayoutOpenInformationTree,
+        Self::HudLayoutOpenActiveTree,
+        Self::HudLayoutCloseInformation,
         Self::MenuHudLayout,
         Self::MenuPluginLayer,
         Self::MenuLayerTop,

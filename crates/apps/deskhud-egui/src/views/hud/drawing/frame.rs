@@ -8,6 +8,7 @@ use deskhud_engine::{HudVisual, ThemePalette};
 
 pub(super) struct FrameResponse {
     pub(super) body: egui::Response,
+    pub(super) context_response: egui::Response,
     pub(super) group_drag: Option<egui::Response>,
     pub(super) resize_drag: Option<ResizeDrag>,
     pub(super) resize_started: bool,
@@ -18,6 +19,7 @@ pub(super) struct FrameResponse {
 pub(super) struct MemberResponse {
     pub(super) instance_id: deskhud_engine::HudInstanceId,
     pub(super) response: egui::Response,
+    pub(super) context_response: egui::Response,
     pub(super) rect: egui::Rect,
     pub(super) corner_radius: f32,
     pub(super) resize_drag: Option<ResizeDrag>,
@@ -586,16 +588,19 @@ pub(super) fn draw_frame(
             let response = ui.interact(
                 child_rect,
                 ui.make_persistent_id(("hud-group-member", layer.instance_id.as_str())),
-                egui::Sense::drag(),
+                egui::Sense::click_and_drag(),
             );
-            let (resize_drag, _resize_started) = hud_resize_interaction(
+            let (resize_drag, _resize_started, resize_response) = hud_resize_interaction(
                 ui,
                 &format!("hud-member/{}", layer.instance_id.as_str()),
                 child_rect,
             );
+            let context_response =
+                resize_response.map_or_else(|| response.clone(), |resize| response.union(resize));
             member_responses.push(MemberResponse {
                 instance_id: layer.instance_id.clone(),
                 response,
+                context_response,
                 rect: child_rect,
                 corner_radius: appearance.corner_radius,
                 resize_drag,
@@ -603,13 +608,16 @@ pub(super) fn draw_frame(
             });
         }
     }
-    let (resize_drag, resize_started) = if custom_resize {
+    let (resize_drag, resize_started, resize_response) = if custom_resize {
         hud_resize_interaction(ui, &item.key, rect)
     } else {
-        (None, false)
+        (None, false, None)
     };
+    let context_response =
+        resize_response.map_or_else(|| response.clone(), |resize| response.union(resize));
     FrameResponse {
         body: response,
+        context_response,
         group_drag: None,
         resize_drag,
         resize_started,
@@ -622,7 +630,7 @@ fn hud_resize_interaction(
     ui: &mut egui::Ui,
     key: &str,
     rect: egui::Rect,
-) -> (Option<ResizeDrag>, bool) {
+) -> (Option<ResizeDrag>, bool, Option<egui::Response>) {
     let edge = RESIZE_EDGE_GRAB
         .min(rect.width() * 0.25)
         .min(rect.height() * 0.25);
@@ -745,16 +753,17 @@ fn hud_resize_interaction(
 
     let mut drag = None;
     let mut started = false;
+    let mut context_response: Option<egui::Response> = None;
     for (name, hit_rect, edges, cursor) in sides.into_iter().chain(corners) {
         let response = ui
             .interact(
                 hit_rect,
                 ui.make_persistent_id(("hud-resize", key, name)),
-                egui::Sense::drag(),
+                egui::Sense::click_and_drag(),
             )
             .on_hover_cursor(cursor);
-        started |= response.drag_started();
-        if response.dragged() {
+        started |= response.drag_started_by(egui::PointerButton::Primary);
+        if response.dragged_by(egui::PointerButton::Primary) {
             drag = Some(ResizeDrag {
                 edges,
                 // The stored geometry already contains every previous frame
@@ -764,8 +773,12 @@ fn hud_resize_interaction(
                 delta: ui.input(|input| input.pointer.delta()),
             });
         }
+        context_response = Some(match context_response {
+            Some(combined) => combined.union(response),
+            None => response,
+        });
     }
-    (drag, started)
+    (drag, started, context_response)
 }
 
 #[allow(clippy::too_many_arguments)]

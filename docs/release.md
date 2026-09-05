@@ -12,6 +12,13 @@ DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布
 2. [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) 中的 version 徽章
 3. （可选）`CHANGELOG` / Release 说明正文
 
+### 0.9.9 变更摘要
+
+- 为 HUD 布局编辑器增加信息树和活动树面板，集中查看插件、HUD 实例、组及启用状态。
+- 增加对齐辅助线与吸附、位置/尺寸重置、单项 HUD 关闭，以及更明确的右键上下文操作。
+- 布局会话支持“应用并退出”和“放弃并退出”，并修正 Escape、关闭窗口和异步移动时的布局提交、恢复与窗口几何计算。
+- 内置包同步升至 `0.9.9`；继续保持每屏一个 HUD 合成窗、`engine = "0.9"` 与 `api_version = 4` 不变。
+
 ### 0.9.8 变更摘要
 
 - 新增官方 `hud.deskhud.system` 原生 HUD 插件，提供系统 CPU、系统内存、DeskHud 进程和指定应用进程四类独立 HUD。

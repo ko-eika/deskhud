@@ -104,6 +104,23 @@ pub(super) fn draw_preview_border(ui: &egui::Ui, rect: egui::Rect) {
     );
 }
 
+/// Draws the alignment lines for a dragged HUD/group. The moving rectangle is
+/// deliberately not changed here; the actual snap is committed on release.
+pub(super) fn draw_alignment_guides(ui: &egui::Ui, snap: AlignmentSnap, activity: egui::Vec2) {
+    let painter = ui.ctx().layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::new("hud-alignment-guides"),
+    ));
+    let color = with_alpha(ui.visuals().selection.bg_fill, 190);
+    let stroke = egui::Stroke::new(1.0, color);
+    if let Some(x) = snap.vertical {
+        painter.line_segment([egui::pos2(x, 0.0), egui::pos2(x, activity.y)], stroke);
+    }
+    if let Some(y) = snap.horizontal {
+        painter.line_segment([egui::pos2(0.0, y), egui::pos2(activity.x, y)], stroke);
+    }
+}
+
 fn draw_animated_border(
     painter: &egui::Painter,
     time: f32,

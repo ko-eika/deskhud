@@ -184,10 +184,29 @@ impl super::HudPrefs {
     }
 
     /// Deletes a group while keeping all member instances as ungrouped HUDs.
+    ///
+    /// Group members store coordinates relative to their group. Reset their position
+    /// before removing the group so the persisted coordinates remain valid when the
+    /// instances are rendered as top-level HUDs after a restart.
     pub fn delete_group(&mut self, id: &str) -> bool {
-        let before = self.groups.len();
-        self.groups.retain(|group| group.id != id);
-        self.groups.len() != before
+        let Some(group_index) = self.groups.iter().position(|group| group.id == id) else {
+            return false;
+        };
+        let children = self.groups.remove(group_index).children;
+        for child in children {
+            let Some(instance_index) = self
+                .instances
+                .iter()
+                .position(|instance| instance.id == child)
+            else {
+                continue;
+            };
+            let default = HudSlotLayout::default_for_index(instance_index);
+            let instance = &mut self.instances[instance_index];
+            instance.layout.x = default.x;
+            instance.layout.y = default.y;
+        }
+        true
     }
 
     /// Repairs malformed records independently, preserving unavailable plugin sources.
@@ -416,6 +435,23 @@ mod tests {
         assert_eq!(prefs.instances[0].layout.x, 8.0);
         assert!(prefs.remove_instance_from_group(&instance_id));
         assert!(prefs.groups.iter().all(|group| group.children.is_empty()));
+    }
+
+    #[test]
+    fn deleting_group_resets_member_position_for_top_level_rendering() {
+        let mut prefs = HudPrefs::default();
+        let source = source("hud.deskhud.demo", "clock");
+        prefs.ensure_default_instances([(source, true)]);
+        prefs.instances[0].layout.x = 240.0;
+        prefs.instances[0].layout.y = 180.0;
+        let instance_id = prefs.instances[0].id.clone();
+        let group_id = prefs.create_group("Group");
+        assert!(prefs.add_instance_to_group(&group_id, &instance_id));
+
+        assert!(prefs.delete_group(&group_id));
+        assert!(prefs.groups.is_empty());
+        assert_eq!(prefs.instances[0].layout.x, 8.0);
+        assert_eq!(prefs.instances[0].layout.y, 8.0);
     }
 
     #[test]

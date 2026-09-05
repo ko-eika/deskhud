@@ -220,7 +220,7 @@ pub(super) fn draw_shadow_window(
     let mut changed = false;
     let position = layout
         .activity_size
-        .map(|size| egui::pos2((size.x - ADJUST_PANEL_WIDTH - 336.0).max(24.0), 32.0))
+        .map(|size| egui::pos2((size.x - EDITOR_PANEL_WIDTH - 336.0).max(24.0), 32.0))
         .unwrap_or(egui::pos2(24.0, 32.0));
     let (
         title_key,
@@ -293,9 +293,9 @@ pub(super) fn draw_shadow_window(
     egui::Window::new(egui::RichText::new(deskhud_ui::i18n::t(prefs.locale, title_key)).strong())
         .id(egui::Id::new(("hud-shadow-window", layout.adjust_session)))
         .default_pos(position)
-        .default_width(ADJUST_PANEL_WIDTH)
-        .min_width(ADJUST_PANEL_WIDTH)
-        .max_width(ADJUST_PANEL_WIDTH)
+        .default_width(EDITOR_PANEL_WIDTH)
+        .min_width(EDITOR_PANEL_WIDTH)
+        .max_width(EDITOR_PANEL_WIDTH)
         .resizable(false)
         .collapsible(false)
         .open(&mut open)
@@ -386,14 +386,14 @@ fn draw_surface_effect_window(
     };
     let position = layout
         .activity_size
-        .map(|size| egui::pos2((size.x - ADJUST_PANEL_WIDTH - 336.0).max(24.0), 32.0))
+        .map(|size| egui::pos2((size.x - EDITOR_PANEL_WIDTH - 336.0).max(24.0), 32.0))
         .unwrap_or(egui::pos2(24.0, 32.0));
     egui::Window::new(egui::RichText::new(deskhud_ui::i18n::t(prefs.locale, title)).strong())
         .id(egui::Id::new((window_id, layout.adjust_session)))
         .default_pos(position)
-        .default_width(ADJUST_PANEL_WIDTH)
-        .min_width(ADJUST_PANEL_WIDTH)
-        .max_width(ADJUST_PANEL_WIDTH)
+        .default_width(EDITOR_PANEL_WIDTH)
+        .min_width(EDITOR_PANEL_WIDTH)
+        .max_width(EDITOR_PANEL_WIDTH)
         .resizable(false)
         .collapsible(false)
         .open(&mut open)

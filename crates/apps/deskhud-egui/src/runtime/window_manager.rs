@@ -134,6 +134,7 @@ impl WindowManager {
                 event_loop,
                 &self.proxy,
                 self.registry.clone(),
+                self.catalogs.clone(),
                 self.prefs.clone(),
             ));
         }
@@ -669,17 +670,19 @@ impl WindowManager {
             }
             ViewportKind::Hud => {
                 if self.hud.as_ref().is_some_and(HudWindow::is_visible) {
-                    let (should_close, changed) = self
-                        .hud
-                        .as_mut()
-                        .expect("HUD viewport disappeared")
-                        .should_close();
+                    let (should_close, changed, layout_active) = {
+                        let hud = self.hud.as_mut().expect("HUD viewport disappeared");
+                        let (should_close, changed) = hud.should_close();
+                        (should_close, changed, hud.is_layout_mode())
+                    };
                     if let Some(prefs) = changed {
-                        // Layout edits are committed on every frame. Keep the HUD's
-                        // live editor state intact; applying the whole snapshot here
-                        // would clear the positions currently being dragged.
+                        // Canvas positions are transient while layout mode is
+                        // active. Copy them into the manager for live state,
+                        // but defer serialization until the drag/session ends.
                         self.prefs.hud = prefs.hud;
-                        self.save_preferences();
+                        if !layout_active {
+                            self.save_preferences();
+                        }
                     }
                     if should_close {
                         self.hide_hud();
@@ -845,6 +848,11 @@ impl WindowManager {
         if let Some(position) = self.pet.as_ref().and_then(PetWindow::current_position) {
             self.prefs.pet.set_pos(position.x as f32, position.y as f32);
         }
+        if let Some(hud) = self.hud.as_mut() {
+            hud.commit_layout_for_shutdown();
+            self.prefs.hud = hud.preferences().hud.clone();
+        }
+        self.save_preferences();
         if let Some(pet) = self.pet.as_mut() {
             pet.destroy();
         }
