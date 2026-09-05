@@ -2,8 +2,9 @@
 
 use super::overlay::with_alpha;
 use super::*;
+use crate::views::hud::DEFAULT_SHADOW_BLUR;
 use crate::views::hud::HudRenderLayer;
-use deskhud_engine::HudVisual;
+use deskhud_engine::{HudVisual, ThemePalette};
 
 pub(super) struct FrameResponse {
     pub(super) body: egui::Response,
@@ -39,8 +40,8 @@ pub(super) struct ResizeDrag {
 
 struct LayerAppearance {
     background_enabled: bool,
-    background_custom_color_enabled: bool,
     background_color: [u8; 3],
+    content_custom_color_enabled: bool,
     background_opacity: f32,
     background_blur: f32,
     content_opacity: f32,
@@ -55,33 +56,32 @@ struct LayerAppearance {
     window_shadow_distance: f32,
     window_shadow_angle: f32,
     window_shadow_color: [u8; 3],
+    window_shadow_color_custom: bool,
     window_custom_shadow: f32,
     window_custom_shadow_blur: f32,
     window_custom_shadow_distance: f32,
     window_custom_shadow_angle: f32,
     window_custom_shadow_color: [u8; 3],
+    window_custom_shadow_color_custom: bool,
     content_custom_shadow: f32,
     content_custom_shadow_blur: f32,
     content_custom_shadow_distance: f32,
     content_custom_shadow_angle: f32,
     content_custom_shadow_color: [u8; 3],
+    content_custom_shadow_color_custom: bool,
     border_enabled: bool,
     border_opacity: f32,
     border_width: f32,
     corner_radius: f32,
     border_color: [u8; 3],
+    border_custom_color_enabled: bool,
 }
 
-fn resolve_layer_appearance(prefs: &UiPreferences, layer: &HudRenderLayer) -> LayerAppearance {
-    let default_color = layer
-        .frame
-        .visuals
-        .iter()
-        .find_map(|visual| match visual {
-            HudVisual::Text { color, .. } => Some([color[0], color[1], color[2]]),
-            _ => None,
-        })
-        .unwrap_or([255; 3]);
+fn resolve_layer_appearance(
+    prefs: &UiPreferences,
+    layer: &HudRenderLayer,
+    palette: ThemePalette,
+) -> LayerAppearance {
     let default_radius = layer
         .frame
         .visuals
@@ -93,15 +93,6 @@ fn resolve_layer_appearance(prefs: &UiPreferences, layer: &HudRenderLayer) -> La
             _ => None,
         })
         .unwrap_or(6.0 / HUD_CORNER_RADIUS_MAX);
-    let default_background_color = layer
-        .frame
-        .visuals
-        .iter()
-        .find_map(|visual| match visual {
-            HudVisual::Panel { color, .. } => Some([color[0], color[1], color[2]]),
-            _ => None,
-        })
-        .unwrap_or([0; 3]);
     let value = |name: &str, default: f32| {
         layer
             .config
@@ -129,19 +120,28 @@ fn resolve_layer_appearance(prefs: &UiPreferences, layer: &HudRenderLayer) -> La
             (value(names[channel], defaults[channel] as f32 / 255.0) * 255.0).round() as u8
         })
     };
+    let theme_background = color3(palette.surface);
+    let theme_content = color3(palette.text);
+    let theme_border = color3(palette.border);
+    let background_custom_color_enabled = value("background_color_enabled", 0.0) >= 0.5;
+    let background_color = rgb(
+        ["background_red", "background_green", "background_blue"],
+        theme_background,
+    );
     LayerAppearance {
         background_enabled: value("background_enabled", 1.0) >= 0.5,
-        background_custom_color_enabled: value("background_color_enabled", 0.0) >= 0.5,
-        background_color: rgb(
-            ["background_red", "background_green", "background_blue"],
-            default_background_color,
-        ),
+        background_color: if background_custom_color_enabled {
+            background_color
+        } else {
+            theme_background
+        },
         background_opacity: value("background_opacity", 1.0),
         background_blur: value("background_blur", 0.0),
         content_opacity: value("content_opacity", 1.0),
+        content_custom_color_enabled: value("content_color_enabled", 0.0) >= 0.5,
         content_color: rgb(
             ["content_red", "content_green", "content_blue"],
-            default_color,
+            theme_content,
         ),
         shadow_enabled: value(
             "shadow_enabled",
@@ -156,15 +156,22 @@ fn resolve_layer_appearance(prefs: &UiPreferences, layer: &HudRenderLayer) -> La
         window_shadow_enabled: value("window_shadow_enabled", 1.0) >= 0.5,
         content_shadow_enabled: value("content_shadow_enabled", 1.0) >= 0.5,
         window_shadow: shadow_opacity,
-        window_shadow_blur: value("shadow_blur", value("window_shadow_blur", 1.0)),
+        window_shadow_blur: value(
+            "shadow_blur",
+            value("window_shadow_blur", DEFAULT_SHADOW_BLUR),
+        ),
         window_shadow_distance: value(
             "shadow_distance",
             value("window_shadow_distance", 5.0 / 12.0),
         ),
         window_shadow_angle: value("shadow_angle", value("window_shadow_angle", 0.125)),
-        window_shadow_color: rgb(["shadow_red", "shadow_green", "shadow_blue"], [0; 3]),
+        window_shadow_color_custom: value("shadow_color_enabled", 0.0) >= 0.5,
+        window_shadow_color: rgb(
+            ["shadow_red", "shadow_green", "shadow_blue"],
+            color3(palette.shadow),
+        ),
         window_custom_shadow: value("window_shadow", 0.75),
-        window_custom_shadow_blur: value("window_shadow_blur", 1.0),
+        window_custom_shadow_blur: value("window_shadow_blur", DEFAULT_SHADOW_BLUR),
         window_custom_shadow_distance: value("window_shadow_distance", 5.0 / 12.0),
         window_custom_shadow_angle: value("window_shadow_angle", 0.125),
         window_custom_shadow_color: rgb(
@@ -173,10 +180,11 @@ fn resolve_layer_appearance(prefs: &UiPreferences, layer: &HudRenderLayer) -> La
                 "window_shadow_green",
                 "window_shadow_blue",
             ],
-            [0; 3],
+            color3(palette.shadow),
         ),
+        window_custom_shadow_color_custom: value("window_shadow_color_enabled", 0.0) >= 0.5,
         content_custom_shadow: value("content_shadow", 0.75),
-        content_custom_shadow_blur: value("content_shadow_blur", 1.0),
+        content_custom_shadow_blur: value("content_shadow_blur", DEFAULT_SHADOW_BLUR),
         content_custom_shadow_distance: value("content_shadow_distance", 5.0 / 12.0),
         content_custom_shadow_angle: value("content_shadow_angle", 0.125),
         content_custom_shadow_color: rgb(
@@ -185,13 +193,15 @@ fn resolve_layer_appearance(prefs: &UiPreferences, layer: &HudRenderLayer) -> La
                 "content_shadow_green",
                 "content_shadow_blue",
             ],
-            [0; 3],
+            color3(palette.shadow),
         ),
+        content_custom_shadow_color_custom: value("content_shadow_color_enabled", 0.0) >= 0.5,
         border_enabled: value("border_enabled", 1.0) >= 0.5,
         border_opacity: value("border_opacity", 1.0),
         border_width: value("border_width", 1.0 / 6.0),
         corner_radius: value("corner_radius", legacy_corner_radius),
-        border_color: rgb(["border_red", "border_green", "border_blue"], default_color),
+        border_custom_color_enabled: value("border_color_enabled", 0.0) >= 0.5,
+        border_color: rgb(["border_red", "border_green", "border_blue"], theme_border),
     }
 }
 
@@ -201,6 +211,10 @@ fn config_f32(value: &deskhud_ui::HudConfigValue) -> Option<f32> {
         deskhud_ui::HudConfigValue::Int(value) => Some(*value as f32),
         _ => None,
     }
+}
+
+fn color3(color: deskhud_engine::OverlayColor) -> [u8; 3] {
+    [color.red, color.green, color.blue]
 }
 
 pub(super) fn draw_frame(
@@ -299,7 +313,18 @@ pub(super) fn draw_frame(
         }
     }
     for layer in &item.layers {
-        let appearance = resolve_layer_appearance(prefs, layer);
+        let palette = crate::views::theme::palette(ui.visuals());
+        let appearance = resolve_layer_appearance(prefs, layer, palette);
+        let foreground_color = if appearance.content_custom_color_enabled {
+            appearance.content_color
+        } else {
+            color3(palette.text)
+        };
+        let border_color = if appearance.border_custom_color_enabled {
+            appearance.border_color
+        } else {
+            color3(palette.border)
+        };
         let child_rect = egui::Rect::from_min_size(
             rect.min + egui::vec2(layer.rect.x * scale_x, layer.rect.y * scale_y),
             egui::vec2(layer.rect.width * scale_x, layer.rect.height * scale_y),
@@ -318,7 +343,11 @@ pub(super) fn draw_frame(
                     appearance.window_shadow_blur,
                     appearance.window_shadow_distance,
                     appearance.window_shadow_angle,
-                    appearance.window_shadow_color,
+                    if appearance.window_shadow_color_custom {
+                        appearance.window_shadow_color
+                    } else {
+                        color3(palette.shadow)
+                    },
                 )
             } else {
                 (
@@ -326,7 +355,11 @@ pub(super) fn draw_frame(
                     appearance.window_custom_shadow_blur,
                     appearance.window_custom_shadow_distance,
                     appearance.window_custom_shadow_angle,
-                    appearance.window_custom_shadow_color,
+                    if appearance.window_custom_shadow_color_custom {
+                        appearance.window_custom_shadow_color
+                    } else {
+                        color3(palette.shadow)
+                    },
                 )
             };
         let (content_shadow, content_blur, content_distance, content_angle, content_color) =
@@ -336,7 +369,11 @@ pub(super) fn draw_frame(
                     appearance.window_shadow_blur,
                     appearance.window_shadow_distance,
                     appearance.window_shadow_angle,
-                    appearance.window_shadow_color,
+                    if appearance.window_shadow_color_custom {
+                        appearance.window_shadow_color
+                    } else {
+                        color3(palette.shadow)
+                    },
                 )
             } else {
                 (
@@ -344,7 +381,11 @@ pub(super) fn draw_frame(
                     appearance.content_custom_shadow_blur,
                     appearance.content_custom_shadow_distance,
                     appearance.content_custom_shadow_angle,
-                    appearance.content_custom_shadow_color,
+                    if appearance.content_custom_shadow_color_custom {
+                        appearance.content_custom_shadow_color
+                    } else {
+                        color3(palette.shadow)
+                    },
                 )
             };
         let window_shadow_enabled = if appearance.window_shadow_global {
@@ -359,7 +400,10 @@ pub(super) fn draw_frame(
         };
         if window_shadow_enabled {
             paint_window_shadow(
-                &hud_painter.with_clip_rect(rect),
+                // The shadow intentionally extends outside the HUD rect. A
+                // rect-sized clip would cut away the entire visible part of
+                // the window shadow before it reaches the desktop backdrop.
+                &hud_painter,
                 child_rect,
                 window_radius,
                 window_shadow,
@@ -369,9 +413,11 @@ pub(super) fn draw_frame(
                 window_color,
             );
         }
-        let child_scale = (child_rect.width() / layer.base_size.width.max(1.0))
-            .min(child_rect.height() / layer.base_size.height.max(1.0))
+        let child_scale_x = (child_rect.width() / layer.base_size.width.max(1.0))
             .clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX);
+        let child_scale_y = (child_rect.height() / layer.base_size.height.max(1.0))
+            .clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX);
+        let child_scale = child_scale_x.min(child_scale_y);
         for visual in &layer.frame.visuals {
             match visual {
                 HudVisual::Panel {
@@ -385,16 +431,12 @@ pub(super) fn draw_frame(
                             &child_painter,
                             child_rect,
                             window_radius,
-                            if appearance.background_custom_color_enabled {
-                                [
-                                    appearance.background_color[0],
-                                    appearance.background_color[1],
-                                    appearance.background_color[2],
-                                    color[3],
-                                ]
-                            } else {
-                                *color
-                            },
+                            [
+                                appearance.background_color[0],
+                                appearance.background_color[1],
+                                appearance.background_color[2],
+                                color[3],
+                            ],
                             appearance.background_opacity,
                             appearance.background_blur,
                         );
@@ -408,11 +450,12 @@ pub(super) fn draw_frame(
                     paint_hud_text(
                         &child_painter,
                         child_rect.center(),
+                        egui::Align2::CENTER_CENTER,
                         text,
                         egui::FontId::proportional(
                             (font_size * child_scale * ui_font_scale).clamp(8.0, 96.0),
                         ),
-                        appearance.content_color,
+                        foreground_color,
                         color[3],
                         appearance.content_opacity,
                         if content_shadow_enabled {
@@ -426,6 +469,107 @@ pub(super) fn draw_frame(
                         content_color,
                     );
                 }
+                HudVisual::Label {
+                    text,
+                    x,
+                    y,
+                    align,
+                    font_size,
+                    color,
+                } => {
+                    let align = match align {
+                        deskhud_engine::HudTextAlign::Left => egui::Align2::LEFT_CENTER,
+                        deskhud_engine::HudTextAlign::Center => egui::Align2::CENTER_CENTER,
+                        deskhud_engine::HudTextAlign::Right => egui::Align2::RIGHT_CENTER,
+                    };
+                    paint_hud_text(
+                        &child_painter,
+                        child_rect.min + egui::vec2(x * child_scale_x, y * child_scale_y),
+                        align,
+                        text,
+                        egui::FontId::proportional(
+                            (font_size * child_scale * ui_font_scale).clamp(8.0, 96.0),
+                        ),
+                        foreground_color,
+                        color[3],
+                        appearance.content_opacity,
+                        if content_shadow_enabled {
+                            content_shadow
+                        } else {
+                            0.0
+                        },
+                        content_blur,
+                        content_distance,
+                        content_angle,
+                        content_color,
+                    );
+                }
+                HudVisual::ProgressBar {
+                    x,
+                    y,
+                    width,
+                    height,
+                    radius,
+                    value,
+                    background,
+                    fill,
+                } => {
+                    let bar = egui::Rect::from_min_size(
+                        child_rect.min + egui::vec2(x * child_scale_x, y * child_scale_y),
+                        egui::vec2(width * child_scale_x, height * child_scale_y),
+                    )
+                    .intersect(child_rect);
+                    let radius = (radius * child_scale).clamp(0.0, bar.height() * 0.5);
+                    child_painter.rect_filled(
+                        bar,
+                        radius,
+                        rgba_with_alpha(*background, appearance.content_opacity),
+                    );
+                    let fill_rect = egui::Rect::from_min_size(
+                        bar.min,
+                        egui::vec2(bar.width() * value.clamp(0.0, 1.0), bar.height()),
+                    );
+                    child_painter.rect_filled(
+                        fill_rect,
+                        radius,
+                        rgba_with_alpha(*fill, appearance.content_opacity),
+                    );
+                }
+                HudVisual::LineChart {
+                    x,
+                    y,
+                    width,
+                    height,
+                    values,
+                    min,
+                    max,
+                    stroke_width,
+                    color,
+                } => {
+                    let chart = egui::Rect::from_min_size(
+                        child_rect.min + egui::vec2(x * child_scale_x, y * child_scale_y),
+                        egui::vec2(width * child_scale_x, height * child_scale_y),
+                    )
+                    .intersect(child_rect);
+                    let range = (max - min).max(f32::EPSILON);
+                    if values.len() > 1 && chart.is_positive() {
+                        let last = (values.len() - 1) as f32;
+                        let points = values.iter().enumerate().map(|(index, value)| {
+                            egui::pos2(
+                                chart.left() + chart.width() * index as f32 / last,
+                                chart.bottom()
+                                    - chart.height() * ((*value - min) / range).clamp(0.0, 1.0),
+                            )
+                        });
+                        child_painter.add(egui::Shape::line(
+                            points.collect(),
+                            egui::Stroke::new(
+                                (stroke_width * child_scale).clamp(0.5, 32.0),
+                                rgba_with_alpha(*color, appearance.content_opacity),
+                            ),
+                        ));
+                    }
+                }
             }
         }
         if appearance.border_enabled {
@@ -435,11 +579,7 @@ pub(super) fn draw_frame(
                 appearance.border_opacity,
                 appearance.border_width,
                 appearance.corner_radius,
-                egui::Color32::from_rgb(
-                    appearance.border_color[0],
-                    appearance.border_color[1],
-                    appearance.border_color[2],
-                ),
+                egui::Color32::from_rgb(border_color[0], border_color[1], border_color[2]),
             );
         }
         if layout_mode && matches!(item.target, HudLayoutTarget::Group(_)) {
@@ -711,6 +851,7 @@ fn paint_acrylic_background(
 fn paint_hud_text(
     painter: &egui::Painter,
     position: egui::Pos2,
+    align: egui::Align2,
     text: &str,
     font: egui::FontId,
     color: [u8; 3],
@@ -738,7 +879,7 @@ fn paint_hud_text(
                 .round() as u8;
             painter.text(
                 position + offset + delta,
-                egui::Align2::CENTER_CENTER,
+                align,
                 text,
                 font.clone(),
                 egui::Color32::from_rgba_unmultiplied(
@@ -752,7 +893,7 @@ fn paint_hud_text(
     }
     painter.text(
         position,
-        egui::Align2::CENTER_CENTER,
+        align,
         text,
         font,
         egui::Color32::from_rgba_unmultiplied(

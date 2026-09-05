@@ -83,7 +83,7 @@ pub(super) fn draw_plugin_list_card(
     selected_id: &str,
     card_width: f32,
     enabled: &mut bool,
-) {
+) -> bool {
     const HEIGHT: f32 = 82.0;
     let (rect, response) = ui.allocate_exact_size(Vec2::new(card_width, HEIGHT), Sense::click());
     let selected = plugin.id == selected_id;
@@ -92,7 +92,7 @@ pub(super) fn draw_plugin_list_card(
     } else if response.hovered() {
         ui.visuals().widgets.hovered.bg_fill
     } else {
-        ui.visuals().extreme_bg_color
+        ui.visuals().faint_bg_color
     };
     ui.painter().rect(
         rect.shrink(0.5),
@@ -156,12 +156,5 @@ pub(super) fn draw_plugin_list_card(
         ("hud-plugin-enable", plugin.id),
     );
     let response = plugin_tooltip(response, plugin, &name, &description, model.draft.locale);
-    if response.clicked() && !toggle_response.clicked() {
-        ui.ctx().data_mut(|data| {
-            data.insert_temp(
-                ui.make_persistent_id("hud.selected_plugin"),
-                plugin.id.to_owned(),
-            )
-        });
-    }
+    response.clicked() || toggle_response.clicked()
 }

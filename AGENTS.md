@@ -53,6 +53,7 @@
 | 包格式 | `.deskhud`（目录或 zip）+ `manifest.toml` | 宠物包 / HUD 插件同构，靠 `kind` 区分 |
 | 配置 / 清单 | `serde` + `toml`；包内 i18n 使用 gettext | prefs、manifest、PO/MO 目录合并 |
 | i18n | 多源 gettext PO/MO 目录合并 | PO 为源文件，MO 为发布文件；`shell.*` / `pet.<id>.*` / `plugin.<id>.*`，缺键回退 |
+| 系统采样 | `sysinfo`（仅官方原生系统 HUD） | 后台按需缓存 CPU、内存和进程指标，不进入 engine 契约 |
 
 **不做（本阶段）**：插件商店、原生 dll 社区包、插件直接使用 egui、UI 依赖 `git2`。
 
@@ -106,7 +107,7 @@ target/<profile>/packages/ …
 - [x] HUD 插件真实帧数据（扫描 registry contribution，按总开关 ∧ 插件 ∧ 条目绘制 `HudFrame`）
 - [x] WASM runtime + SDK + 示例包
 - [x] HUD 组基础能力（实例、组合渲染及布局模式中的分组与编辑）
-- [ ] 官方系统与应用性能 HUD 插件
+- [x] 官方系统与应用性能 HUD 插件
 - [ ] 支持多实例和自定义内容的便签 HUD 插件
 
 ## 常用命令

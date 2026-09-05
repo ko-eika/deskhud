@@ -1,0 +1,5 @@
+msgid "display_name"
+msgstr "系统监视器"
+
+msgid "description"
+msgstr "以缓存方式显示真实的系统与应用性能指标"

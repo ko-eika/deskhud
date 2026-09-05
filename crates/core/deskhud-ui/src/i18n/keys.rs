@@ -171,8 +171,12 @@ pub enum MessageKey {
     HudAdjustInstance,
     /// HUD 位置字段。
     HudAdjustPosition,
+    /// HUD 调整：重置位置悬浮提示。
+    HudAdjustResetPosition,
     /// HUD 大小字段。
     HudAdjustSize,
+    /// HUD 调整：重置大小悬浮提示。
+    HudAdjustResetSize,
     /// HUD 背景透明度字段。
     HudAdjustBackgroundOpacity,
     /// HUD 背景模糊字段。
@@ -400,7 +404,9 @@ impl MessageKey {
         Self::HudAdjustContribution,
         Self::HudAdjustInstance,
         Self::HudAdjustPosition,
+        Self::HudAdjustResetPosition,
         Self::HudAdjustSize,
+        Self::HudAdjustResetSize,
         Self::HudAdjustBackgroundOpacity,
         Self::HudAdjustBackgroundBlur,
         Self::HudAdjustContentOpacity,

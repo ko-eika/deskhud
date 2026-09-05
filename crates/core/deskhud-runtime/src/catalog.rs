@@ -28,6 +28,11 @@ fn merge_builtin_pack_catalogs(store: &mut CatalogStore) {
             include_str!(concat!(env!("OUT_DIR"), "/builtin-demo-zh-CN.po")),
             include_str!(concat!(env!("OUT_DIR"), "/builtin-demo-en-US.po")),
         ),
+        (
+            "hud.deskhud.system.",
+            include_str!(concat!(env!("OUT_DIR"), "/builtin-system-zh-CN.po")),
+            include_str!(concat!(env!("OUT_DIR"), "/builtin-system-en-US.po")),
+        ),
     ];
     for &(prefix, zh_file, en_file) in BUILTINS {
         if let Ok(cat) = PackCatalog::parse_gettext(zh_file.as_bytes()) {
@@ -209,6 +214,28 @@ mod tests {
         assert_eq!(
             store.get(Locale::En, "pet.deskhud.mochi.follow_eyes.label"),
             Some("Eye effect")
+        );
+        assert_eq!(
+            store.get(Locale::ZhCn, "hud.deskhud.system.system_cpu.label"),
+            Some("系统状态")
+        );
+        assert_eq!(
+            store.get(Locale::En, "hud.deskhud.system.deskhud.label"),
+            Some("Current application process status")
+        );
+        assert_eq!(
+            store.get(
+                Locale::En,
+                "hud.deskhud.system.application.process_name.label"
+            ),
+            Some("Monitored application")
+        );
+        assert_eq!(
+            store.get(
+                Locale::ZhCn,
+                "hud.deskhud.system.application.process_name.placeholder"
+            ),
+            Some("请选择应用")
         );
         assert_eq!(store.get(Locale::En, "InputKey.Escape"), Some("Esc"));
         assert_eq!(

@@ -12,6 +12,13 @@ DeskHud 当前 **没有** 自动打安装包的 GitHub Release workflow；发布
 2. [`README.md`](../README.md) / [`README_EN.md`](../README_EN.md) 中的 version 徽章
 3. （可选）`CHANGELOG` / Release 说明正文
 
+### 0.9.8 变更摘要
+
+- 新增官方 `hud.deskhud.system` 原生 HUD 插件，提供系统 CPU、系统内存、DeskHud 进程和指定应用进程四类独立 HUD。
+- 通过 `sysinfo` 后台缓存采样，支持受控刷新周期、进程搜索选择、历史趋势、进度条及不可用状态，不在绘制线程执行昂贵查询。
+- 扩展平台无关的 `HudVisual` 与实例配置声明，支持锚点文本、进度条、历史曲线和动态选项；补齐中英文包内文案。
+- 内置包同步升至 `0.9.8`；保持每屏一个 HUD 合成窗、`engine = "0.9"` 与 `api_version = 4` 不变。
+
 ### 0.9.7 变更摘要
 
 - 将普通模式 HUD 合成窗口的尺寸与位置纳入 `[prefs]`，布局编辑中的 `x/y` 改为相对窗口的物理像素坐标。

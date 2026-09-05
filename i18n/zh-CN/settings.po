@@ -188,7 +188,7 @@ msgid "HudLayoutEdit"
 msgstr "插件布局"
 
 msgid "HudLayoutEditingHint"
-msgstr "布局编辑已打开：可将 HUD 拖入组，或右击创建组"
+msgstr "布局编辑已打开：可将 HUD 拖入分组，或右击创建分组"
 
 msgid "HudLayoutDone"
 msgstr "应用"
@@ -197,7 +197,7 @@ msgid "HudLayoutCancel"
 msgstr "取消"
 
 msgid "HudLayoutHint"
-msgstr "点击选中 · 拖动调整 · 右击管理组"
+msgstr "点击选中 · 拖动调整 · 右击管理分组"
 
 msgid "HudLayoutResetSize"
 msgstr "重置大小"
@@ -223,8 +223,14 @@ msgstr "实例 ID"
 msgid "HudAdjustPosition"
 msgstr "位置"
 
+msgid "HudAdjustResetPosition"
+msgstr "重置位置"
+
 msgid "HudAdjustSize"
 msgstr "大小"
+
+msgid "HudAdjustResetSize"
+msgstr "重置大小"
 
 msgid "HudAdjustBackgroundOpacity"
 msgstr "透明度"
@@ -335,28 +341,28 @@ msgid "HudAdjustSnapGrid"
 msgstr "对齐网格"
 
 msgid "HudGroupCreate"
-msgstr "创建组"
+msgstr "创建分组"
 
 msgid "HudGroupEdit"
-msgstr "调整组"
+msgstr "调整分组"
 
 msgid "HudGroupDelete"
-msgstr "删除组"
+msgstr "删除分组"
 
 msgid "HudGroupAdjustTitle"
-msgstr "信息组调整窗口"
+msgstr "分组调整窗口"
 
 msgid "HudGroupInfo"
-msgstr "信息"
+msgstr "分组"
 
 msgid "HudGroupName"
 msgstr "名称"
 
 msgid "HudGroupColor"
-msgstr "组颜色"
+msgstr "分组颜色"
 
 msgid "HudGroupDefaultName"
-msgstr "组"
+msgstr "分组"
 
 msgid "HudGroupArrangement"
 msgstr "布局"
@@ -395,7 +401,7 @@ msgid "HudGroupAlignmentEnd"
 msgstr "末端"
 
 msgid "HudGroupRemoveMember"
-msgstr "移出组"
+msgstr "移出分组"
 
 msgid "SettingsTopmost"
 msgstr "置顶"

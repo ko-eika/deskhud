@@ -1,0 +1,12 @@
+[package]
+name = "hud-deskhud-system"
+description = "DeskHud built-in system and application performance HUD plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+deskhud-engine = { workspace = true }
+sysinfo = { workspace = true }

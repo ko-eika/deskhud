@@ -1,0 +1,95 @@
+msgid "system_cpu.label"
+msgstr "系统状态"
+
+msgid "system_cpu.description"
+msgstr "集中显示 CPU、内存、进程数、运行时长和交换空间"
+
+msgid "deskhud.label"
+msgstr "当前应用进程状态"
+
+msgid "deskhud.description"
+msgstr "显示当前 DeskHud 应用的 CPU、内存、PID 和近期曲线"
+
+msgid "application.label"
+msgstr "指定应用进程状态"
+
+msgid "application.description"
+msgstr "显示指定应用的 CPU 和内存用量"
+
+msgid "system_cpu.refresh_seconds.label"
+msgstr "刷新周期"
+
+msgid "system_cpu.refresh_seconds.description"
+msgstr "采样间隔（秒）"
+
+msgid "system_cpu.unit.label"
+msgstr "内存单位"
+
+msgid "system_cpu.unit.description"
+msgstr "使用二进制或十进制单位"
+
+msgid "system_cpu.show_labels.label"
+msgstr "显示标签"
+
+msgid "system_cpu.show_labels.description"
+msgstr "在数值旁显示指标名称"
+
+msgid "deskhud.refresh_seconds.label"
+msgstr "刷新周期"
+
+msgid "deskhud.refresh_seconds.description"
+msgstr "采样间隔（秒）"
+
+msgid "deskhud.unit.label"
+msgstr "内存单位"
+
+msgid "deskhud.unit.description"
+msgstr "使用二进制或十进制单位"
+
+msgid "deskhud.show_labels.label"
+msgstr "显示标签"
+
+msgid "deskhud.show_labels.description"
+msgstr "在数值旁显示指标名称"
+
+msgid "application.refresh_seconds.label"
+msgstr "刷新周期"
+
+msgid "application.refresh_seconds.description"
+msgstr "采样间隔（秒）"
+
+msgid "application.unit.label"
+msgstr "内存单位"
+
+msgid "application.unit.description"
+msgstr "使用二进制或十进制单位"
+
+msgid "application.show_labels.label"
+msgstr "显示标签"
+
+msgid "application.show_labels.description"
+msgstr "在数值旁显示指标名称"
+
+msgid "application.process_name.label"
+msgstr "监控应用"
+
+msgid "application.process_name.description"
+msgstr "从当前运行的应用进程中选择"
+
+msgid "application.process_name.placeholder"
+msgstr "请选择应用"
+
+msgid "unit.binary"
+msgstr "二进制（GiB/MiB）"
+
+msgid "unit.decimal"
+msgstr "十进制（GB/MB）"
+
+msgid "status.unavailable"
+msgstr "暂不可用"
+
+msgid "status.not_running"
+msgstr "未运行"
+
+msgid "status.select_process"
+msgstr "请选择应用进程"

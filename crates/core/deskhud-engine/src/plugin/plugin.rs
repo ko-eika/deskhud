@@ -1,6 +1,6 @@
 //! [`Plugin`] 扩展点。
 
-use super::{HudContribution, HudFrame, HudFrameCtx, PluginInfo};
+use super::{HudConfigDynamicChoice, HudContribution, HudFrame, HudFrameCtx, PluginInfo};
 
 /// 功能插件：领域能力 + 可选 HUD 贡献。
 pub trait Plugin: Send + Sync {
@@ -10,6 +10,15 @@ pub trait Plugin: Send + Sync {
     /// 可配置 HUD 条目。
     fn hud_contributions(&self) -> &'static [HudContribution] {
         &[]
+    }
+
+    /// Returns current choices for one dynamic HUD configuration option.
+    fn hud_config_choices(
+        &self,
+        _contribution_id: &str,
+        _option_key: &str,
+    ) -> Vec<HudConfigDynamicChoice> {
+        Vec::new()
     }
 
     /// Produces the current frame for an enabled HUD item.

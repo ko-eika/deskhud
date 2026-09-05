@@ -74,25 +74,35 @@ pub(crate) fn toggle_switch_with_id(
         response.mark_changed();
     }
     let t = ui.ctx().animate_bool(response.id, *value);
-    let mut fill = super::lerp_color(
-        ui.visuals().widgets.inactive.bg_fill,
-        ui.visuals().selection.bg_fill,
-        t,
-    );
+    let off_fill = ui.visuals().widgets.inactive.bg_fill;
+    let mut fill = super::lerp_color(off_fill, ui.visuals().selection.bg_fill, t);
     if response.hovered() {
         let hover_target = if *value {
             ui.visuals().selection.bg_fill.gamma_multiply(1.16)
         } else {
-            ui.visuals().widgets.hovered.bg_fill
+            off_fill.gamma_multiply(1.12)
         };
         fill = super::lerp_color(fill, hover_target, 0.68);
     }
     ui.painter().rect_filled(rect, CornerRadius::same(12), fill);
-    let knob_x = egui::lerp((rect.left() + 12.0)..=(rect.right() - 12.0), t);
-    ui.painter().circle_filled(
-        egui::pos2(knob_x, rect.center().y),
-        8.0,
-        ui.visuals().extreme_bg_color,
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::same(12),
+        egui::Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color),
+        egui::StrokeKind::Outside,
     );
+    let knob_x = egui::lerp((rect.left() + 12.0)..=(rect.right() - 12.0), t);
+    let knob_color = super::lerp_color(
+        ui.visuals()
+            .widgets
+            .noninteractive
+            .fg_stroke
+            .color
+            .gamma_multiply(0.62),
+        ui.visuals().extreme_bg_color,
+        t,
+    );
+    ui.painter()
+        .circle_filled(egui::pos2(knob_x, rect.center().y), 8.0, knob_color);
     response
 }

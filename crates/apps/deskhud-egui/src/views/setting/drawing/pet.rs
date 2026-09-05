@@ -41,28 +41,50 @@ pub(super) fn draw(
         ui.add_space(8.0);
         ui.separator();
         ui.add_space(12.0);
-        match mode {
-            deskhud_ui::PetPickerMode::Grid => {
-                let card_layout = deskhud_ui::pet_card_layout_with_font(
-                    ui.available_width(),
-                    fonts::base_size(ui),
-                );
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
-                    for info in &infos {
-                        pet_picker::draw_pet_grid_card(ui, catalogs, model, info, card_layout);
+        egui::Frame::NONE
+            .fill(ui.visuals().widgets.inactive.bg_fill)
+            .stroke(egui::Stroke::new(
+                1.0,
+                ui.visuals()
+                    .widgets
+                    .noninteractive
+                    .bg_stroke
+                    .color
+                    .gamma_multiply(if ui.visuals().dark_mode { 0.62 } else { 0.82 }),
+            ))
+            .corner_radius(egui::CornerRadius::same(8))
+            .inner_margin(egui::Margin::same(12))
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                match mode {
+                    deskhud_ui::PetPickerMode::Grid => {
+                        let card_layout = deskhud_ui::pet_card_layout_with_font(
+                            ui.available_width(),
+                            fonts::base_size(ui),
+                        );
+                        ui.horizontal_wrapped(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
+                            for info in &infos {
+                                pet_picker::draw_pet_grid_card(
+                                    ui,
+                                    catalogs,
+                                    model,
+                                    info,
+                                    card_layout,
+                                );
+                            }
+                        });
                     }
-                });
-            }
-            deskhud_ui::PetPickerMode::List => {
-                for (index, info) in infos.iter().enumerate() {
-                    pet_picker::draw_pet_list_row(ui, catalogs, model, info);
-                    if index + 1 < infos.len() {
-                        ui.add_space(8.0);
+                    deskhud_ui::PetPickerMode::List => {
+                        for (index, info) in infos.iter().enumerate() {
+                            pet_picker::draw_pet_list_row(ui, catalogs, model, info);
+                            if index + 1 < infos.len() {
+                                ui.add_space(8.0);
+                            }
+                        }
                     }
                 }
-            }
-        }
+            });
     });
     ui.add_space(16.0);
 

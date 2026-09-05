@@ -27,12 +27,14 @@ impl Plugin for DemoHudPlugin {
                 label: "演示时钟条",
                 default_enabled: true,
                 icon: Some(include_bytes!("../assets/icon_clock.svg")),
+                config: &[],
             },
             HudContribution {
                 id: "tip",
                 label: "演示提示条",
                 default_enabled: false,
                 icon: Some(include_bytes!("../assets/icon_tip.svg")),
+                config: &[],
             },
         ];
         ITEMS

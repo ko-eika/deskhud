@@ -1,5 +1,7 @@
 //! HUD 调整窗口流程编排。
 
+use std::cell::Cell;
+
 mod common;
 mod effects;
 mod shadow;
@@ -64,6 +66,12 @@ pub(super) fn draw_adjust_window(
         slot.x = position.x;
         slot.y = position.y;
     }
+    let reset_position =
+        adjustment_default_position(layout, prefs, items, &item, &key, grouped_member);
+    let reset_size = *layout
+        .adjustment_reset_sizes
+        .entry(key.clone())
+        .or_insert(egui::vec2(slot.width, slot.height));
     let initial_width = slot.width;
     let initial_height = slot.height;
     let initial_x = slot.x;
@@ -160,6 +168,7 @@ pub(super) fn draw_adjust_window(
                                     slot: &mut slot,
                                     size,
                                 },
+                                reset_position,
                             );
                             ui.add_space(8.0);
                         } else if let HudLayoutTarget::Instance(instance_id) = &item.target {
@@ -182,6 +191,7 @@ pub(super) fn draw_adjust_window(
                                         minimum: geometry.minimum,
                                         maximum: geometry.maximum,
                                     },
+                                    reset_position,
                                 );
                                 if position_changed
                                     && let Some(instance) = prefs
@@ -200,13 +210,26 @@ pub(super) fn draw_adjust_window(
                         }
                         let (size_changed, width_was_changed, height_was_changed) =
                             if let HudLayoutTarget::Group(id) = &item.target {
-                                (
-                                    draw_group_size_group(ui, layout, prefs, id, item, &slot),
-                                    false,
-                                    false,
-                                )
+                                let missing_reset_size = reset_size.x <= 0.0 || reset_size.y <= 0.0;
+                                let (group_changed, group_reset_size) = draw_group_size_group(
+                                    ui, layout, prefs, id, item, &slot, reset_size,
+                                );
+                                if missing_reset_size {
+                                    layout
+                                        .adjustment_reset_sizes
+                                        .insert(key.clone(), group_reset_size);
+                                }
+                                (group_changed, false, false)
                             } else {
-                                draw_size_group(ui, layout, prefs, &mut slot, item, initial_ratio)
+                                draw_size_group(
+                                    ui,
+                                    layout,
+                                    prefs,
+                                    &mut slot,
+                                    item,
+                                    initial_ratio,
+                                    reset_size,
+                                )
                             };
                         changed |= size_changed;
                         width_changed = width_was_changed;
@@ -295,6 +318,72 @@ pub(super) fn draw_adjust_window(
         }
     }
     changed
+}
+
+/// Returns the default reset position in the coordinate system used by the
+/// active adjustment editor. Top-level slots are projected from the persisted
+/// HUD window screen position; grouped members are relative to their group.
+fn adjustment_default_position(
+    layout: &LayoutState,
+    prefs: &UiPreferences,
+    items: &[HudRenderItem],
+    item: &HudRenderItem,
+    key: &str,
+    grouped_member: bool,
+) -> egui::Pos2 {
+    let scale = layout.scale_factor.max(1.0);
+    let Some(activity_origin) = layout.activity_origin else {
+        return item.initial_position + egui::vec2(8.0, 8.0);
+    };
+    let preview_origin = current_preview_origin(items, layout, scale)
+        .unwrap_or(activity_origin)
+        .to_vec2();
+    let preview_origin = (preview_origin - activity_origin.to_vec2()) / scale;
+    if grouped_member {
+        let group_position = prefs
+            .hud
+            .groups
+            .iter()
+            .find(|group| {
+                group.children.iter().any(|child| {
+                    child.as_str() == key.strip_prefix("instance/").unwrap_or_default()
+                })
+            })
+            .and_then(|group| layout.positions.get(&format!("group/{}", group.id)))
+            .copied()
+            .unwrap_or(item.initial_position);
+        return group_position + egui::vec2(8.0, 8.0);
+    }
+    egui::pos2(preview_origin.x + 8.0, preview_origin.y + 8.0)
+}
+
+fn current_preview_origin(
+    items: &[HudRenderItem],
+    layout: &LayoutState,
+    scale: f32,
+) -> Option<egui::Pos2> {
+    let mut bounds = egui::Rect::NOTHING;
+    for item in items {
+        let size = item.container_size.unwrap_or_else(|| {
+            egui::vec2(
+                item.base_size.width * item.width,
+                item.base_size.height * item.height,
+            )
+        }) * scale;
+        let position = layout
+            .absolute_positions
+            .get(&item.key)
+            .copied()
+            .or_else(|| {
+                layout
+                    .activity_origin
+                    .map(|origin| origin + item.initial_position.to_vec2() * scale)
+            })?;
+        bounds = bounds.union(egui::Rect::from_min_size(position, size));
+    }
+    bounds
+        .is_positive()
+        .then_some(bounds.min - egui::vec2(12.0 * scale, 12.0 * scale))
 }
 
 fn draw_hud_info(
@@ -547,37 +636,88 @@ fn grouped_member_position_geometry_from_parts(
     }
 }
 
+fn reset_icon_button(ui: &mut egui::Ui, locale: deskhud_ui::Locale, tooltip: MessageKey) -> bool {
+    let (rect, response) = ui.allocate_exact_size(egui::Vec2::splat(28.0), egui::Sense::click());
+    if response.hovered() {
+        ui.painter().rect_filled(
+            rect,
+            egui::CornerRadius::same(5),
+            ui.visuals().widgets.hovered.bg_fill,
+        );
+    }
+    components::icons::paint(
+        ui,
+        "reset",
+        rect.shrink(6.0),
+        ui.visuals().text_color(),
+        false,
+    );
+    response
+        .on_hover_text(deskhud_ui::i18n::t(locale, tooltip))
+        .clicked()
+}
+
 fn draw_position_editor(
     ui: &mut egui::Ui,
     layout: &mut LayoutState,
     locale: deskhud_ui::Locale,
     target: PositionTarget<'_>,
+    reset_position: egui::Pos2,
 ) -> bool {
     let mut changed = false;
+    let reset_requested = Cell::new(false);
     components::config_card_with_header(
         ui,
         |ui| {
-            ui.label(
-                egui::RichText::new(deskhud_ui::i18n::t(locale, MessageKey::HudAdjustPosition))
-                    .strong(),
+            let header_size = egui::vec2(ui.available_width(), 28.0);
+            ui.allocate_ui_with_layout(
+                header_size,
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.label(
+                        egui::RichText::new(deskhud_ui::i18n::t(
+                            locale,
+                            MessageKey::HudAdjustPosition,
+                        ))
+                        .strong(),
+                    );
+                    reset_requested.set(
+                        reset_requested.get()
+                            || reset_icon_button(ui, locale, MessageKey::HudAdjustResetPosition),
+                    );
+                },
             );
         },
         |ui| {
             let activity = layout.activity_size.unwrap_or(egui::vec2(1.0, 1.0));
             let (x, y, minimum, maximum, snap) = match target {
-                PositionTarget::Slot { slot, size } => (
-                    &mut slot.x,
-                    &mut slot.y,
-                    egui::pos2(HUD_PADDING, HUD_PADDING),
-                    top_level_position_max(activity, size),
-                    true,
-                ),
+                PositionTarget::Slot { slot, size } => {
+                    if reset_requested.get() {
+                        slot.x = reset_position.x;
+                        slot.y = reset_position.y;
+                        changed = true;
+                    }
+                    (
+                        &mut slot.x,
+                        &mut slot.y,
+                        egui::pos2(HUD_PADDING, HUD_PADDING),
+                        top_level_position_max(activity, size),
+                        true,
+                    )
+                }
                 PositionTarget::Member {
                     x,
                     y,
                     minimum,
                     maximum,
-                } => (x, y, minimum, maximum, false),
+                } => {
+                    if reset_requested.get() {
+                        *x = reset_position.x;
+                        *y = reset_position.y;
+                        changed = true;
+                    }
+                    (x, y, minimum, maximum, false)
+                }
             };
             for (index, (label, value, pixels)) in [
                 (MessageKey::HudAdjustX, x, activity.x),
@@ -627,7 +767,8 @@ fn draw_group_size_group(
     group_id: &str,
     item: &HudRenderItem,
     slot: &deskhud_ui::HudSlotLayout,
-) -> bool {
+    reset_size: egui::Vec2,
+) -> (bool, egui::Vec2) {
     let content_min_size = group_adjustment_min_size(prefs, group_id, item);
     let screen_max_size = layout
         .activity_size
@@ -643,7 +784,7 @@ fn draw_group_size_group(
         .iter_mut()
         .find(|group| group.id == group_id)
     else {
-        return false;
+        return (false, egui::Vec2::ZERO);
     };
     let mut changed = false;
     if group.layout.width <= 0.0 || group.layout.height <= 0.0 {
@@ -668,6 +809,12 @@ fn draw_group_size_group(
         layout.lock_ratio.then_some(ratio),
     );
     let old_size = egui::vec2(group.layout.width, group.layout.height);
+    let reset_size = if reset_size.x > 0.0 && reset_size.y > 0.0 {
+        reset_size
+    } else {
+        old_size
+    };
+    let reset_requested = Cell::new(false);
     if layout.lock_ratio {
         group.layout.width = group.layout.width.clamp(minimum.x, maximum.x);
         group.layout.height = group.layout.width * ratio;
@@ -679,12 +826,31 @@ fn draw_group_size_group(
     components::config_card_with_header(
         ui,
         |ui| {
-            ui.label(
-                egui::RichText::new(deskhud_ui::i18n::t(prefs.locale, MessageKey::HudAdjustSize))
-                    .strong(),
+            let header_size = egui::vec2(ui.available_width(), 28.0);
+            ui.allocate_ui_with_layout(
+                header_size,
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.label(
+                        egui::RichText::new(deskhud_ui::i18n::t(
+                            prefs.locale,
+                            MessageKey::HudAdjustSize,
+                        ))
+                        .strong(),
+                    );
+                    reset_requested.set(
+                        reset_requested.get()
+                            || reset_icon_button(ui, prefs.locale, MessageKey::HudAdjustResetSize),
+                    );
+                },
             );
         },
         |ui| {
+            if reset_requested.get() {
+                group.layout.width = reset_size.x.clamp(minimum.x, maximum.x);
+                group.layout.height = reset_size.y.clamp(minimum.y, maximum.y);
+                changed = true;
+            }
             for (index, label) in [MessageKey::HudAdjustWidth, MessageKey::HudAdjustHeight]
                 .into_iter()
                 .enumerate()
@@ -750,7 +916,7 @@ fn draw_group_size_group(
             }
         },
     );
-    changed
+    (changed, reset_size)
 }
 
 fn top_level_position_max(activity: egui::Vec2, size: egui::Vec2) -> egui::Pos2 {
@@ -835,21 +1001,42 @@ fn draw_size_group(
     slot: &mut deskhud_ui::HudSlotLayout,
     item: &HudRenderItem,
     ratio: f32,
+    reset_size: egui::Vec2,
 ) -> (bool, bool, bool) {
     let mut changed = false;
     let mut width_changed = false;
     let mut height_changed = false;
     let base = egui::vec2(item.base_size.width, item.base_size.height);
     let limits = hud_adjustment_size_factor_limits(layout, prefs, slot, item);
+    let reset_requested = Cell::new(false);
     components::config_card_with_header(
         ui,
         |ui| {
-            ui.label(
-                egui::RichText::new(deskhud_ui::i18n::t(prefs.locale, MessageKey::HudAdjustSize))
-                    .strong(),
+            let header_size = egui::vec2(ui.available_width(), 28.0);
+            ui.allocate_ui_with_layout(
+                header_size,
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.label(
+                        egui::RichText::new(deskhud_ui::i18n::t(
+                            prefs.locale,
+                            MessageKey::HudAdjustSize,
+                        ))
+                        .strong(),
+                    );
+                    reset_requested.set(
+                        reset_requested.get()
+                            || reset_icon_button(ui, prefs.locale, MessageKey::HudAdjustResetSize),
+                    );
+                },
             );
         },
         |ui| {
+            if reset_requested.get() {
+                slot.width = reset_size.x;
+                slot.height = reset_size.y;
+                changed = true;
+            }
             let width_max = if layout.lock_ratio {
                 limits
                     .x

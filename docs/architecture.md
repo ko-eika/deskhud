@@ -67,7 +67,8 @@ Host 契约（当前）：
 
 - 声明 `HudContribution[]`（id、默认开、标签、可选 `icon`：svg/png/jpeg/gif/webp）
 - `PluginInfo.icon`：插件图标；条目图标按 contribution id 对应；设置页由壳栅格化 SVG
-- 每帧或按需产出 `HudFrame`（已启用条目的展示数据，仍在路线图）
+- 每帧或按需产出 `HudFrame`（已启用条目的展示数据）；官方系统插件通过后台缓存提供真实指标
+- `HudVisual` 提供平台无关的面板、文本、进度条和历史曲线原语；实例配置支持布尔、数值、文本、固定选项及原生插件动态选项
 - prefs：
   - `[theme]` / `[font]` / `[prefs]`：主题 / 字体 / 设置窗几何
   - `[pet]`：当前宠、尺寸位置层级 + `pet.<org>.<id>.*` 选项；`pet.global.layer` 为通用三档层级

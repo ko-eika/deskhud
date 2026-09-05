@@ -223,8 +223,14 @@ msgstr "Instance ID"
 msgid "HudAdjustPosition"
 msgstr "Position"
 
+msgid "HudAdjustResetPosition"
+msgstr "Reset position"
+
 msgid "HudAdjustSize"
 msgstr "Size"
+
+msgid "HudAdjustResetSize"
+msgstr "Reset size"
 
 msgid "HudAdjustBackgroundOpacity"
 msgstr "Opacity"

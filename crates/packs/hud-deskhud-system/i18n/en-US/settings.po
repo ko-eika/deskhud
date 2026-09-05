@@ -1,0 +1,95 @@
+msgid "system_cpu.label"
+msgstr "System status"
+
+msgid "system_cpu.description"
+msgstr "CPU, memory, process count, uptime, and swap in one view"
+
+msgid "deskhud.label"
+msgstr "Current application process status"
+
+msgid "deskhud.description"
+msgstr "CPU, memory, PID, and recent history for the current DeskHud application"
+
+msgid "application.label"
+msgstr "Selected application process status"
+
+msgid "application.description"
+msgstr "CPU and memory for one selected application"
+
+msgid "system_cpu.refresh_seconds.label"
+msgstr "Refresh interval"
+
+msgid "system_cpu.refresh_seconds.description"
+msgstr "Sampling interval in seconds"
+
+msgid "system_cpu.unit.label"
+msgstr "Memory unit"
+
+msgid "system_cpu.unit.description"
+msgstr "Binary or decimal memory units"
+
+msgid "system_cpu.show_labels.label"
+msgstr "Show labels"
+
+msgid "system_cpu.show_labels.description"
+msgstr "Show metric names beside values"
+
+msgid "deskhud.refresh_seconds.label"
+msgstr "Refresh interval"
+
+msgid "deskhud.refresh_seconds.description"
+msgstr "Sampling interval in seconds"
+
+msgid "deskhud.unit.label"
+msgstr "Memory unit"
+
+msgid "deskhud.unit.description"
+msgstr "Binary or decimal memory units"
+
+msgid "deskhud.show_labels.label"
+msgstr "Show labels"
+
+msgid "deskhud.show_labels.description"
+msgstr "Show metric names beside values"
+
+msgid "application.refresh_seconds.label"
+msgstr "Refresh interval"
+
+msgid "application.refresh_seconds.description"
+msgstr "Sampling interval in seconds"
+
+msgid "application.unit.label"
+msgstr "Memory unit"
+
+msgid "application.unit.description"
+msgstr "Binary or decimal memory units"
+
+msgid "application.show_labels.label"
+msgstr "Show labels"
+
+msgid "application.show_labels.description"
+msgstr "Show metric names beside values"
+
+msgid "application.process_name.label"
+msgstr "Monitored application"
+
+msgid "application.process_name.description"
+msgstr "Choose from currently running application processes"
+
+msgid "application.process_name.placeholder"
+msgstr "Select an application"
+
+msgid "unit.binary"
+msgstr "Binary (GiB/MiB)"
+
+msgid "unit.decimal"
+msgstr "Decimal (GB/MB)"
+
+msgid "status.unavailable"
+msgstr "Unavailable"
+
+msgid "status.not_running"
+msgstr "Not running"
+
+msgid "status.select_process"
+msgstr "Select an application process"

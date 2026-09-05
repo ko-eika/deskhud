@@ -174,7 +174,7 @@ fn draw_navigation(ui: &mut egui::Ui, model: &mut SettingsModel, locale: Locale)
     ui.label(
         RichText::new(text(model, MessageKey::AppName))
             .font(fonts::scaled_font(ui, 0.86))
-            .color(Color32::from_gray(165)),
+            .color(ui.visuals().weak_text_color()),
     );
     ui.add_space(22.0);
     for tab in SettingsTab::ALL {

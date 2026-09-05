@@ -1,0 +1,5 @@
+msgid "display_name"
+msgstr "System Monitor"
+
+msgid "description"
+msgstr "Cached real-time system and application performance metrics"

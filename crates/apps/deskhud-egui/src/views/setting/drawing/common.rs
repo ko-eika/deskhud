@@ -84,7 +84,7 @@ pub(crate) fn paint_preview_frame(ui: &Ui, preview: egui::Rect, scale: f32) {
     ui.painter().rect(
         preview,
         CornerRadius::same((10.0 * scale).round() as u8),
-        ui.visuals().faint_bg_color,
+        ui.visuals().widgets.inactive.bg_fill,
         Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color),
         egui::StrokeKind::Inside,
     );

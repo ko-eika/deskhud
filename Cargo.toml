@@ -20,7 +20,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.9.7"
+version = "0.9.8"
 edition = "2024"
 rust-version = "1.95"
 license = "Apache-2.0"
@@ -44,6 +44,7 @@ deskhud-sdk = { path = "crates/core/deskhud-sdk" }
 pet-deskhud-mochi = { path = "crates/packs/pet-deskhud-mochi" }
 pet-deskhud-sesame = { path = "crates/packs/pet-deskhud-sesame" }
 hud-deskhud-demo = { path = "crates/packs/hud-deskhud-demo" }
+hud-deskhud-system = { path = "crates/packs/hud-deskhud-system" }
 
 # 平台中性契约与平台实现；OS 类型只允许出现在这些平台 crate 内。
 deskhud-platform = { path = "crates/platform/deskhud-platform" }
@@ -73,6 +74,7 @@ raw-window-handle = "0.6.2"
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.4"
 thiserror = "2.0.20"
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 ttf-parser = "0.25.1"
 
 # 设置页资源：位图解码与 SVG 栅格化。

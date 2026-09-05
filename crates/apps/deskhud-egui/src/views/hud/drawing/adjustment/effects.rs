@@ -110,13 +110,14 @@ pub(super) fn draw_effects_group(
             .into(),
         ),
         |ui| {
-            changed |= draw_effect_color_config_row(
+            changed |= draw_custom_color_config_row(
                 ui,
                 prefs,
                 instance_id,
                 MessageKey::HudAdjustContentColor,
                 item.content_color,
                 ["content_red", "content_green", "content_blue"],
+                "content_color_enabled",
                 true,
             );
             changed |= draw_effect_slider_config_row(
@@ -320,45 +321,71 @@ pub(super) fn draw_effect_slider_config_row(
     changed
 }
 
-pub(super) fn draw_effect_color_config_row(
+pub(super) fn draw_custom_color_config_row(
     ui: &mut egui::Ui,
     prefs: &mut UiPreferences,
     instance_id: &deskhud_engine::HudInstanceId,
     message: MessageKey,
-    mut color: [u8; 3],
+    color: [u8; 3],
     names: [&str; 3],
+    enabled_name: &str,
     show_divider: bool,
 ) -> bool {
-    for (channel, name) in names.iter().enumerate() {
-        color[channel] =
-            (prefs
-                .hud
-                .instance_visual_value(instance_id, name, color[channel] as f32 / 255.0)
-                * 255.0)
-                .round() as u8;
-    }
-    let mut changed = false;
+    let mut custom = prefs
+        .hud
+        .instance_visual_value(instance_id, enabled_name, 0.0)
+        >= 0.5;
+    let before_custom = custom;
+    // The render item is a snapshot from before this frame's edits. Read the
+    // persisted channels first so the picker does not jump back to that
+    // snapshot on the next frame.
+    let mut color = std::array::from_fn(|channel| {
+        (prefs.hud.instance_visual_value(
+            instance_id,
+            names[channel],
+            color[channel] as f32 / 255.0,
+        ) * 255.0)
+            .round() as u8
+    });
+    let mut color_changed = false;
     components::config_row_with_divider(
         ui,
         deskhud_ui::i18n::t(prefs.locale, message),
         None::<egui::RichText>,
         show_divider,
         |ui| {
-            changed = draw_hex_color_control(
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(42.0, 24.0), egui::Sense::hover());
+            components::toggle_switch_with_id(
                 ui,
-                &mut color,
-                ui.make_persistent_id(("hud-effect-color", instance_id.as_str(), names[0])),
+                rect,
+                &mut custom,
+                (enabled_name, instance_id.as_str()),
             );
+            ui.add_space(8.0);
+            ui.add_enabled_ui(custom, |ui| {
+                color_changed = draw_hex_color_control(
+                    ui,
+                    &mut color,
+                    ui.make_persistent_id((enabled_name, instance_id.as_str())),
+                );
+            });
         },
     );
-    if changed {
+    if before_custom != custom {
+        prefs.hud.set_instance_visual_value(
+            instance_id,
+            enabled_name,
+            if custom { 1.0 } else { 0.0 },
+        );
+    }
+    if color_changed {
         for (name, channel) in names.into_iter().zip(color) {
             prefs
                 .hud
                 .set_instance_visual_value(instance_id, name, channel as f32 / 255.0);
         }
     }
-    changed
+    before_custom != custom || color_changed
 }
 
 #[allow(clippy::too_many_arguments)]

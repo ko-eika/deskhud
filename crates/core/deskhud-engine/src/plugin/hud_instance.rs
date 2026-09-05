@@ -1,6 +1,9 @@
 //! Platform-independent HUD instance and group layout contracts.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+use super::HudConfigValue;
 
 /// Stable identity of the plugin contribution used by a HUD instance.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -58,6 +61,10 @@ pub struct HudFrameCtx<'a> {
     pub instance_id: &'a HudInstanceId,
     /// Definition that owns the rendering capability.
     pub source: &'a HudSourceId,
+    /// Validated values owned by this instance only.
+    pub config: &'a HashMap<String, HudConfigValue>,
+    /// Normalized BCP-47-like UI locale selected by the host.
+    pub locale: &'a str,
     /// Monotonic elapsed time supplied by the host.
     pub elapsed_secs: f32,
 }

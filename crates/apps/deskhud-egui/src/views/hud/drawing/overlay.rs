@@ -23,8 +23,10 @@ pub(super) fn draw_group_drop_feedback(
     feedback: GroupDropFeedback,
 ) {
     let color = match feedback {
-        GroupDropFeedback::Add => egui::Color32::from_rgb(56, 190, 112),
-        GroupDropFeedback::Remove => egui::Color32::from_rgb(225, 82, 82),
+        GroupDropFeedback::Add => to_egui_color(crate::views::theme::palette(ui.visuals()).success),
+        GroupDropFeedback::Remove => {
+            to_egui_color(crate::views::theme::palette(ui.visuals()).danger)
+        }
     };
     let pulse = ((time * 5.0).sin() * 0.5 + 0.5) * 0.35 + 0.25;
     let painter = ui.ctx().layer_painter(overlay.layer_id);
@@ -74,7 +76,18 @@ pub(super) fn draw_border(ui: &mut egui::Ui, time: f32, rect: egui::Rect) {
     );
 }
 
-/// Draws the pending compact-window preview as a static theme-aware border.
+/// Draws the compact preview background used as the layout editor's virtual
+/// root group. It follows the active egui theme for light/dark mode legibility.
+pub(super) fn draw_preview_background(ui: &egui::Ui, rect: egui::Rect) {
+    let fill = ui.visuals().window_fill();
+    let [red, green, blue, _] = fill.to_array();
+    ui.painter().rect_filled(
+        rect,
+        0.0,
+        egui::Color32::from_rgba_unmultiplied(red, green, blue, 8),
+    );
+}
+
 pub(super) fn draw_preview_border(ui: &egui::Ui, rect: egui::Rect) {
     let color = ui
         .visuals()
@@ -85,8 +98,8 @@ pub(super) fn draw_preview_border(ui: &egui::Ui, rect: egui::Rect) {
         .gamma_multiply(0.9);
     ui.painter().rect_stroke(
         rect,
-        0.0,
-        egui::Stroke::new(2.0, color),
+        8.0,
+        egui::Stroke::new(2.0, with_alpha(color, 160)),
         egui::StrokeKind::Outside,
     );
 }
@@ -190,4 +203,8 @@ fn rounded_rect_path(rect: egui::Rect, corner_radius: f32) -> Vec<egui::Pos2> {
 pub(super) fn with_alpha(color: egui::Color32, alpha: u8) -> egui::Color32 {
     let [red, green, blue, _] = color.to_array();
     egui::Color32::from_rgba_unmultiplied(red, green, blue, alpha)
+}
+
+fn to_egui_color(color: deskhud_engine::OverlayColor) -> egui::Color32 {
+    egui::Color32::from_rgba_unmultiplied(color.red, color.green, color.blue, color.alpha)
 }

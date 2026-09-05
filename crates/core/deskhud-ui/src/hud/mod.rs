@@ -13,46 +13,7 @@ pub use layout::{HUD_SIZE_FACTOR_MAX, HUD_SIZE_FACTOR_MIN, HudSlotLayout};
 pub use model::{HudGroup, HudInstance, HudInstanceConfig, HudRecoveryReport};
 
 /// `[hud]` 里单个键的值：bool / 数字 / 字符串。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum HudConfigValue {
-    /// 开关类（`.enable`）。
-    Bool(bool),
-    /// 整数（反序列化兜底，读布局时当 float）。
-    Int(i64),
-    /// 浮点参数。
-    Float(f64),
-    /// 位置元组（`.position = [x, y]`）。
-    Position([f64; 2]),
-    /// 尺寸元组（`.size = [width, height]`）。
-    Size([f64; 2]),
-    /// 字符串（`.display` 等）。
-    String(String),
-}
-
-impl HudConfigValue {
-    fn as_bool(&self) -> Option<bool> {
-        match self {
-            Self::Bool(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    fn as_f32(&self) -> Option<f32> {
-        match self {
-            Self::Float(v) => Some(*v as f32),
-            Self::Int(v) => Some(*v as f32),
-            Self::Bool(_) | Self::String(_) | Self::Position(_) | Self::Size(_) => None,
-        }
-    }
-
-    fn as_str(&self) -> Option<&str> {
-        match self {
-            Self::String(s) => Some(s.as_str()),
-            _ => None,
-        }
-    }
-}
+pub use deskhud_engine::HudConfigValue;
 
 /// 用户对插件 / HUD 条目的启用状态与屏幕布局。
 ///

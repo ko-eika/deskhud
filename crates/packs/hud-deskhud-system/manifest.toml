@@ -1,0 +1,22 @@
+id = "hud.deskhud.system"
+kind = "plugin"
+version = "0.9.8"
+engine = "0.9"
+api_version = 4
+display_name = "System Monitor"
+description = "Cached real-time system and application performance metrics"
+author = "DeskHud"
+homepage = "https://github.com/ko-eika/deskhud"
+icon = "assets/icon.svg"
+
+[[hud]]
+id = "system_cpu"
+icon = "assets/icon_overview.svg"
+
+[[hud]]
+id = "deskhud"
+icon = "assets/icon_deskhud.svg"
+
+[[hud]]
+id = "application"
+icon = "assets/icon_application.svg"

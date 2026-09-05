@@ -1,6 +1,6 @@
 //! HUD 阴影设置及预览。
 
-use super::effects::{draw_effect_color_config_row, draw_effect_slider_config_row};
+use super::effects::{draw_custom_color_config_row, draw_effect_slider_config_row};
 use super::*;
 use crate::components;
 use crate::views::hud::drawing::frame::paint_window_shadow;
@@ -195,13 +195,13 @@ fn draw_shadow_preview_inline(
     if opacity > f32::EPSILON {
         paint_window_shadow(painter, panel, 6.0, opacity, blur, distance, angle, color);
     }
-    painter.rect_filled(panel, 6.0, egui::Color32::from_rgb(48, 52, 62));
+    painter.rect_filled(panel, 6.0, ui.visuals().window_fill());
     painter.text(
         panel.center(),
         egui::Align2::CENTER_CENTER,
         "Aa",
         egui::FontId::proportional(16.0),
-        egui::Color32::from_rgb(245, 247, 250),
+        ui.visuals().text_color(),
     );
 }
 
@@ -229,6 +229,7 @@ pub(super) fn draw_shadow_window(
         distance_name,
         angle_name,
         color_names,
+        color_enabled_name,
         opacity,
         blur,
         distance,
@@ -242,6 +243,7 @@ pub(super) fn draw_shadow_window(
             "shadow_distance",
             "shadow_angle",
             ["shadow_red", "shadow_green", "shadow_blue"],
+            "shadow_color_enabled",
             item.window_shadow,
             item.window_shadow_blur,
             item.window_shadow_distance,
@@ -259,6 +261,7 @@ pub(super) fn draw_shadow_window(
                 "window_shadow_green",
                 "window_shadow_blue",
             ],
+            "window_shadow_color_enabled",
             item.window_custom_shadow,
             item.window_custom_shadow_blur,
             item.window_custom_shadow_distance,
@@ -276,6 +279,7 @@ pub(super) fn draw_shadow_window(
                 "content_shadow_green",
                 "content_shadow_blue",
             ],
+            "content_shadow_color_enabled",
             item.content_custom_shadow,
             item.content_custom_shadow_blur,
             item.content_custom_shadow_distance,
@@ -300,13 +304,14 @@ pub(super) fn draw_shadow_window(
                 ui,
                 None,
                 |ui| {
-                    changed |= draw_effect_color_config_row(
+                    changed |= draw_custom_color_config_row(
                         ui,
                         prefs,
                         instance_id,
                         MessageKey::HudAdjustShadowColor,
                         color,
                         color_names,
+                        color_enabled_name,
                         true,
                     );
                     changed |= draw_effect_slider_config_row(
@@ -398,13 +403,14 @@ fn draw_surface_effect_window(
                 None,
                 |ui| match target {
                     ShadowTarget::Border => {
-                        changed |= draw_effect_color_config_row(
+                        changed |= draw_custom_color_config_row(
                             ui,
                             prefs,
                             instance_id,
                             MessageKey::HudAdjustBorderColor,
                             item.border_color,
                             ["border_red", "border_green", "border_blue"],
+                            "border_color_enabled",
                             true,
                         );
                         changed |= draw_effect_slider_config_row(

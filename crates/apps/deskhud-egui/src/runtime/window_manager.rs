@@ -8,7 +8,8 @@
 use deskhud_engine::{EngineRegistry, HudSourceId, PetEvent, PetKeyTracker};
 use deskhud_runtime::{bootstrap_registry, build_catalog_store};
 use deskhud_ui::{
-    CatalogStore, LayerPreference, PrefsWriteOrder, UiPreferences, load, save, save_ordered,
+    CatalogStore, HudConfigValue, LayerPreference, PrefsWriteOrder, UiPreferences, load, save,
+    save_ordered,
 };
 use std::sync::Arc;
 use winit::{
@@ -69,10 +70,17 @@ impl WindowManager {
                 },
             ),
         );
+        let migrated_status_layouts = migrate_system_status_layouts(&mut prefs);
         if migrated_instances > 0 {
             tracing::info!(
                 migrated_instances,
                 "mapped HUD contributions to stable instances"
+            );
+        }
+        if migrated_status_layouts > 0 {
+            tracing::info!(
+                migrated_status_layouts,
+                "normalized built-in status HUD dimensions"
             );
         }
         if !bootstrap
@@ -83,7 +91,9 @@ impl WindowManager {
         {
             prefs.pet.kind = bootstrap.registry.active_pet_id().to_owned();
         }
-        if (migrated_instances > 0 || rewrite_hud_model) && loaded_from_disk {
+        if (migrated_instances > 0 || migrated_status_layouts > 0 || rewrite_hud_model)
+            && loaded_from_disk
+        {
             prefs.hud.mark_model_format_current();
             if let Err(error) = save(&prefs) {
                 tracing::warn!(%error, "failed to persist formatted HUD instances");
@@ -238,6 +248,17 @@ impl WindowManager {
             && let Some(position) = pet.current_position()
         {
             prefs.pet.set_pos(position.x as f32, position.y as f32);
+        }
+        // Applying settings or toggling a plugin replaces the HUD preference
+        // snapshot. Keep the live native window geometry so a stale snapshot
+        // cannot move or resize the composed HUD when it is applied.
+        if let Some(hud) = self.hud.as_ref() {
+            let window = hud.window_handle();
+            if let Ok(position) = window.outer_position() {
+                prefs.hud.window_position = [position.x, position.y];
+            }
+            let size = window.inner_size();
+            prefs.hud.window_size = [size.width, size.height];
         }
         self.prefs = prefs;
         let _ = self.proxy.send_event(UserEvent::SetGlobalInputMonitoring {
@@ -842,6 +863,52 @@ impl WindowManager {
     }
 }
 
+fn migrate_system_status_layouts(prefs: &mut UiPreferences) -> usize {
+    const REVISION_KEY: &str = "_builtin_status_layout_revision";
+    const REVISION: i64 = 4;
+    let mut migrated = 0;
+    for instance in &mut prefs.hud.instances {
+        let is_status_card = instance.source.plugin_id == "hud.deskhud.system"
+            && matches!(
+                instance.source.contribution_id.as_str(),
+                "system_cpu" | "deskhud" | "application"
+            );
+        let current = instance
+            .config
+            .get(REVISION_KEY)
+            .and_then(HudConfigValue::as_f32)
+            .map(|value| value as i64);
+        if is_status_card && current != Some(REVISION) {
+            instance.layout.width = 1.0;
+            instance.layout.height = 1.0;
+            instance
+                .config
+                .insert(REVISION_KEY.to_owned(), HudConfigValue::Int(REVISION));
+            // Keep all built-in status cards on the same readable text/shadow baseline.
+            for (name, value) in [
+                ("content_red", 248.0 / 255.0),
+                ("content_green", 248.0 / 255.0),
+                ("content_blue", 252.0 / 255.0),
+                ("content_shadow_mode", 0.0),
+                ("content_shadow_enabled", 1.0),
+                ("content_shadow", 0.75),
+                ("content_shadow_blur", 1.0 / 24.0),
+                ("content_shadow_distance", 5.0 / 12.0),
+                ("content_shadow_angle", 0.125),
+                ("content_shadow_red", 0.0),
+                ("content_shadow_green", 0.0),
+                ("content_shadow_blue", 0.0),
+            ] {
+                instance
+                    .config
+                    .insert(name.to_owned(), HudConfigValue::Float(value as f64));
+            }
+            migrated += 1;
+        }
+    }
+    migrated
+}
+
 fn layer_preference(layer: super::viewport::WindowLayer) -> LayerPreference {
     match layer {
         super::viewport::WindowLayer::AlwaysOnTop => LayerPreference::Top,
@@ -873,4 +940,33 @@ fn is_right_click(event: &WindowEvent) -> bool {
 
 fn is_window_close(event: &WindowEvent) -> bool {
     matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::migrate_system_status_layouts;
+    use deskhud_engine::HudSourceId;
+    use deskhud_ui::UiPreferences;
+
+    #[test]
+    fn status_layout_migration_runs_once_and_unifies_dimensions() {
+        let mut prefs = UiPreferences::default();
+        prefs.hud.ensure_default_instances([
+            (HudSourceId::new("hud.deskhud.system", "system_cpu"), true),
+            (HudSourceId::new("hud.deskhud.system", "deskhud"), true),
+        ]);
+        prefs.hud.instances[0].layout.width = 1.7;
+        prefs.hud.instances[1].layout.height = 1.4;
+        assert_eq!(migrate_system_status_layouts(&mut prefs), 2);
+        assert!(
+            prefs
+                .hud
+                .instances
+                .iter()
+                .all(|instance| instance.layout.width == 1.0 && instance.layout.height == 1.0)
+        );
+        prefs.hud.instances[0].layout.width = 1.5;
+        assert_eq!(migrate_system_status_layouts(&mut prefs), 0);
+        assert_eq!(prefs.hud.instances[0].layout.width, 1.5);
+    }
 }

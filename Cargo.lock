@@ -537,7 +537,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
 name = "deskhud-egui"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "core-foundation 0.10.1",
  "core-graphics 0.25.0",
@@ -561,14 +561,14 @@ dependencies = [
 
 [[package]]
 name = "deskhud-engine"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "deskhud-native"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-platform-linux-gtk",
  "deskhud-platform-macos",
@@ -577,7 +577,7 @@ dependencies = [
 
 [[package]]
 name = "deskhud-package"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "image",
  "serde",
@@ -588,11 +588,11 @@ dependencies = [
 
 [[package]]
 name = "deskhud-platform"
-version = "0.9.7"
+version = "0.9.8"
 
 [[package]]
 name = "deskhud-platform-linux-gtk"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-platform",
  "winit",
@@ -600,7 +600,7 @@ dependencies = [
 
 [[package]]
 name = "deskhud-platform-macos"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-platform",
  "winit",
@@ -608,7 +608,7 @@ dependencies = [
 
 [[package]]
 name = "deskhud-platform-windows"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-platform",
  "windows",
@@ -616,12 +616,13 @@ dependencies = [
 
 [[package]]
 name = "deskhud-runtime"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-engine",
  "deskhud-package",
  "deskhud-ui",
  "hud-deskhud-demo",
+ "hud-deskhud-system",
  "pet-deskhud-mochi",
  "pet-deskhud-sesame",
  "thiserror 2.0.20",
@@ -631,14 +632,14 @@ dependencies = [
 
 [[package]]
 name = "deskhud-sdk"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "wit-bindgen 0.44.0",
 ]
 
 [[package]]
 name = "deskhud-ui"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-engine",
  "serde",
@@ -650,7 +651,7 @@ dependencies = [
 
 [[package]]
 name = "deskhud-xtask"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-package",
 ]
@@ -1272,9 +1273,17 @@ checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 
 [[package]]
 name = "hud-deskhud-demo"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-engine",
+]
+
+[[package]]
+name = "hud-deskhud-system"
+version = "0.9.8"
+dependencies = [
+ "deskhud-engine",
+ "sysinfo",
 ]
 
 [[package]]
@@ -1738,6 +1747,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
 
 [[package]]
+name = "ntapi"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3b335231dfd352ffb0f8017f3b6027a4917f7df785ea2143d8af2adc66980ae"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1932,6 +1950,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-io-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33fafba39597d6dc1fb709123dfa8289d39406734be322956a69f0931c73bb15"
+dependencies = [
+ "libc",
+ "objc2-core-foundation",
+]
+
+[[package]]
 name = "objc2-link-presentation"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2107,7 +2135,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pet-deskhud-dumpling"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-sdk",
  "wit-bindgen 0.44.0",
@@ -2115,14 +2143,14 @@ dependencies = [
 
 [[package]]
 name = "pet-deskhud-mochi"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-engine",
 ]
 
 [[package]]
 name = "pet-deskhud-sesame"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "deskhud-engine",
 ]
@@ -2747,6 +2775,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "sysinfo"
+version = "0.39.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2071df9448915b71c4fe6d25deaf1c22f12bd234f01540b77312bb8e41361e6"
+dependencies = [
+ "libc",
+ "memchr",
+ "ntapi",
+ "objc2-core-foundation",
+ "objc2-io-kit",
+ "windows",
 ]
 
 [[package]]
@@ -3600,6 +3642,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 
 [[package]]
+name = "winapi"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c839a674fcd7a98952e593242ea400abe93992746761e38641405d28b00f419"
+dependencies = [
+ "winapi-i686-pc-windows-gnu",
+ "winapi-x86_64-pc-windows-gnu",
+]
+
+[[package]]
+name = "winapi-i686-pc-windows-gnu"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
+
+[[package]]
 name = "winapi-util"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3607,6 +3665,12 @@ checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "winapi-x86_64-pc-windows-gnu"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "winch-codegen"

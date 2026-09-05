@@ -413,7 +413,7 @@ mod tests {
         assert!(prefs.add_instance_to_group(&second, &instance_id));
         assert!(prefs.groups[0].children.is_empty());
         assert_eq!(prefs.groups[1].children, vec![instance_id.clone()]);
-        assert_eq!(prefs.instances[0].layout.x, 32.0);
+        assert_eq!(prefs.instances[0].layout.x, 8.0);
         assert!(prefs.remove_instance_from_group(&instance_id));
         assert!(prefs.groups.iter().all(|group| group.children.is_empty()));
     }

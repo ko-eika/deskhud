@@ -15,7 +15,7 @@ use frame::draw_frame;
 use layout::{draw_alignment_grid, layout_slot, set_layout_slot, snap_coordinate};
 use overlay::{
     EditorOverlay, GroupDropFeedback, draw_border, draw_editor_overlays, draw_group_drop_feedback,
-    draw_preview_border,
+    draw_preview_background, draw_preview_border,
 };
 
 const HUD_PADDING: f32 = 8.0;
@@ -218,11 +218,14 @@ pub(super) fn draw(
     let canvas_response = ui.interact(
         ui.max_rect(),
         ui.make_persistent_id("hud-layout-canvas"),
-        egui::Sense::click(),
+        egui::Sense::drag(),
     );
     if layout.layout_mode {
-        let position = canvas_response
-            .interact_pointer_pos()
+        let canvas_rect = ui.max_rect();
+        let position = ui
+            .input(|input| input.pointer.interact_pos())
+            .map(|point| point - canvas_rect.min.to_vec2())
+            .or_else(|| canvas_response.interact_pointer_pos())
             .unwrap_or(egui::Pos2::ZERO);
         let mut menu_snap_to_grid = layout.snap_to_grid;
         let mut menu_lock_ratio = layout.lock_ratio;
@@ -259,6 +262,9 @@ pub(super) fn draw(
             layout.lock_ratio = menu_lock_ratio;
             changed = true;
         }
+    }
+    if layout.layout_mode {
+        draw_preview_background(ui, preview_bounds(layout, items).expand(HUD_PADDING));
     }
     if layout.layout_mode
         && layout.snap_to_grid
@@ -687,6 +693,41 @@ pub(super) fn draw(
         changed |= apply_editor_action(action, layout, prefs, &editor_overlays);
     }
 
+    // The compact preview acts as a virtual root group. Its empty surface
+    // moves all top-level HUDs/groups together while preserving child
+    // geometry. Child overlays win the hit test, so HUD drags remain precise.
+    if layout.layout_mode {
+        let preview_rect = bounds.expand(HUD_PADDING);
+        let pointer_pos = ui.input(|input| input.pointer.interact_pos());
+        let pointer_over_child = pointer_pos.is_some_and(|pointer| {
+            editor_overlays
+                .iter()
+                .any(|overlay| overlay.rect.contains(pointer))
+        });
+        if canvas_response.drag_started()
+            && pointer_pos.is_some_and(|pointer| preview_rect.contains(pointer))
+            && !pointer_over_child
+        {
+            layout.root_dragging = true;
+        }
+        if !ui.input(|input| input.pointer.primary_down()) {
+            layout.root_dragging = false;
+        }
+        if layout.root_dragging && canvas_response.dragged() {
+            let delta = root_drag_delta(
+                preview_rect,
+                ui.input(|input| input.pointer.delta()),
+                layout.activity_size,
+            );
+            if delta != egui::Vec2::ZERO {
+                for position in layout.positions.values_mut() {
+                    *position += delta;
+                }
+                changed = true;
+            }
+        }
+    }
+
     // Commit the latest canvas positions before rendering the adjustment
     // windows. Otherwise a drag and a panel read can happen in the same
     // frame with different position sources, making groups visibly flicker.
@@ -786,6 +827,7 @@ pub(super) fn draw(
         layout.adjust_open = layout.hud_adjust_open || layout.group_adjust_open;
         if !layout.adjust_open {
             layout.adjustment_order.clear();
+            layout.adjustment_reset_sizes.clear();
         }
     }
 
@@ -841,6 +883,55 @@ pub(super) fn draw(
         // correction a second time.
         move_by: None,
         changed,
+    }
+}
+
+fn preview_bounds(layout: &mut LayoutState, items: &[HudRenderItem]) -> egui::Rect {
+    let mut bounds = egui::Rect::NOTHING;
+    for item in items {
+        let position = layout
+            .positions
+            .entry(item.key.clone())
+            .or_insert(item.initial_position);
+        let base_size = egui::vec2(item.base_size.width, item.base_size.height);
+        let size = item.container_size.unwrap_or_else(|| {
+            egui::vec2(
+                base_size.x * item.width.clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX),
+                base_size.y * item.height.clamp(HUD_SIZE_FACTOR_MIN, HUD_SIZE_FACTOR_MAX),
+            )
+        });
+        let size = if matches!(item.target, HudLayoutTarget::Group(_)) {
+            size.max(group_min_size())
+        } else {
+            size
+        };
+        bounds = bounds.union(egui::Rect::from_min_size(*position, size));
+    }
+    bounds
+}
+
+fn root_drag_delta(
+    preview_rect: egui::Rect,
+    delta: egui::Vec2,
+    activity_size: Option<egui::Vec2>,
+) -> egui::Vec2 {
+    let Some(activity) = activity_size else {
+        return delta;
+    };
+    let activity_rect = egui::Rect::from_min_size(egui::Pos2::ZERO, activity);
+    let min_delta = activity_rect.min - preview_rect.min;
+    let max_delta = activity_rect.max - preview_rect.max;
+    egui::vec2(
+        clamp_root_axis(delta.x, min_delta.x, max_delta.x),
+        clamp_root_axis(delta.y, min_delta.y, max_delta.y),
+    )
+}
+
+fn clamp_root_axis(value: f32, min: f32, max: f32) -> f32 {
+    if min <= max {
+        value.clamp(min, max)
+    } else {
+        0.0
     }
 }
 
@@ -1527,7 +1618,7 @@ mod tests {
             .iter()
             .find(|instance| instance.id == first)
             .unwrap();
-        assert_eq!((instance.layout.x, instance.layout.y), (32.0, 64.0));
+        assert_eq!((instance.layout.x, instance.layout.y), (8.0, 8.0));
         assert_eq!(
             layout
                 .absolute_positions

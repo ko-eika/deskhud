@@ -15,6 +15,7 @@ use crate::runtime::{
     viewport::{UserEvent, Viewport, WindowLayer},
     viewport_config::ViewportConfig,
 };
+use crate::views::hud::DEFAULT_SHADOW_BLUR;
 
 use crate::area::{self, ActivityArea};
 use crate::views as view;
@@ -162,6 +163,7 @@ impl HudWindow {
         // from persisted slots each time, rather than reusing stale window
         // coordinates from the previous layout session.
         self.layout.active_hud_drag = None;
+        self.layout.root_dragging = false;
         self.layout.positions.clear();
         self.layout.transient_group_sizes.clear();
         let slots = resolved_hud_slots(
@@ -191,6 +193,7 @@ impl HudWindow {
         self.layout.selected = None;
         self.layout.adjustment_selection = None;
         self.layout.adjustment_order.clear();
+        self.layout.adjustment_reset_sizes.clear();
         self.layout.adjust_open = false;
         self.layout.hud_adjust_open = false;
         self.layout.group_adjust_open = false;
@@ -256,6 +259,7 @@ impl HudWindow {
         // session. Normal mode must rebuild positions from the translated
         // persisted slots and the compact window origin.
         self.layout.positions.clear();
+        self.layout.root_dragging = false;
         self.layout.absolute_positions.clear();
         self.layout.activity_origin = None;
         self.layout.transient_group_sizes.clear();
@@ -347,12 +351,14 @@ impl HudWindow {
                 .frame
                 .visuals
                 .iter()
-                .find_map(|visual| match visual {
-                    deskhud_engine::HudVisual::Text { color, .. } => {
+                .filter_map(|visual| match visual {
+                    deskhud_engine::HudVisual::Text { color, .. }
+                    | deskhud_engine::HudVisual::Label { color, .. } => {
                         Some([color[0], color[1], color[2]])
                     }
                     _ => None,
                 })
+                .max_by_key(|color| u32::from(color[0]) + u32::from(color[1]) + u32::from(color[2]))
                 .unwrap_or([255; 3]);
             let default_content_color = default_border_color;
             let default_corner_radius = item
@@ -539,7 +545,7 @@ impl HudWindow {
                         item.plugin_id,
                         item.contribution_id,
                         "window_shadow_blur",
-                        1.0,
+                        DEFAULT_SHADOW_BLUR,
                     ),
                 ),
                 window_shadow_distance: self.prefs.hud.visual_value(
@@ -592,7 +598,7 @@ impl HudWindow {
                     item.plugin_id,
                     item.contribution_id,
                     "window_shadow_blur",
-                    1.0,
+                    DEFAULT_SHADOW_BLUR,
                 ),
                 window_custom_shadow_distance: self.prefs.hud.visual_value(
                     item.plugin_id,
@@ -629,7 +635,7 @@ impl HudWindow {
                     item.plugin_id,
                     item.contribution_id,
                     "content_shadow_blur",
-                    1.0,
+                    DEFAULT_SHADOW_BLUR,
                 ),
                 content_custom_shadow_distance: self.prefs.hud.visual_value(
                     item.plugin_id,

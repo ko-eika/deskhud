@@ -168,6 +168,10 @@ cargo pack-builtins --out path/to/out
 
 当前 host 已实现：按插件折叠 + **插件总开关** + 默认实例开关；运行态从稳定 HUD 实例解析贡献，按“总开关 ∧ 插件开关 ∧ 实例开关 ∧（若有）组开关”调用 `hud_frame_for_instance()` 并绘制中性 `HudVisual`。
 
+`HudVisual::Label` 可在逻辑坐标中声明左、中、右锚点文本；`ProgressBar` 与 `LineChart` 同样使用逻辑矩形。宿主在 HUD 宽高独立调整时分别换算 X/宽度与 Y/高度，字体、线宽和圆角按较小比例缩放，因此插件不应预先换算屏幕像素。
+
+原生插件如需运行时选项，可声明 `HudConfigKind::DynamicChoice`，并通过 `Plugin::hud_config_choices()` 返回稳定值与显示标签；宿主将其绘制为可搜索下拉框。进程、设备等发现逻辑应留在插件侧，UI 不依赖具体系统库。社区 WASM 的动态选项契约尚未开放。
+
 ### 2.2 实现入口：`Plugin`
 
 ```rust

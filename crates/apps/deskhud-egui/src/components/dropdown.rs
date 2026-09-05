@@ -224,8 +224,11 @@ fn dropdown_impl(
             .show(ui.ctx(), |ui| {
                 ui.set_width(button_rect.width());
                 ui.set_min_width(button_rect.width());
+                // Keep the popup on the same control surface as its button.
+                // Using the raised window surface here made the light popup
+                // look almost white while the dark popup looked nearly black.
                 Frame::NONE
-                    .fill(ui.visuals().window_fill)
+                    .fill(ui.visuals().widgets.inactive.bg_fill)
                     .stroke(Stroke::new(1.0, ui.visuals().window_stroke.color))
                     .corner_radius(CornerRadius::same(style.popup_radius))
                     .inner_margin(Margin::symmetric(

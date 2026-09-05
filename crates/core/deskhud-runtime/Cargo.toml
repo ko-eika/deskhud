@@ -14,6 +14,7 @@ deskhud-ui = { workspace = true }
 pet-deskhud-mochi = { workspace = true }
 pet-deskhud-sesame = { workspace = true }
 hud-deskhud-demo = { workspace = true }
+hud-deskhud-system = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 wasmtime = { workspace = true }

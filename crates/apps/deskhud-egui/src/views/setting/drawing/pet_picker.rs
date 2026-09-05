@@ -41,7 +41,7 @@ pub(super) fn draw_pet_grid_card(
     } else if response.hovered() {
         ui.visuals().widgets.hovered.bg_fill
     } else {
-        ui.visuals().extreme_bg_color
+        ui.visuals().faint_bg_color
     };
     let stroke = if selected {
         Stroke::new(
@@ -172,7 +172,7 @@ pub(super) fn draw_pet_list_row(
     } else if response.hovered() {
         ui.visuals().widgets.hovered.bg_fill
     } else {
-        ui.visuals().extreme_bg_color
+        ui.visuals().faint_bg_color
     };
     let stroke = if selected {
         Stroke::new(

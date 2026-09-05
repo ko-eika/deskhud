@@ -19,6 +19,7 @@ const PUZZLE: &[u8] = include_bytes!("../../../../../assets/svg/puzzle.svg");
 const WINDOW: &[u8] = include_bytes!("../../../../../assets/svg/window.svg");
 const INFO: &[u8] = include_bytes!("../../../../../assets/svg/info.svg");
 const LINK: &[u8] = include_bytes!("../../../../../assets/svg/link.svg");
+const RESET: &[u8] = include_bytes!("../../../../../assets/svg/reset.svg");
 
 /// Paints a bundled SVG icon without relying on a font glyph being available.
 pub(crate) fn paint(ui: &Ui, name: &'static str, rect: Rect, color: Color32, flip_y: bool) {
@@ -55,6 +56,7 @@ fn texture(ui: &Ui, name: &'static str) -> Option<TextureHandle> {
         "window" => WINDOW,
         "info" => INFO,
         "link" => LINK,
+        "reset" => RESET,
         _ => return None,
     };
     let pixmap = rasterize(bytes)?;

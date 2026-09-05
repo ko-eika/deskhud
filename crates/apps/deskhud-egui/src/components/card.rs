@@ -13,7 +13,7 @@ pub(crate) fn section_card(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
         .noninteractive
         .bg_stroke
         .color
-        .gamma_multiply(0.62);
+        .gamma_multiply(if ui.visuals().dark_mode { 0.62 } else { 0.9 });
     Frame::group(ui.style())
         .fill(ui.visuals().faint_bg_color)
         .stroke(Stroke::new(1.0, border))
@@ -154,21 +154,6 @@ pub(crate) fn config_row_with_divider(
     add_control: impl FnOnce(&mut Ui),
 ) {
     config_row(ui, title, description, add_control);
-    if show_divider {
-        ui.separator();
-    }
-}
-
-/// Draws an icon configuration row and, when requested, its bottom divider.
-pub(crate) fn config_row_with_icon_and_divider(
-    ui: &mut Ui,
-    icon: Option<&TextureHandle>,
-    title: impl Into<RichText>,
-    description: Option<impl Into<RichText>>,
-    show_divider: bool,
-    add_control: impl FnOnce(&mut Ui),
-) {
-    config_row_with_icon(ui, icon, title, description, add_control);
     if show_divider {
         ui.separator();
     }

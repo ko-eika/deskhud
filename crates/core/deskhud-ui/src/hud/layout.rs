@@ -77,8 +77,8 @@ impl Default for HudSlotLayout {
     fn default() -> Self {
         Self {
             display: default_display(),
-            x: 32.0,
-            y: 64.0,
+            x: 8.0,
+            y: 8.0,
             width: 1.0,
             height: 1.0,
         }
@@ -107,8 +107,8 @@ impl HudSlotLayout {
         let i = index as f32;
         Self {
             display: default_display(),
-            x: 32.0,
-            y: 64.0 + i * 64.0,
+            x: 8.0,
+            y: 8.0 + i * 64.0,
             width: 1.0,
             height: 1.0,
         }

@@ -31,6 +31,7 @@ fn main() {
         ("mochi", "pet-deskhud-mochi"),
         ("sesame", "pet-deskhud-sesame"),
         ("demo", "hud-deskhud-demo"),
+        ("system", "hud-deskhud-system"),
     ] {
         for locale in ["zh-CN", "en-US"] {
             let dir = root.join(pack).join("i18n").join(locale);

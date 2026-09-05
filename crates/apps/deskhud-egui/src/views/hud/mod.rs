@@ -15,6 +15,9 @@ use egui::{Context, RawInput};
 
 use crate::views::ViewOutput;
 
+/// Shadow blur is stored as a 0..=1 factor and displayed as 0..=24 px.
+pub(crate) const DEFAULT_SHADOW_BLUR: f32 = 1.0 / 24.0;
+
 /// HUD 内部子窗口的布局状态。
 #[derive(Default)]
 pub(crate) struct LayoutState {
@@ -36,6 +39,8 @@ pub(crate) struct LayoutState {
     /// A grouped HUD is detached when this state is created and is assigned
     /// back to a group (or to the screen) only after the drag finishes.
     pub(crate) active_hud_drag: Option<HudDragState>,
+    /// Whether the preview surface is being dragged as a virtual root group.
+    pub(crate) root_dragging: bool,
     /// 是否处于可拖动布局模式。
     pub(crate) layout_mode: bool,
     /// The in-canvas completion action requests the same transition as Escape.
@@ -52,6 +57,8 @@ pub(crate) struct LayoutState {
     pub(crate) adjustment_order: Vec<&'static str>,
     /// Revision used to reset panel geometry when a panel is reopened.
     pub(crate) adjustment_window_revision: u64,
+    /// Position/size snapshots captured when an adjustment panel opens.
+    pub(crate) adjustment_reset_sizes: HashMap<String, egui::Vec2>,
     pub(crate) adjust_open: bool,
     pub(crate) group_adjust_open: bool,
     pub(crate) hud_adjust_open: bool,
@@ -225,6 +232,8 @@ fn active_hud_frames(
             let frame = registry.hud_frame_for_instance(&deskhud_engine::HudFrameCtx {
                 instance_id: &instance.id,
                 source: &instance.source,
+                config: &instance.config,
+                locale: &prefs.locale.tag(),
                 elapsed_secs,
             });
             (!frame.is_empty()).then(|| ActiveHudFrame {
@@ -463,8 +472,55 @@ fn measured_frame_size(frame: &HudFrame) -> HudLogicalSize {
             HudVisual::Text {
                 text, font_size, ..
             } => {
-                width = width.max(text.chars().count() as f32 * font_size * 0.62 + 20.0);
-                height = height.max(font_size + 16.0);
+                let lines = text.lines().collect::<Vec<_>>();
+                let line_count = lines.len().max(1) as f32;
+                let longest = lines
+                    .iter()
+                    .map(|line| line.chars().count())
+                    .max()
+                    .unwrap_or(0) as f32;
+                width = width.max(longest * font_size * 0.62 + 20.0);
+                height = height.max(line_count * font_size * 1.25 + 20.0);
+            }
+            HudVisual::Label {
+                text,
+                x,
+                y,
+                font_size,
+                align,
+                ..
+            } => {
+                let longest = text
+                    .lines()
+                    .map(|line| line.chars().count())
+                    .max()
+                    .unwrap_or(0) as f32
+                    * font_size
+                    * 0.62;
+                let left = match align {
+                    deskhud_engine::HudTextAlign::Left => 0.0,
+                    deskhud_engine::HudTextAlign::Center => longest * 0.5,
+                    deskhud_engine::HudTextAlign::Right => longest,
+                };
+                width = width.max(x - left + longest);
+                height = height.max(y + font_size * 0.65);
+            }
+            HudVisual::ProgressBar {
+                x,
+                y,
+                width: visual_width,
+                height: visual_height,
+                ..
+            }
+            | HudVisual::LineChart {
+                x,
+                y,
+                width: visual_width,
+                height: visual_height,
+                ..
+            } => {
+                width = width.max(x + visual_width);
+                height = height.max(y + visual_height);
             }
         }
     }
@@ -540,6 +596,7 @@ mod tests {
                 label: "Meter",
                 default_enabled: true,
                 icon: None,
+                config: &[],
             }];
             ITEMS
         }
@@ -572,7 +629,10 @@ mod tests {
                     )
                 }),
         );
-        let initial = active_hud_frames(&bootstrap.registry, &prefs, 1.0);
+        let initial = active_hud_frames(&bootstrap.registry, &prefs, 1.0)
+            .into_iter()
+            .filter(|frame| frame.source.plugin_id == "hud.deskhud.demo")
+            .collect::<Vec<_>>();
         assert_eq!(initial.len(), 1);
         assert_eq!(initial[0].source.contribution_id, "clock");
         assert!(initial[0].frame.visuals.iter().any(|visual| {
@@ -586,10 +646,20 @@ mod tests {
             .find(|instance| instance.source.contribution_id == "tip")
             .expect("tip instance");
         tip.enabled = true;
-        assert_eq!(active_hud_frames(&bootstrap.registry, &prefs, 1.0).len(), 2);
+        assert_eq!(
+            active_hud_frames(&bootstrap.registry, &prefs, 1.0)
+                .iter()
+                .filter(|frame| frame.source.plugin_id == "hud.deskhud.demo")
+                .count(),
+            2
+        );
 
         prefs.hud.set_plugin_enabled("hud.deskhud.demo", false);
-        assert!(active_hud_frames(&bootstrap.registry, &prefs, 1.0).is_empty());
+        assert!(
+            active_hud_frames(&bootstrap.registry, &prefs, 1.0)
+                .iter()
+                .all(|frame| frame.source.plugin_id != "hud.deskhud.demo")
+        );
     }
 
     #[test]
@@ -601,6 +671,9 @@ mod tests {
                 .registry
                 .all_hud_contributions()
                 .into_iter()
+                .filter(|(plugin, _)| {
+                    *plugin == "hud.deskhud.demo" || *plugin == "hud.example.other"
+                })
                 .map(|(plugin, contribution)| {
                     (
                         deskhud_engine::HudSourceId::new(plugin, contribution.id),
@@ -634,6 +707,9 @@ mod tests {
                 .registry
                 .all_hud_contributions()
                 .into_iter()
+                .filter(|(plugin, _)| {
+                    *plugin == "hud.deskhud.demo" || *plugin == "hud.example.other"
+                })
                 .map(|(plugin, contribution)| {
                     (
                         deskhud_engine::HudSourceId::new(plugin, contribution.id),
@@ -682,6 +758,7 @@ mod tests {
                 .registry
                 .all_hud_contributions()
                 .into_iter()
+                .filter(|(plugin, _)| *plugin == "hud.deskhud.demo")
                 .map(|(plugin, contribution)| {
                     (
                         deskhud_engine::HudSourceId::new(plugin, contribution.id),

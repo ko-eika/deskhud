@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use crate::pet::{PetKind, PetKindInfo};
-use crate::plugin::{HudContribution, HudFrame, HudFrameCtx, Plugin, PluginInfo};
+use crate::plugin::{
+    HudConfigDynamicChoice, HudContribution, HudFrame, HudFrameCtx, Plugin, PluginInfo,
+};
 
 /// 引擎运行时注册表（宠物 + HUD 插件）。
 pub struct EngineRegistry {
@@ -107,6 +109,20 @@ impl EngineRegistry {
         out
     }
 
+    /// Returns current choices for one plugin-owned dynamic HUD option.
+    pub fn hud_config_choices(
+        &self,
+        plugin_id: &str,
+        contribution_id: &str,
+        option_key: &str,
+    ) -> Vec<HudConfigDynamicChoice> {
+        self.plugins
+            .iter()
+            .find(|plugin| plugin.info().id == plugin_id)
+            .map(|plugin| plugin.hud_config_choices(contribution_id, option_key))
+            .unwrap_or_default()
+    }
+
     /// Produces frames for the contributions selected by the caller's prefs.
     pub fn hud_frame(&self, plugin_id: &str, contribution_id: &str, elapsed_secs: f32) -> HudFrame {
         self.plugins
@@ -182,6 +198,8 @@ mod tests {
                 .hud_frame_for_instance(&HudFrameCtx {
                     instance_id: &instance_id,
                     source: &source,
+                    config: &std::collections::HashMap::new(),
+                    locale: "en-US",
                     elapsed_secs: 1.0,
                 })
                 .is_empty()

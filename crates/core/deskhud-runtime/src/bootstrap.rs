@@ -5,6 +5,7 @@ use std::sync::Arc;
 use deskhud_engine::{AssetFrame, AssetKind, EngineRegistry, PetKind, Plugin};
 use deskhud_package::PackKind;
 use hud_deskhud_demo::DemoHudPlugin;
+use hud_deskhud_system::SystemHudPlugin;
 use pet_deskhud_mochi::BuiltinMochiPet;
 use pet_deskhud_sesame::BuiltinSesamePet;
 use tracing::{info, warn};
@@ -37,6 +38,7 @@ fn register_builtins(registry: &mut EngineRegistry) {
         }
     }
     registry.register_plugin(Arc::new(DemoHudPlugin) as Arc<dyn Plugin>);
+    registry.register_plugin(Arc::new(SystemHudPlugin::default()) as Arc<dyn Plugin>);
 }
 
 /// 启动时的默认宿主注册表（内置宠 + 演示 HUD），并扫描 profile / 用户包目录。

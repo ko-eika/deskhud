@@ -6,7 +6,10 @@ mod hud_instance;
 mod plugin_api;
 mod plugin_info;
 
-pub use hud_contribution::{HudContribution, HudFrame, HudVisual};
+pub use hud_contribution::{
+    HudConfigChoice, HudConfigDynamicChoice, HudConfigKind, HudConfigOption, HudConfigValue,
+    HudContribution, HudFrame, HudTextAlign, HudVisual,
+};
 pub use hud_instance::{
     HudFrameCtx, HudGroupAlignment, HudGroupArrangement, HudGroupComposition, HudGroupLayout,
     HudGroupMemberPlacement, HudInstanceId, HudLogicalRect, HudLogicalSize, HudSourceId,
